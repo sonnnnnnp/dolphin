@@ -1,0 +1,36 @@
+// 変数定義
+@height_cm = 0
+@weight_kg = 0
+
+// データ受け取り
+log[身長を入力してください(cm)]
+input[@height_cm]
+log[体重を入力してください(kg)]
+input[@weight_kg]
+
+// BMI計算
+@height_square = @height_cm * @height_cm
+@bmi = @weight_kg * 10000
+@bmi = @bmi / @height_square
+
+// 結果出力
+@msg = 痩せすぎです
+if @bmi > 18 {
+    @msg = 普通体重です
+}
+if @bmi > 25 {
+    @msg = 肥満(1度)です
+}
+if @bmi > 29 {
+    @msg = 肥満(2度)です
+}
+if @bmi > 34 {
+    @msg = 肥満(3度)です
+    log[@msg]
+}
+if @bmi > 39 {
+    @msg = 肥満(4度)です
+}
+log[身長:, @height_cm, cm, 体重:, @weight_kg, kg]
+log[BMI:, @bmi]
+log[@msg]

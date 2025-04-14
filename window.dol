@@ -1,0 +1,6 @@
+// windowサイズ定義
+@w = 800
+@h = 600
+
+// window表示
+window[@w, @h , Hi]
