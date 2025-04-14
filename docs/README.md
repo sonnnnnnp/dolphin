@@ -1,23 +1,29 @@
 # dolphin Language
 🐬 自作インタプリタ言語 dolphin 🐬<br>
 C++で実装されたインタプリタ<br>
-拡張子 `.dol`<br>
+拡張子は `.dol`<br>
 
 ## 構文
-- コメントアウト
+### コメントアウト
 ```
 // ここはコメント
 ```
-- 変数宣言
+### 変数宣言
 ```
 @foo = 123
 @bar = 12 * 34
 @baz = abc
 ```
-- 組み込み関数
-`log[ Hello World!!! ]`標準出力<br>
-`input[@var]`標準入力<br>
-`window[@width, @height, @window_name(省略可)]`window生成<br>
+### 組み込み関数<br>
+- 標準出力(変数、複数引数可)<br>
+`log[ Hello World!!! ]`<br>
+
+- 標準入力<br>
+`input[@var]`<br>
+
+- window生成<br>
+`window[@width, @height, @window_name(省略可)]`<br>
+
 - if文
 ```
 if @a < @b {
