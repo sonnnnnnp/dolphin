@@ -1,7 +1,7 @@
 # dolphin Language
-🐬 自作インタプリタ言語 dolphin 🐬
-C++で実装されたインタプリタ
-拡張子 `.dol`
+🐬 自作インタプリタ言語 dolphin 🐬<br>
+C++で実装されたインタプリタ<br>
+拡張子 `.dol`<br>
 
 ## 構文
 - コメントアウト
@@ -15,9 +15,9 @@ C++で実装されたインタプリタ
 @baz = abc
 ```
 - 組み込み関数
-`log[]`標準出力
-`input[]`標準入力
-`window[@width, @height, @window_name]`window生成
+`log[ Hello World!!! ]`標準出力<br>
+`input[@var]`標準入力<br>
+`window[@width, @height, @window_name(省略可)]`window生成<br>
 - if文
 ```
 if @a < @b {
