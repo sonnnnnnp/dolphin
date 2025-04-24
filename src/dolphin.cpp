@@ -16,26 +16,22 @@ private:
     unordered_map<string, function<void(vector<string>&)>> functions;
 
     string evaluate_expression(const string& expr) {
-        size_t pos = expr.find("+");
-        if (pos != string::npos) {
+        if (expr.find("+") != string::npos) {
             int left = stoi(resolve_variable(trim(expr.substr(0, pos))));
             int right = stoi(resolve_variable(trim(expr.substr(pos + 1))));
             return to_string(left + right);
         }
-        pos = expr.find("-");
-        if (pos != string::npos) {
+        if (expr.find("-") != string::npos) {
             int left = stoi(resolve_variable(trim(expr.substr(0, pos))));
             int right = stoi(resolve_variable(trim(expr.substr(pos + 1))));
             return to_string(left - right);
         }
-        pos = expr.find("*");
-        if (pos != string::npos) {
+        if (expr.find("*") != string::npos) {
             int left = stoi(resolve_variable(trim(expr.substr(0, pos))));
             int right = stoi(resolve_variable(trim(expr.substr(pos + 1))));
             return to_string(left * right);
         }
-        pos = expr.find("/");
-        if (pos != string::npos) {
+        if (expr.find("/") != string::npos) {
             int left = stoi(resolve_variable(trim(expr.substr(0, pos))));
             int right = stoi(resolve_variable(trim(expr.substr(pos + 1))));
             if (right == 0) {
