@@ -1,215 +1,304 @@
 #include "DolphinInterpreter.h"
 #include <iostream>
 #include <sstream>
-#include <unordered_map>
-#include <functional>
-#include <vector>
-#include <fstream>
 #include <string>
-#include <SFML/Graphics.hpp>
-// 必要に応じて他のモジュールのヘッダーも include する
 
 using namespace std;
 
+// ---- キー名変換 ----
+
+sf::Keyboard::Key DolphinInterpreter::str_to_key(const string& name) {
+    if (name == "Left")  return sf::Keyboard::Left;
+    if (name == "Right") return sf::Keyboard::Right;
+    if (name == "Up")    return sf::Keyboard::Up;
+    if (name == "Down")  return sf::Keyboard::Down;
+    if (name == "Space") return sf::Keyboard::Space;
+    if (name == "Enter") return sf::Keyboard::Return;
+    if (name == "Z")     return sf::Keyboard::Z;
+    if (name == "X")     return sf::Keyboard::X;
+    if (name == "A")     return sf::Keyboard::A;
+    if (name == "D")     return sf::Keyboard::D;
+    if (name == "W")     return sf::Keyboard::W;
+    if (name == "S")     return sf::Keyboard::S;
+    return sf::Keyboard::Unknown;
+}
+
+// ---- コンストラクタ / デストラクタ ----
+
 DolphinInterpreter::DolphinInterpreter() {
-    // 組み込み関数 log[]
+    // log[arg1, arg2, ...]
     functions["log"] = [this](vector<string>& args) {
         args = resolve_variable_array(args);
-        if (args.empty()) {
-            return;
-        }
+        if (args.empty()) return;
         cout << args[0];
-        for (size_t i = 1; i < args.size(); ++i) {
+        for (size_t i = 1; i < args.size(); ++i)
             cout << " " << args[i];
-        }
         cout << endl;
     };
-    // 組み込み関数 input[]
+
+    // input[@var]
     functions["input"] = [this](vector<string>& args) {
-        if (args.empty()) {
-            cerr << "Error: input function requires at least 1 argument." << endl;
-            return;
-        }
+        if (args.empty()) { cerr << "Error: input requires 1 argument." << endl; return; }
         string input;
         getline(cin, input);
-        // 変数に格納
         declare_variable(args[0].substr(1), input);
     };
-    // 組み込み関数 window[]
+
+    // window[width, height, title?] — ノンブロッキング
     functions["window"] = [this](vector<string>& args) {
         args = resolve_variable_array(args);
-        if (args.size() < 2) {
-            cerr << "Error: draw function requires at least 2 arguments." << endl;
-            return;
-        }
-        // 引数を取得
-        int width = stoi(args[0]);
+        if (args.size() < 2) { cerr << "Error: window requires width and height." << endl; return; }
+        int width  = stoi(args[0]);
         int height = stoi(args[1]);
-        string title = (args.size() > 2) ? args[2] : "";
-        // SFMLウィンドウの作成
-        sf::RenderWindow window(sf::VideoMode(width, height), title);
+        string title = (args.size() > 2) ? args[2] : "dolphin";
+        delete gameWindow;
+        gameWindow = new sf::RenderWindow(sf::VideoMode(width, height), title);
+        gameWindow->setFramerateLimit(60);
+    };
 
-        // 描画ループ
-        while (window.isOpen()) {
-            sf::Event event;
-            while (window.pollEvent(event)) {
-                if (event.type == sf::Event::Closed)
-                    window.close();
-            }
-            window.clear();
-            // window.draw(rectangle);
-            window.display();
+    // rect_create[id, x, y, w, h, r, g, b]
+    functions["rect_create"] = [this](vector<string>& args) {
+        if (args.size() < 8) { cerr << "Error: rect_create requires id x y w h r g b." << endl; return; }
+        string id = args[0];
+        vector<string> nums(args.begin() + 1, args.end());
+        nums = resolve_variable_array(nums);
+
+        sf::RectangleShape rect(sf::Vector2f(stof(nums[2]), stof(nums[3])));
+        rect.setPosition(stof(nums[0]), stof(nums[1]));
+        rect.setFillColor(sf::Color(stoi(nums[4]), stoi(nums[5]), stoi(nums[6])));
+
+        if (shape_index.count(id)) {
+            shape_list[shape_index[id]].second = rect;
+        } else {
+            shape_index[id] = shape_list.size();
+            shape_list.push_back({id, rect});
         }
+    };
+
+    // rect_set[id, x, y]
+    functions["rect_set"] = [this](vector<string>& args) {
+        if (args.size() < 3) { cerr << "Error: rect_set requires id x y." << endl; return; }
+        string id = args[0];
+        vector<string> nums(args.begin() + 1, args.end());
+        nums = resolve_variable_array(nums);
+        if (!shape_index.count(id)) { cerr << "Error: rect '" << id << "' not found." << endl; return; }
+        shape_list[shape_index[id]].second.setPosition(stof(nums[0]), stof(nums[1]));
+    };
+
+    // key_check[KeyName, @var]
+    functions["key_check"] = [this](vector<string>& args) {
+        if (args.size() < 2) { cerr << "Error: key_check requires key_name and @var." << endl; return; }
+        string key_name = resolve_variable(trim(args[0]));
+        string var_name = trim(args[1]).substr(1);
+        declare_variable(var_name, sf::Keyboard::isKeyPressed(str_to_key(key_name)) ? "1" : "0");
+    };
+
+    // bg[r, g, b] — ウィンドウのクリアカラー
+    functions["bg"] = [this](vector<string>& args) {
+        args = resolve_variable_array(args);
+        if (args.size() < 3) return;
+        clearColor = sf::Color(stoi(args[0]), stoi(args[1]), stoi(args[2]));
     };
 }
 
-void DolphinInterpreter::execute(const string& code) {
-    stringstream ss(code);
-    string line;
-    
-    while (getline(ss, line)) {
-        line = trim(line); // 行の前後の空白を削除
-        if (line.empty()) continue; // 空行をスキップ
-        if (line.find("//") == 0) continue; // コメントアウトをスキップ
+DolphinInterpreter::~DolphinInterpreter() {
+    delete gameWindow;
+}
 
-        // 変数宣言 (例: @a = 10)
-        if (line.find("@") == 0 && line.find("=") != string::npos) {
-            size_t pos = line.find("=");
-            string var_name = trim(line.substr(1, pos - 1));
-            string var_value = trim(line.substr(pos + 1)); // '='の後ろを取得
-            var_value = evaluate_expression(var_value); // 変数の演算を解決
-            declare_variable(var_name, var_value);
+// ---- ブロック読み取り ({...} を対応する } まで収集) ----
+
+string DolphinInterpreter::read_block(istringstream& ss, const string& first_line) {
+    string block;
+    // 1行に { } が両方ある場合
+    size_t open  = first_line.find('{');
+    size_t close = first_line.rfind('}');
+    if (open != string::npos && close != string::npos && close > open)
+        return first_line.substr(open + 1, close - open - 1);
+
+    // 複数行ブロック
+    int depth = 1;
+    string line;
+    while (getline(ss, line)) {
+        string t = trim(line);
+        for (char c : t) {
+            if (c == '{') depth++;
+            if (c == '}') { if (--depth == 0) goto done; }
+        }
+        block += line + "\n";
+    }
+done:
+    return block;
+}
+
+// ---- メイン実行 ----
+
+void DolphinInterpreter::execute(const string& code) {
+    istringstream ss(code);
+    string line;
+
+    while (getline(ss, line)) {
+        line = trim(line);
+        if (line.empty() || line.find("//") == 0) continue;
+
+        // 変数宣言: @var = expr
+        if (line[0] == '@' && line.find('=') != string::npos) {
+            size_t pos     = line.find('=');
+            string var_name  = trim(line.substr(1, pos - 1));
+            string var_value = trim(line.substr(pos + 1));
+            declare_variable(var_name, evaluate_expression(var_value));
+            continue;
         }
 
-        // 関数呼び出し (例: log(@a))
-        if (line.find("[") != string::npos && line.back() == ']') {
-            size_t name_end = line.find("[");
-            string func_name = line.substr(0, name_end);
-            string arg_str = line.substr(name_end + 1, line.size() - name_end - 2); // 括弧内
-            // 関数名の前後の空白を削除
-            func_name = trim(func_name);
-            // 引数無しの場合
+        // gameloop { ... }
+        if (line.find("gameloop") == 0 && line.find('{') != string::npos) {
+            string block = read_block(ss, line);
+            if (!gameWindow) { cerr << "Error: call window[] before gameloop." << endl; continue; }
+            while (gameWindow->isOpen()) {
+                sf::Event event;
+                while (gameWindow->pollEvent(event))
+                    if (event.type == sf::Event::Closed) gameWindow->close();
+                if (!gameWindow->isOpen()) break;
+                execute(block);
+                gameWindow->clear(clearColor);
+                for (auto& [id, shape] : shape_list)
+                    gameWindow->draw(shape);
+                gameWindow->display();
+            }
+            continue;
+        }
+
+        // if文: if cond { ... }
+        if (line.find("if") == 0 && line.find('{') != string::npos) {
+            size_t brace = line.find('{');
+            string cond  = trim(line.substr(2, brace - 2));
+            string block = read_block(ss, line);
+            if (evaluate_expression(cond) == "1")
+                execute(block);
+            continue;
+        }
+
+        // 関数呼び出し: func[arg1, arg2, ...]
+        if (line.find('[') != string::npos && line.back() == ']') {
+            size_t name_end = line.find('[');
+            string func_name = trim(line.substr(0, name_end));
+            string arg_str   = line.substr(name_end + 1, line.size() - name_end - 2);
             if (arg_str.empty()) {
                 run_function(func_name, {});
-                continue;
-            }
-            // 引数をカンマ区切りで分割
-            vector<string> raw_args;
-            stringstream arg_ss(arg_str);
-            string item;
-            while (getline(arg_ss, item, ',')) {
-                raw_args.push_back(trim(item));
-            }
-
-            run_function(func_name, raw_args);
-        }
-        // 条件分岐 (例: if (@a > 10) { log(@a); })
-        if (line.find("if") == 0 && line.find("{") != string::npos) {
-            // 条件とブロックの抽出
-            size_t cond_start = line.find("if") + 2;
-            size_t brace_pos = line.find("{");
-        
-            string condition = trim(line.substr(cond_start, brace_pos - cond_start));
-            string block_line;
-            string block = "";
-        
-            // ブレース内の複数行読み込み（対応: { ... } が別行でもOK）
-            if (line.find("}") == string::npos) {
-                while (getline(ss, block_line)) {
-                    if (block_line.find("}") != string::npos) break;
-                    block += block_line + "\n";
-                }
             } else {
-                // 単一行に } まである場合
-                block = line.substr(brace_pos + 1, line.find("}") - brace_pos - 1);
-            }
-        
-            // 条件を評価
-            string cond_result = evaluate_expression(condition);
-            if (cond_result == "1" || cond_result == "true") {
-                execute(block); // 再帰的にブロック実行
+                vector<string> raw_args;
+                istringstream arg_ss(arg_str);
+                string item;
+                while (getline(arg_ss, item, ','))
+                    raw_args.push_back(trim(item));
+                run_function(func_name, raw_args);
             }
             continue;
         }
     }
 }
 
+// ---- 式評価 ----
+
 string DolphinInterpreter::evaluate_expression(const string& expr) {
-    size_t pos = expr.find("+");
+    // 論理 OR
+    size_t pos = expr.find("||");
     if (pos != string::npos) {
-        int left = stoi(resolve_variable(trim(expr.substr(0, pos))));
-        int right = stoi(resolve_variable(trim(expr.substr(pos + 1))));
-        return to_string(left + right);
+        bool l = (evaluate_expression(trim(expr.substr(0, pos))) == "1");
+        bool r = (evaluate_expression(trim(expr.substr(pos + 2))) == "1");
+        return (l || r) ? "1" : "0";
     }
-    pos = expr.find("-");
+    // 論理 AND
+    pos = expr.find("&&");
     if (pos != string::npos) {
-        int left = stoi(resolve_variable(trim(expr.substr(0, pos))));
-        int right = stoi(resolve_variable(trim(expr.substr(pos + 1))));
-        return to_string(left - right);
+        bool l = (evaluate_expression(trim(expr.substr(0, pos))) == "1");
+        bool r = (evaluate_expression(trim(expr.substr(pos + 2))) == "1");
+        return (l && r) ? "1" : "0";
     }
-    pos = expr.find("*");
+    // != と ==（先に 2文字演算子を確認）
+    pos = expr.find("!=");
     if (pos != string::npos) {
-        int left = stoi(resolve_variable(trim(expr.substr(0, pos))));
-        int right = stoi(resolve_variable(trim(expr.substr(pos + 1))));
-        return to_string(left * right);
-    }
-    pos = expr.find("/");
-    if (pos != string::npos) {
-        int left = stoi(resolve_variable(trim(expr.substr(0, pos))));
-        int right = stoi(resolve_variable(trim(expr.substr(pos + 1))));
-        if (right == 0) {
-            cerr << "Error: Division by zero." << endl;
-            return "";
-        }
-        return to_string(left / right);
-    }
-    pos = expr.find(">");
-    if (pos != string::npos) {
-        int left = stoi(resolve_variable(trim(expr.substr(0, pos))));
-        int right = stoi(resolve_variable(trim(expr.substr(pos + 1))));
-        return (left > right) ? "1" : "0";
-    }
-    pos = expr.find("<");
-    if (pos != string::npos) {
-        int left = stoi(resolve_variable(trim(expr.substr(0, pos))));
-        int right = stoi(resolve_variable(trim(expr.substr(pos + 1))));
-        return (left < right) ? "1" : "0";
+        string l = evaluate_expression(trim(expr.substr(0, pos)));
+        string r = evaluate_expression(trim(expr.substr(pos + 2)));
+        try { return (stoi(l) != stoi(r)) ? "1" : "0"; } catch (...) { return (l != r) ? "1" : "0"; }
     }
     pos = expr.find("==");
     if (pos != string::npos) {
-        int left = stoi(resolve_variable(trim(expr.substr(0, pos))));
-        int right = stoi(resolve_variable(trim(expr.substr(pos + 2))));
-        return (left == right) ? "1" : "0";
+        string l = evaluate_expression(trim(expr.substr(0, pos)));
+        string r = evaluate_expression(trim(expr.substr(pos + 2)));
+        try { return (stoi(l) == stoi(r)) ? "1" : "0"; } catch (...) { return (l == r) ? "1" : "0"; }
     }
-    pos = expr.find("!=");
+    // >= と <=
+    pos = expr.find(">=");
     if (pos != string::npos) {
-        int left = stoi(resolve_variable(trim(expr.substr(0, pos))));
-        int right = stoi(resolve_variable(trim(expr.substr(pos + 2))));
-        return (left != right) ? "1" : "0";
+        int l = stoi(evaluate_expression(trim(expr.substr(0, pos))));
+        int r = stoi(evaluate_expression(trim(expr.substr(pos + 2))));
+        return (l >= r) ? "1" : "0";
     }
-    // <, ==, != とかも後々追加するンゴ
+    pos = expr.find("<=");
+    if (pos != string::npos) {
+        int l = stoi(evaluate_expression(trim(expr.substr(0, pos))));
+        int r = stoi(evaluate_expression(trim(expr.substr(pos + 2))));
+        return (l <= r) ? "1" : "0";
+    }
+    // > と <
+    pos = expr.find('>');
+    if (pos != string::npos) {
+        int l = stoi(evaluate_expression(trim(expr.substr(0, pos))));
+        int r = stoi(evaluate_expression(trim(expr.substr(pos + 1))));
+        return (l > r) ? "1" : "0";
+    }
+    pos = expr.find('<');
+    if (pos != string::npos) {
+        int l = stoi(evaluate_expression(trim(expr.substr(0, pos))));
+        int r = stoi(evaluate_expression(trim(expr.substr(pos + 1))));
+        return (l < r) ? "1" : "0";
+    }
+    // 四則演算
+    pos = expr.find('+');
+    if (pos != string::npos) {
+        int l = stoi(evaluate_expression(trim(expr.substr(0, pos))));
+        int r = stoi(evaluate_expression(trim(expr.substr(pos + 1))));
+        return to_string(l + r);
+    }
+    // - は単項マイナスと区別するため pos > 0 のみ
+    pos = expr.rfind('-');
+    if (pos != string::npos && pos > 0) {
+        int l = stoi(evaluate_expression(trim(expr.substr(0, pos))));
+        int r = stoi(evaluate_expression(trim(expr.substr(pos + 1))));
+        return to_string(l - r);
+    }
+    pos = expr.find('*');
+    if (pos != string::npos) {
+        int l = stoi(evaluate_expression(trim(expr.substr(0, pos))));
+        int r = stoi(evaluate_expression(trim(expr.substr(pos + 1))));
+        return to_string(l * r);
+    }
+    pos = expr.rfind('/');
+    if (pos != string::npos) {
+        int l = stoi(evaluate_expression(trim(expr.substr(0, pos))));
+        int r = stoi(evaluate_expression(trim(expr.substr(pos + 1))));
+        if (r == 0) { cerr << "Error: Division by zero." << endl; return "0"; }
+        return to_string(l / r);
+    }
     return resolve_variable(expr);
 }
 
+// ---- ユーティリティ ----
+
 string DolphinInterpreter::resolve_variable(const string& var_name) {
-    // 変数名が '@' で始まる場合、変数として解決
-    if (var_name[0] == '@') {
+    if (!var_name.empty() && var_name[0] == '@') {
         string name = var_name.substr(1);
-        if (variables.count(name)) {
-            return variables[name];
-        } else {
-            cerr << "Error: Variable '" << name << "' is not defined." << endl;
-            return "";
-        }
+        if (variables.count(name)) return variables[name];
+        cerr << "Error: Variable '" << name << "' is not defined." << endl;
+        return "0";
     }
-    // 変数名が '@' で始まらない場合、文字列として返す
     return var_name;
 }
 
 string DolphinInterpreter::trim(const string& str) {
-    size_t start = str.find_first_not_of(" \t");
-    size_t end = str.find_last_not_of(" \t");
-    return (start == string::npos) ? "" : str.substr(start, (end - start + 1));
+    size_t start = str.find_first_not_of(" \t\r");
+    size_t end   = str.find_last_not_of(" \t\r");
+    return (start == string::npos) ? "" : str.substr(start, end - start + 1);
 }
 
 void DolphinInterpreter::declare_variable(const string& name, const string& value) {
@@ -217,16 +306,14 @@ void DolphinInterpreter::declare_variable(const string& name, const string& valu
 }
 
 vector<string> DolphinInterpreter::resolve_variable_array(const vector<string>& var_names) {
-    vector<string> resolved_args;
-    for (auto& arg : var_names) {
-        resolved_args.push_back(evaluate_expression(arg));
-    }
-    return resolved_args;
+    vector<string> resolved;
+    for (const auto& v : var_names)
+        resolved.push_back(evaluate_expression(v));
+    return resolved;
 }
 
 void DolphinInterpreter::run_function(const string& name, vector<string> args) {
-    // 関数が存在するか確認
-    if (functions.find(name) != functions.end()) {
+    if (functions.count(name)) {
         functions[name](args);
     } else {
         cerr << "Error: Function '" << name << "' is not defined." << endl;

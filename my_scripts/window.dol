@@ -3,4 +3,7 @@
 @h = 600
 
 // window表示
-window[@w, @h , Hi]
+window[@w, @h, Hi]
+
+gameloop {
+}
