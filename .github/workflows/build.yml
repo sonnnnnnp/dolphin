@@ -1,0 +1,62 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+            artifact: dolphin
+          - os: windows-latest
+            name: windows
+            artifact: dolphin.exe
+          - os: macos-latest
+            name: macos
+            artifact: dolphin
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libx11-dev libxrandr-dev libxi-dev \
+            libudev-dev libgl1-mesa-dev libfreetype-dev
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dolphin-${{ matrix.name }}
+          path: |
+            build/${{ matrix.artifact }}
+            build/Release/${{ matrix.artifact }}
+            build/*.dll
+
+      # リリース作成時はバイナリをアタッチ
+      - name: Upload to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/${{ matrix.artifact }}
+            build/Release/${{ matrix.artifact }}
+            build/*.dll
