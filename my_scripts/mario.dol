@@ -1,62 +1,76 @@
 window[800, 600, dolphin Mario]
+bg[100, 149, 237]
 
-// 背景・地面
-rect_create[sky,    0,   0, 800, 480, 100, 149, 237]
-rect_create[ground, 0, 480, 800, 120,  80,  50,  20]
+img_load[player, assets/player.png]
+img_load[tile,   assets/tile.png]
+img_load[ground, assets/ground.png]
+img_load[coin,   assets/coin.png]
 
-// プレイヤー (赤い四角, 幅40 高さ60)
-rect_create[player, 100, 420, 40, 60, 220, 50, 50]
+// 足場: x座標, y座標, タイル幅
+@plat_x = {160, 380, 560, 800, 1040, 1280, 1520, 1800, 2100, 2400}
+@plat_y = {440, 390, 450, 370, 420,  350,  460,  380,  360,  440}
+@plat_w = {3,   4,   3,   5,   3,    4,    3,    4,    5,    3}
 
-// 足場 (platform1: x200-320 y350,  platform2: x450-570 y280)
-rect_create[platform1, 200, 350, 120, 20,  80, 180,  80]
-rect_create[platform2, 450, 280, 120, 20,  80, 180,  80]
+// コイン: x座標, y座標, 生存フラグ
+@coin_x     = {240, 450, 650, 900, 1150, 1450, 1680, 2000}
+@coin_y     = {405, 355, 415, 340, 385,  315,  445,  325}
+@coin_alive = {1,   1,   1,   1,   1,    1,    1,    1}
 
-// 初期状態
-@px = 100
-@py = 420
+@px = 80
+@py = 472
 @vy = 0
+@facing = 0
 @on_ground = 0
+@score = 0
+@cam_x = 0
+
+arr_len[plat_x, @plen]
+arr_len[coin_x,  @clen]
 
 gameloop (
-    // 毎フレームリセット（歩いて落ちたとき空中ジャンプしないように）
-    @on_ground = 0
+    // 入力
+    key_check[Left,  @go_left]
+    key_check[Right, @go_right]
+    key_check[Space, @jump]
+
+    // 横移動 (facing: 0=右, 1=左)
+    if @go_left == 1 (
+        @px = @px - 5
+        @facing = 1
+    )
+    if @go_right == 1 (
+        @px = @px + 5
+        @facing = 0
+    )
 
     // 重力
     @vy = @vy + 1
-
-    // 最大落下速度
     if @vy > 20 (
         @vy = 20
     )
-
     @py = @py + @vy
 
-    // 地面判定 (プレイヤー上端が y420 = 地面上面)
-    if @py >= 420 (
-        @py = 420
+    // 地面判定 (地面上面y=520, プレイヤー高さ48 → 立ち位置y=472)
+    @on_ground = 0
+    if @py >= 472 (
+        @py = 472
         @vy = 0
         @on_ground = 1
     )
 
-    // 足場1 判定: プレイヤー底面(py+60)が y350 を上から越えたとき
-    // py >= 290 かつ py <= 360 で "近傍のみ" に絞り込む (下を歩いても反応しない)
-    if @vy >= 0 && @py >= 290 && @py <= 360 && @px >= 160 && @px <= 310 (
-        @py = 290
-        @vy = 0
-        @on_ground = 1
+    // 足場衝突
+    @pi = 0
+    while @pi < @plen (
+        @pcx = @plat_x[@pi]
+        @pcy = @plat_y[@pi]
+        @pcw = @plat_w[@pi] * 32
+        if @vy >= 0 && @py + 48 >= @pcy && @py + 48 <= @pcy + 15 && @px + 32 > @pcx && @px < @pcx + @pcw (
+            @py = @pcy - 48
+            @vy = 0
+            @on_ground = 1
+        )
+        @pi = @pi + 1
     )
-
-    // 足場2 判定: プレイヤー底面(py+60)が y280 を上から越えたとき
-    if @vy >= 0 && @py >= 220 && @py <= 290 && @px >= 410 && @px <= 560 (
-        @py = 220
-        @vy = 0
-        @on_ground = 1
-    )
-
-    // キー入力
-    key_check[Space, @jump]
-    key_check[Left,  @move_left]
-    key_check[Right, @move_right]
 
     // ジャンプ
     if @jump == 1 && @on_ground == 1 (
@@ -64,22 +78,74 @@ gameloop (
         @on_ground = 0
     )
 
-    // 横移動
-    if @move_left == 1 (
-        @px = @px - 5
-    )
-    if @move_right == 1 (
-        @px = @px + 5
-    )
-
-    // 画面端クランプ
+    // 世界端クランプ (ワールド幅2800px, プレイヤー幅32px)
     if @px < 0 (
         @px = 0
     )
-    if @px > 760 (
-        @px = 760
+    if @px > 2768 (
+        @px = 2768
     )
 
-    // 描画更新
-    rect_set[player, @px, @py]
+    // 落下リセット
+    if @py > 650 (
+        @px = 80
+        @py = 472
+        @vy = 0
+    )
+
+    // コイン取得
+    @ci = 0
+    while @ci < @clen (
+        @ccx = @coin_x[@ci]
+        @ccy = @coin_y[@ci]
+        if @coin_alive[@ci] == 1 && @px + 32 > @ccx && @px < @ccx + 16 && @py + 48 > @ccy && @py < @ccy + 16 (
+            arr_set[coin_alive, @ci, 0]
+            @score = @score + 1
+        )
+        @ci = @ci + 1
+    )
+
+    // カメラ (プレイヤーを画面中央に, 上限2000)
+    @cam_x = @px - 400
+    if @cam_x < 0 (
+        @cam_x = 0
+    )
+    if @cam_x > 2000 (
+        @cam_x = 2000
+    )
+    camera_set[@cam_x, 0]
+
+    // 描画: 地面タイル
+    @gx = 0
+    while @gx < 2800 (
+        img_draw[ground, @gx, 520]
+        img_draw[ground, @gx, 552]
+        @gx = @gx + 32
+    )
+
+    // 描画: 足場タイル
+    @pi = 0
+    while @pi < @plen (
+        @ptx = @plat_x[@pi]
+        @pti = 0
+        while @pti < @plat_w[@pi] (
+            img_draw[tile, @ptx, @plat_y[@pi]]
+            @ptx = @ptx + 32
+            @pti = @pti + 1
+        )
+        @pi = @pi + 1
+    )
+
+    // 描画: コイン
+    @ci = 0
+    while @ci < @clen (
+        if @coin_alive[@ci] == 1 (
+            img_draw[coin, @coin_x[@ci], @coin_y[@ci]]
+        )
+        @ci = @ci + 1
+    )
+
+    // 描画: プレイヤー
+    img_flip[player, @facing]
+    img_draw[player, @px, @py]
 )
