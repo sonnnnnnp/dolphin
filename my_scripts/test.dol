@@ -3,6 +3,6 @@ window[800, 600, dolphin Mario]
 // 背景・地面
 rect_create[sky,    0,   0, 800, 480, 100, 149, 237]
 
-gameloop {
+gameloop (
     
-}
+)

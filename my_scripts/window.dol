@@ -5,5 +5,5 @@
 // window表示
 window[@w, @h, Hi]
 
-gameloop {
-}
+gameloop (
+)

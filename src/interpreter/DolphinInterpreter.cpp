@@ -105,13 +105,13 @@ DolphinInterpreter::~DolphinInterpreter() {
     delete gameWindow;
 }
 
-// ---- ブロック読み取り ({...} を対応する } まで収集) ----
+// ---- ブロック読み取り ((...) を対応する ) まで収集) ----
 
 string DolphinInterpreter::read_block(istringstream& ss, const string& first_line) {
     string block;
-    // 1行に { } が両方ある場合
-    size_t open  = first_line.find('{');
-    size_t close = first_line.rfind('}');
+    // 1行に ( ) が両方ある場合
+    size_t open  = first_line.find('(');
+    size_t close = first_line.rfind(')');
     if (open != string::npos && close != string::npos && close > open)
         return first_line.substr(open + 1, close - open - 1);
 
@@ -121,8 +121,8 @@ string DolphinInterpreter::read_block(istringstream& ss, const string& first_lin
     while (getline(ss, line)) {
         string t = trim(line);
         for (char c : t) {
-            if (c == '{') depth++;
-            if (c == '}') { if (--depth == 0) goto done; }
+            if (c == '(') depth++;
+            if (c == ')') { if (--depth == 0) goto done; }
         }
         block += line + "\n";
     }
@@ -149,8 +149,8 @@ void DolphinInterpreter::execute(const string& code) {
             continue;
         }
 
-        // gameloop { ... }
-        if (line.find("gameloop") == 0 && line.find('{') != string::npos) {
+        // gameloop ( ... )
+        if (line.find("gameloop") == 0 && line.find('(') != string::npos) {
             string block = read_block(ss, line);
             if (!gameWindow) { cerr << "Error: call window[] before gameloop." << endl; continue; }
             while (gameWindow->isOpen()) {
@@ -167,9 +167,9 @@ void DolphinInterpreter::execute(const string& code) {
             continue;
         }
 
-        // if文: if cond { ... }
-        if (line.find("if") == 0 && line.find('{') != string::npos) {
-            size_t brace = line.find('{');
+        // if文: if cond ( ... )
+        if (line.find("if") == 0 && line.find('(') != string::npos) {
+            size_t brace = line.find('(');
             string cond  = trim(line.substr(2, brace - 2));
             string block = read_block(ss, line);
             if (evaluate_expression(cond) == "1")

@@ -15,22 +15,22 @@ input[@weight_kg]
 
 // 結果出力
 @msg = 痩せすぎです
-if @bmi > 18 {
+if @bmi > 18 (
     @msg = 普通体重です
-}
-if @bmi > 25 {
+)
+if @bmi > 25 (
     @msg = 肥満(1度)です
-}
-if @bmi > 29 {
+)
+if @bmi > 29 (
     @msg = 肥満(2度)です
-}
-if @bmi > 34 {
+)
+if @bmi > 34 (
     @msg = 肥満(3度)です
     log[@msg]
-}
-if @bmi > 39 {
+)
+if @bmi > 39 (
     @msg = 肥満(4度)です
-}
+)
 log[身長:, @height_cm, cm, 体重:, @weight_kg, kg]
 log[BMI:, @bmi]
 log[@msg]

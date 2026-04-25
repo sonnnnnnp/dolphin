@@ -39,13 +39,13 @@ input[@var]
 比較演算子: `>` `<` `>=` `<=` `==` `!=`
 論理演算子: `&&` `||`
 ```
-if @a < @b {
+if @a < @b (
     log[@a, より, @b, の方が大きいです!!!]
-}
+)
 
-if @a > 0 && @b > 0 {
+if @a > 0 && @b > 0 (
     log[両方正の数]
-}
+)
 ```
 
 ---
@@ -96,9 +96,9 @@ key_check[Right, @go_right]
 ### ゲームループ
 ウィンドウが閉じるまでブロック内を毎フレーム実行する（60fps）。
 ```
-gameloop {
+gameloop (
     // ここに毎フレームの処理を書く
-}
+)
 ```
 
 ---
@@ -118,31 +118,31 @@ rect_create[player, 100, 420, 40, 60, 220, 50, 50]
 @vy = 0
 @on_ground = 0
 
-gameloop {
+gameloop (
     @vy = @vy + 1
     @py = @py + @vy
 
-    if @py >= 420 {
+    if @py >= 420 (
         @py = 420
         @vy = 0
         @on_ground = 1
-    }
+    )
 
     key_check[Space, @jump]
     key_check[Left,  @move_left]
     key_check[Right, @move_right]
 
-    if @jump == 1 && @on_ground == 1 {
+    if @jump == 1 && @on_ground == 1 (
         @vy = -18
         @on_ground = 0
-    }
-    if @move_left == 1 {
+    )
+    if @move_left == 1 (
         @px = @px - 5
-    }
-    if @move_right == 1 {
+    )
+    if @move_right == 1 (
         @px = @px + 5
-    }
+    )
 
     rect_set[player, @px, @py]
-}
+)
 ```
