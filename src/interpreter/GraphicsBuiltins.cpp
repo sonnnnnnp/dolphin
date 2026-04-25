@@ -2,9 +2,7 @@
 #include <iostream>
 #include <memory>
 
-using namespace std;
-
-static sf::Keyboard::Key str_to_key(const string& name) {
+static sf::Keyboard::Key str_to_key(const std::string& name) {
     if (name == "Left")  return sf::Keyboard::Left;
     if (name == "Right") return sf::Keyboard::Right;
     if (name == "Up")    return sf::Keyboard::Up;
@@ -22,26 +20,26 @@ static sf::Keyboard::Key str_to_key(const string& name) {
 
 void DolphinInterpreter::register_graphics_builtins() {
     // window[width, height, title?]
-    functions["window"] = [this](vector<string>& args) {
+    functions["window"] = [this](std::vector<std::string>& args) {
         args = resolve_variable_array(args);
-        if (args.size() < 2) { cerr << "Error: window requires width and height." << endl; return; }
+        if (args.size() < 2) { std::cerr << "Error: window requires width and height." << std::endl; return; }
         delete gameWindow;
         gameWindow = new sf::RenderWindow(
-            sf::VideoMode(stoi(args[0]), stoi(args[1])),
+            sf::VideoMode(std::stoi(args[0]), std::stoi(args[1])),
             args.size() > 2 ? args[2] : "dolphin"
         );
         gameWindow->setFramerateLimit(60);
     };
 
     // rect_create[id, x, y, w, h, r, g, b]
-    functions["rect_create"] = [this](vector<string>& args) {
-        if (args.size() < 8) { cerr << "Error: rect_create requires id x y w h r g b." << endl; return; }
-        string id = args[0];
-        vector<string> n = resolve_variable_array(vector<string>(args.begin() + 1, args.end()));
+    functions["rect_create"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 8) { std::cerr << "Error: rect_create requires id x y w h r g b." << std::endl; return; }
+        std::string id = args[0];
+        std::vector<std::string> n = resolve_variable_array(std::vector<std::string>(args.begin() + 1, args.end()));
 
-        sf::RectangleShape rect(sf::Vector2f(stof(n[2]), stof(n[3])));
-        rect.setPosition(stof(n[0]), stof(n[1]));
-        rect.setFillColor(sf::Color(stoi(n[4]), stoi(n[5]), stoi(n[6])));
+        sf::RectangleShape rect(sf::Vector2f(std::stof(n[2]), std::stof(n[3])));
+        rect.setPosition(std::stof(n[0]), std::stof(n[1]));
+        rect.setFillColor(sf::Color(std::stoi(n[4]), std::stoi(n[5]), std::stoi(n[6])));
 
         if (shape_index.count(id)) {
             shape_list[shape_index[id]].second = rect;
@@ -52,56 +50,56 @@ void DolphinInterpreter::register_graphics_builtins() {
     };
 
     // rect_set[id, x, y]
-    functions["rect_set"] = [this](vector<string>& args) {
-        if (args.size() < 3) { cerr << "Error: rect_set requires id x y." << endl; return; }
-        string id = args[0];
-        vector<string> n = resolve_variable_array(vector<string>(args.begin() + 1, args.end()));
-        if (!shape_index.count(id)) { cerr << "Error: rect '" << id << "' not found." << endl; return; }
-        shape_list[shape_index[id]].second.setPosition(stof(n[0]), stof(n[1]));
+    functions["rect_set"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 3) { std::cerr << "Error: rect_set requires id x y." << std::endl; return; }
+        std::string id = args[0];
+        std::vector<std::string> n = resolve_variable_array(std::vector<std::string>(args.begin() + 1, args.end()));
+        if (!shape_index.count(id)) { std::cerr << "Error: rect '" << id << "' not found." << std::endl; return; }
+        shape_list[shape_index[id]].second.setPosition(std::stof(n[0]), std::stof(n[1]));
     };
 
     // key_check[KeyName, @var]
-    functions["key_check"] = [this](vector<string>& args) {
-        if (args.size() < 2) { cerr << "Error: key_check requires key_name and @var." << endl; return; }
-        string key_name = resolve_variable(trim(args[0]));
-        string var_name = trim(args[1]).substr(1);
+    functions["key_check"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 2) { std::cerr << "Error: key_check requires key_name and @var." << std::endl; return; }
+        std::string key_name = resolve_variable(trim(args[0]));
+        std::string var_name = trim(args[1]).substr(1);
         declare_variable(var_name, sf::Keyboard::isKeyPressed(str_to_key(key_name)) ? "1" : "0");
     };
 
     // bg[r, g, b]
-    functions["bg"] = [this](vector<string>& args) {
+    functions["bg"] = [this](std::vector<std::string>& args) {
         args = resolve_variable_array(args);
         if (args.size() < 3) return;
-        clearColor = sf::Color(stoi(args[0]), stoi(args[1]), stoi(args[2]));
+        clearColor = sf::Color(std::stoi(args[0]), std::stoi(args[1]), std::stoi(args[2]));
     };
 
     // img_load[id, path]
-    functions["img_load"] = [this](vector<string>& args) {
-        if (args.size() < 2) { cerr << "Error: img_load requires id and path." << endl; return; }
-        string id = trim(args[0]), path = trim(args[1]);
-        auto entry = make_unique<SpriteEntry>();
+    functions["img_load"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 2) { std::cerr << "Error: img_load requires id and path." << std::endl; return; }
+        std::string id = trim(args[0]), path = trim(args[1]);
+        auto entry = std::make_unique<SpriteEntry>();
         if (!entry->texture.loadFromFile(path)) {
-            cerr << "Error: Failed to load image '" << path << "'." << endl; return;
+            std::cerr << "Error: Failed to load image '" << path << "'." << std::endl; return;
         }
         entry->sprite.setTexture(entry->texture);
         sprite_map[id] = std::move(entry);
     };
 
     // img_draw[id, x, y]
-    functions["img_draw"] = [this](vector<string>& args) {
+    functions["img_draw"] = [this](std::vector<std::string>& args) {
         args = resolve_variable_array(args);
-        if (args.size() < 3) { cerr << "Error: img_draw requires id, x, y." << endl; return; }
-        string id = args[0];
-        if (!sprite_map.count(id)) { cerr << "Error: Image '" << id << "' not loaded." << endl; return; }
-        sprite_map[id]->sprite.setPosition(stof(args[1]), stof(args[2]));
+        if (args.size() < 3) { std::cerr << "Error: img_draw requires id, x, y." << std::endl; return; }
+        std::string id = args[0];
+        if (!sprite_map.count(id)) { std::cerr << "Error: Image '" << id << "' not loaded." << std::endl; return; }
+        sprite_map[id]->sprite.setPosition(std::stof(args[1]), std::stof(args[2]));
         sprite_draw_queue.push_back(sprite_map[id]->sprite);
     };
 
     // img_flip[id, 1/0]
-    functions["img_flip"] = [this](vector<string>& args) {
+    functions["img_flip"] = [this](std::vector<std::string>& args) {
         args = resolve_variable_array(args);
         if (args.size() < 2) return;
-        string id = args[0];
+        std::string id = args[0];
         if (!sprite_map.count(id)) return;
         auto& entry = *sprite_map[id];
         bool flip = args[1] == "1";
@@ -111,15 +109,15 @@ void DolphinInterpreter::register_graphics_builtins() {
     };
 
     // camera_set[x, y] — ビューの左上座標を指定
-    functions["camera_set"] = [this](vector<string>& args) {
+    functions["camera_set"] = [this](std::vector<std::string>& args) {
         args = resolve_variable_array(args);
         if (args.size() < 2) return;
-        cameraPos = {stof(args[0]), stof(args[1])};
+        cameraPos = {std::stof(args[0]), std::stof(args[1])};
     };
 
     // gameloop ( ... )
-    keyword_handlers["gameloop"] = [this](const string& block) {
-        if (!gameWindow) { cerr << "Error: call window[] before gameloop." << endl; return; }
+    keyword_handlers["gameloop"] = [this](const std::string& block) {
+        if (!gameWindow) { std::cerr << "Error: call window[] before gameloop." << std::endl; return; }
         auto defaultView = gameWindow->getDefaultView();
         while (gameWindow->isOpen()) {
             sf::Event event;
