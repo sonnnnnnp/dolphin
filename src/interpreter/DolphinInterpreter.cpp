@@ -46,12 +46,41 @@ void DolphinInterpreter::execute(const string& code) {
         line = trim(line);
         if (line.empty() || line.find("//") == 0) continue;
 
-        // 変数宣言: @var = expr
+        // 変数宣言: @var = expr  /  @arr = {1,2,3}  /  @arr[i] = val
         if (line[0] == '@' && line.find('=') != string::npos) {
-            size_t eq       = line.find('=');
-            string var_name  = trim(line.substr(1, eq - 1));
-            string var_value = trim(line.substr(eq + 1));
-            declare_variable(var_name, evaluate_expression(var_value));
+            size_t eq  = line.find('=');
+            string lhs = trim(line.substr(1, eq - 1));
+            string rhs = trim(line.substr(eq + 1));
+
+            size_t bracket = lhs.find('[');
+            if (bracket != string::npos) {
+                // @arr[idx] = val
+                string arr_name = lhs.substr(0, bracket);
+                string idx_expr = lhs.substr(bracket + 1, lhs.rfind(']') - bracket - 1);
+                int idx = stoi(evaluate_expression(trim(idx_expr)));
+                if (arrays.count(arr_name) && idx >= 0 && (size_t)idx < arrays[arr_name].size())
+                    arrays[arr_name][idx] = evaluate_expression(rhs);
+                else
+                    cerr << "Error: Array '" << arr_name << "' index " << idx << " out of bounds." << endl;
+                continue;
+            }
+
+            if (!rhs.empty() && rhs[0] == '{') {
+                // @arr = {1, 2, 3}
+                size_t close = rhs.rfind('}');
+                string inner = rhs.substr(1, close == string::npos ? rhs.size() - 1 : close - 1);
+                vector<string> elements;
+                istringstream iss(inner);
+                string elem;
+                while (getline(iss, elem, ',')) {
+                    string e = trim(elem);
+                    if (!e.empty()) elements.push_back(evaluate_expression(e));
+                }
+                arrays[lhs] = elements;
+                continue;
+            }
+
+            declare_variable(lhs, evaluate_expression(rhs));
             continue;
         }
 
@@ -68,12 +97,22 @@ void DolphinInterpreter::execute(const string& code) {
             if (handled) continue;
         }
 
-        // if 文: if <cond> ( ... )  ← 条件付きブロックはコア構文
+        // if 文
         if (line.find("if") == 0 && line.find('(') != string::npos) {
             size_t paren = line.find('(');
             string cond  = trim(line.substr(2, paren - 2));
             string block = read_block(ss, line);
             if (evaluate_expression(cond) == "1")
+                execute(block);
+            continue;
+        }
+
+        // while 文
+        if (line.find("while") == 0 && line.find('(') != string::npos) {
+            size_t paren = line.find('(');
+            string cond  = trim(line.substr(5, paren - 5));
+            string block = read_block(ss, line);
+            while (evaluate_expression(cond) == "1")
                 execute(block);
             continue;
         }
@@ -153,6 +192,17 @@ string DolphinInterpreter::evaluate_expression(const string& expr) {
 string DolphinInterpreter::resolve_variable(const string& name) {
     if (!name.empty() && name[0] == '@') {
         string key = name.substr(1);
+        size_t bracket = key.find('[');
+        if (bracket != string::npos) {
+            // @arr[idx]
+            string arr_name = key.substr(0, bracket);
+            string idx_expr = key.substr(bracket + 1, key.rfind(']') - bracket - 1);
+            int idx = stoi(evaluate_expression(trim(idx_expr)));
+            if (arrays.count(arr_name) && idx >= 0 && (size_t)idx < arrays[arr_name].size())
+                return arrays[arr_name][idx];
+            cerr << "Error: Array '" << arr_name << "' index " << idx << " out of bounds." << endl;
+            return "0";
+        }
         if (variables.count(key)) return variables[key];
         cerr << "Error: Variable '" << key << "' is not defined." << endl;
         return "0";

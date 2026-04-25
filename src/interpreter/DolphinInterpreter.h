@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <functional>
 #include <vector>
+#include <memory>
 #include <SFML/Graphics.hpp>
 
 class DolphinInterpreter {
@@ -18,15 +19,24 @@ private:
     using BlockHandler = std::function<void(const std::string&)>;
 
     // --- 言語状態 ---
-    std::unordered_map<std::string, std::string> variables;
-    std::unordered_map<std::string, BuiltinFn>   functions;
-    std::unordered_map<std::string, BlockHandler> keyword_handlers; // "gameloop" 等
+    std::unordered_map<std::string, std::string>              variables;
+    std::unordered_map<std::string, std::vector<std::string>> arrays;
+    std::unordered_map<std::string, BuiltinFn>                functions;
+    std::unordered_map<std::string, BlockHandler>             keyword_handlers;
 
     // --- グラフィクス状態 ---
     sf::RenderWindow* gameWindow = nullptr;
     std::vector<std::pair<std::string, sf::RectangleShape>> shape_list;
     std::unordered_map<std::string, size_t> shape_index;
     sf::Color clearColor{0, 0, 0};
+
+    struct SpriteEntry {
+        sf::Texture texture;
+        sf::Sprite  sprite;
+    };
+    std::unordered_map<std::string, std::unique_ptr<SpriteEntry>> sprite_map;
+    std::vector<sf::Sprite> sprite_draw_queue;
+    sf::Vector2f cameraPos{0.f, 0.f};
 
     // --- パーサー / 評価 ---
     std::string evaluate_expression(const std::string& expr);

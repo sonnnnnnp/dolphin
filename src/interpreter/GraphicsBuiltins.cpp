@@ -1,5 +1,6 @@
 #include "DolphinInterpreter.h"
 #include <iostream>
+#include <memory>
 
 using namespace std;
 
@@ -74,19 +75,72 @@ void DolphinInterpreter::register_graphics_builtins() {
         clearColor = sf::Color(stoi(args[0]), stoi(args[1]), stoi(args[2]));
     };
 
-    // gameloop ( ... ) — ウィンドウが閉じるまでブロックを毎フレーム実行
+    // img_load[id, path]
+    functions["img_load"] = [this](vector<string>& args) {
+        if (args.size() < 2) { cerr << "Error: img_load requires id and path." << endl; return; }
+        string id = trim(args[0]), path = trim(args[1]);
+        auto entry = make_unique<SpriteEntry>();
+        if (!entry->texture.loadFromFile(path)) {
+            cerr << "Error: Failed to load image '" << path << "'." << endl; return;
+        }
+        entry->sprite.setTexture(entry->texture);
+        sprite_map[id] = std::move(entry);
+    };
+
+    // img_draw[id, x, y]
+    functions["img_draw"] = [this](vector<string>& args) {
+        args = resolve_variable_array(args);
+        if (args.size() < 3) { cerr << "Error: img_draw requires id, x, y." << endl; return; }
+        string id = args[0];
+        if (!sprite_map.count(id)) { cerr << "Error: Image '" << id << "' not loaded." << endl; return; }
+        sprite_map[id]->sprite.setPosition(stof(args[1]), stof(args[2]));
+        sprite_draw_queue.push_back(sprite_map[id]->sprite);
+    };
+
+    // img_flip[id, 1/0]
+    functions["img_flip"] = [this](vector<string>& args) {
+        args = resolve_variable_array(args);
+        if (args.size() < 2) return;
+        string id = args[0];
+        if (!sprite_map.count(id)) return;
+        auto& entry = *sprite_map[id];
+        bool flip = args[1] == "1";
+        float w = static_cast<float>(entry.texture.getSize().x);
+        entry.sprite.setScale(flip ? -1.f : 1.f, 1.f);
+        entry.sprite.setOrigin(flip ? w : 0.f, 0.f);
+    };
+
+    // camera_set[x, y] — ビューの左上座標を指定
+    functions["camera_set"] = [this](vector<string>& args) {
+        args = resolve_variable_array(args);
+        if (args.size() < 2) return;
+        cameraPos = {stof(args[0]), stof(args[1])};
+    };
+
+    // gameloop ( ... )
     keyword_handlers["gameloop"] = [this](const string& block) {
         if (!gameWindow) { cerr << "Error: call window[] before gameloop." << endl; return; }
+        auto defaultView = gameWindow->getDefaultView();
         while (gameWindow->isOpen()) {
             sf::Event event;
             while (gameWindow->pollEvent(event))
                 if (event.type == sf::Event::Closed) gameWindow->close();
             if (!gameWindow->isOpen()) break;
+
+            sprite_draw_queue.clear();
             execute(block);
+
+            sf::View view(sf::FloatRect(
+                cameraPos.x, cameraPos.y,
+                defaultView.getSize().x, defaultView.getSize().y));
+            gameWindow->setView(view);
             gameWindow->clear(clearColor);
             for (auto& [id, shape] : shape_list)
                 gameWindow->draw(shape);
+            for (auto& sp : sprite_draw_queue)
+                gameWindow->draw(sp);
             gameWindow->display();
         }
+        gameWindow->setView(defaultView);
     };
 }
