@@ -1,6 +1,7 @@
 #include "DolphinInterpreter.h"
 #include <iostream>
 #include <string>
+#include <cctype>
 
 DolphinInterpreter::DolphinInterpreter() {
     register_builtins();
@@ -43,15 +44,15 @@ void DolphinInterpreter::execute(const std::string& code) {
         line = trim(line);
         if (line.empty() || line.find("//") == 0) continue;
 
-        // 変数宣言: @var = expr  /  @arr = {1,2,3}  /  @arr[i] = val
-        if (line[0] == '@' && line.find('=') != std::string::npos) {
+        // 変数宣言: $num = expr  /  @str = val  /  $arr = {1,2,3}  /  $arr[i] = val
+        if ((line[0] == '@' || line[0] == '$') && line.find('=') != std::string::npos) {
             size_t eq        = line.find('=');
             std::string lhs  = trim(line.substr(1, eq - 1));
             std::string rhs  = trim(line.substr(eq + 1));
 
             size_t bracket = lhs.find('[');
             if (bracket != std::string::npos) {
-                // @arr[idx] = val
+                // $arr[idx] = val
                 std::string arr_name = lhs.substr(0, bracket);
                 std::string idx_expr = lhs.substr(bracket + 1, lhs.rfind(']') - bracket - 1);
                 int idx = std::stoi(evaluate_expression(trim(idx_expr)));
@@ -63,7 +64,7 @@ void DolphinInterpreter::execute(const std::string& code) {
             }
 
             if (!rhs.empty() && rhs[0] == '{') {
-                // @arr = {1, 2, 3}
+                // $arr = {1, 2, 3}
                 size_t close = rhs.rfind('}');
                 std::string inner = rhs.substr(1, close == std::string::npos ? rhs.size() - 1 : close - 1);
                 std::vector<std::string> elements;
@@ -96,7 +97,7 @@ void DolphinInterpreter::execute(const std::string& code) {
 
         // if 文
         if (line.find("if") == 0 && line.find('(') != std::string::npos) {
-            size_t paren     = line.find('(');
+            size_t paren      = line.find('(');
             std::string cond  = trim(line.substr(2, paren - 2));
             std::string block = read_block(ss, line);
             if (evaluate_expression(cond) == "1")
@@ -106,11 +107,17 @@ void DolphinInterpreter::execute(const std::string& code) {
 
         // while 文
         if (line.find("while") == 0 && line.find('(') != std::string::npos) {
-            size_t paren     = line.find('(');
+            size_t paren      = line.find('(');
             std::string cond  = trim(line.substr(5, paren - 5));
             std::string block = read_block(ss, line);
             while (evaluate_expression(cond) == "1")
                 execute(block);
+            continue;
+        }
+
+        // log[テンプレート] ← コンマ分割なし、$/$@ をインライン展開して出力
+        if (line.find("log[") == 0 && line.back() == ']') {
+            std::cout << interpolate(line.substr(4, line.size() - 5)) << std::endl;
             continue;
         }
 
@@ -188,11 +195,11 @@ std::string DolphinInterpreter::evaluate_expression(const std::string& expr) {
 // ---- 変数 / 関数ディスパッチ ----
 
 std::string DolphinInterpreter::resolve_variable(const std::string& name) {
-    if (!name.empty() && name[0] == '@') {
+    if (!name.empty() && (name[0] == '@' || name[0] == '$')) {
         std::string key = name.substr(1);
         size_t bracket = key.find('[');
         if (bracket != std::string::npos) {
-            // @arr[idx]
+            // $arr[idx] / @arr[idx]
             std::string arr_name = key.substr(0, bracket);
             std::string idx_expr = key.substr(bracket + 1, key.rfind(']') - bracket - 1);
             int idx = std::stoi(evaluate_expression(trim(idx_expr)));
@@ -230,4 +237,29 @@ std::string DolphinInterpreter::trim(const std::string& str) {
     size_t s = str.find_first_not_of(" \t\r");
     size_t e = str.find_last_not_of(" \t\r");
     return s == std::string::npos ? "" : str.substr(s, e - s + 1);
+}
+
+// ---- 文字列テンプレート展開 ----
+// $var / @var (配列アクセス $arr[idx] も対応) を変数値に置換する
+
+std::string DolphinInterpreter::interpolate(const std::string& tmpl) {
+    std::string result;
+    for (size_t i = 0; i < tmpl.size(); ) {
+        char c = tmpl[i];
+        if ((c == '$' || c == '@') &&
+            i + 1 < tmpl.size() &&
+            (std::isalpha((unsigned char)tmpl[i + 1]) || tmpl[i + 1] == '_')) {
+            size_t start = i++;
+            while (i < tmpl.size() && (std::isalnum((unsigned char)tmpl[i]) || tmpl[i] == '_')) i++;
+            // 配列アクセス: $arr[idx]
+            if (i < tmpl.size() && tmpl[i] == '[') {
+                while (i < tmpl.size() && tmpl[i] != ']') i++;
+                if (i < tmpl.size()) i++;
+            }
+            result += resolve_variable(tmpl.substr(start, i - start));
+        } else {
+            result += tmpl[i++];
+        }
+    }
+    return result;
 }

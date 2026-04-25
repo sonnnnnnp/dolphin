@@ -46,6 +46,7 @@ private:
     void run_function(const std::string& name, std::vector<std::string> args);
     std::string read_block(std::istringstream& ss, const std::string& first_line);
     std::string trim(const std::string& str);
+    std::string interpolate(const std::string& tmpl);
 
     // --- 組み込み登録（各 *Builtins.cpp で実装） ---
     void register_builtins();

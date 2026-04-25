@@ -1,8 +1,41 @@
-window[800, 600, dolphin Mario]
+// 配列テスト
 
-// 背景・地面
-rect_create[sky,    0,   0, 800, 480, 100, 149, 237]
+$nums = {10, 20, 30, 40}
+@words = {hello, world, dolphin}
 
-gameloop (
-    
+// 長さ取得
+arr_len[nums,  $nlen]
+arr_len[words, $wlen]
+log[nums の長さ: $nlen]
+log[words の長さ: $wlen]
+
+// 要素アクセス
+log[nums[0] = $nums[0]]
+log[words[1] = @words[1]]
+
+// 要素書き換え
+$nums[0] = 99
+log[nums[0] を 99 に書き換え後: $nums[0]]
+
+arr_set[words, 2, dolphin!]
+log[words[2] を書き換え後: @words[2]]
+
+// arr_push
+arr_push[nums, 100]
+arr_len[nums, $nlen]
+log[push後の長さ: $nlen  末尾: $nums[$nlen - 1]]
+
+// while でループ
+$i = 0
+while $i < $nlen (
+    log[nums[$i] = $nums[$i]]
+    $i = $i + 1
 )
+
+// 文字列変数
+@name = 世界
+log[こんにちは、@name！]
+
+// 数値と文字列の混在
+$score = 42
+log[プレイヤー「@name」のスコア: $score 点]

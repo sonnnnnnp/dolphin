@@ -1,30 +1,26 @@
 #include "DolphinInterpreter.h"
 #include <iostream>
 
-void DolphinInterpreter::register_builtins() {
-    // log[arg1, arg2, ...]
-    functions["log"] = [this](std::vector<std::string>& args) {
-        args = resolve_variable_array(args);
-        if (args.empty()) return;
-        std::cout << args[0];
-        for (size_t i = 1; i < args.size(); ++i)
-            std::cout << " " << args[i];
-        std::cout << std::endl;
-    };
+// シジル ($/@) を除いた変数名を返す
+static std::string strip_sigil(const std::string& s) {
+    if (!s.empty() && (s[0] == '@' || s[0] == '$')) return s.substr(1);
+    return s;
+}
 
-    // input[@var]
+void DolphinInterpreter::register_builtins() {
+    // input[$var] / input[@var]
     functions["input"] = [this](std::vector<std::string>& args) {
         if (args.empty()) { std::cerr << "Error: input requires 1 argument." << std::endl; return; }
-        std::string input;
-        std::getline(std::cin, input);
-        declare_variable(args[0].substr(1), input);
+        std::string input_val;
+        std::getline(std::cin, input_val);
+        declare_variable(strip_sigil(args[0]), input_val);
     };
 
-    // arr_len[arr_name, @var]
+    // arr_len[arr_name, $var]
     functions["arr_len"] = [this](std::vector<std::string>& args) {
-        if (args.size() < 2) { std::cerr << "Error: arr_len requires arr_name and @var." << std::endl; return; }
+        if (args.size() < 2) { std::cerr << "Error: arr_len requires arr_name and var." << std::endl; return; }
         std::string arr_name = trim(args[0]);
-        std::string var_name = trim(args[1]).substr(1);
+        std::string var_name = strip_sigil(trim(args[1]));
         declare_variable(var_name, std::to_string(arrays.count(arr_name) ? arrays[arr_name].size() : 0));
     };
 

@@ -58,11 +58,12 @@ void DolphinInterpreter::register_graphics_builtins() {
         shape_list[shape_index[id]].second.setPosition(std::stof(n[0]), std::stof(n[1]));
     };
 
-    // key_check[KeyName, @var]
+    // key_check[KeyName, $var]
     functions["key_check"] = [this](std::vector<std::string>& args) {
-        if (args.size() < 2) { std::cerr << "Error: key_check requires key_name and @var." << std::endl; return; }
+        if (args.size() < 2) { std::cerr << "Error: key_check requires key_name and var." << std::endl; return; }
         std::string key_name = resolve_variable(trim(args[0]));
-        std::string var_name = trim(args[1]).substr(1);
+        std::string raw      = trim(args[1]);
+        std::string var_name = (!raw.empty() && (raw[0] == '@' || raw[0] == '$')) ? raw.substr(1) : raw;
         declare_variable(var_name, sf::Keyboard::isKeyPressed(str_to_key(key_name)) ? "1" : "0");
     };
 
