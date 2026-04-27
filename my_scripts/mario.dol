@@ -6,7 +6,7 @@ img_load[tile,   assets/tile.png]
 img_load[ground, assets/ground.png]
 img_load[coin,   assets/coin.png]
 
-sound_load[coin_se, /System/Library/Sounds/Pop.aiff]
+sound_load[coin_se, assets/coin.wav]
 
 // 足場: x座標, y座標, タイル幅
 $plat_x = {160, 380, 560, 800, 1040, 1280, 1520, 1800, 2100, 2400}
