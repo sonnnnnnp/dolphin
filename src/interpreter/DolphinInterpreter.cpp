@@ -212,6 +212,14 @@ std::string DolphinInterpreter::evaluate_expression(const std::string& expr) {
         if (!l.empty() && !r.empty())
             return format_number(std::stod(evaluate_expression(l)) * std::stod(evaluate_expression(r)));
     }
+    if ((pos = expr.find('%')) != std::string::npos) {
+        std::string l = trim(expr.substr(0, pos)), r = trim(expr.substr(pos + 1));
+        if (!l.empty() && !r.empty()) {
+            double rv = std::stod(evaluate_expression(r));
+            if (rv == 0) { std::cerr << "Error: Modulo by zero." << std::endl; return "0"; }
+            return format_number(std::fmod(std::stod(evaluate_expression(l)), rv));
+        }
+    }
     if ((pos = expr.rfind('/')) != std::string::npos) {
         std::string l = trim(expr.substr(0, pos)), r = trim(expr.substr(pos + 1));
         if (!l.empty() && !r.empty()) {
