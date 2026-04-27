@@ -95,13 +95,26 @@ void DolphinInterpreter::execute(const std::string& code) {
             if (handled) continue;
         }
 
-        // if 文
+        // if / else 文
         if (line.find("if") == 0 && line.find('(') != std::string::npos) {
             size_t paren      = line.find('(');
             std::string cond  = trim(line.substr(2, paren - 2));
             std::string block = read_block(ss, line);
-            if (evaluate_expression(cond) == "1")
-                execute(block);
+            bool result = evaluate_expression(cond) == "1";
+            if (result) execute(block);
+
+            auto saved = ss.tellg();
+            std::string peek;
+            if (std::getline(ss, peek)) {
+                std::string tp = trim(peek);
+                if (tp.find("else") == 0 && tp.find('(') != std::string::npos) {
+                    std::string else_block = read_block(ss, tp);
+                    if (!result) execute(else_block);
+                } else {
+                    ss.clear();
+                    ss.seekg(saved);
+                }
+            }
             continue;
         }
 
@@ -173,20 +186,27 @@ std::string DolphinInterpreter::evaluate_expression(const std::string& expr) {
         }
     }
 
-    // 四則演算
-    if ((pos = expr.find('+')) != std::string::npos)
-        return std::to_string(std::stoi(evaluate_expression(trim(expr.substr(0, pos)))) +
-                              std::stoi(evaluate_expression(trim(expr.substr(pos + 1)))));
+    // 四則演算（両辺が空の場合はスキップしてリテラルとして扱う）
+    if ((pos = expr.find('+')) != std::string::npos) {
+        std::string l = trim(expr.substr(0, pos)), r = trim(expr.substr(pos + 1));
+        if (!l.empty() && !r.empty())
+            return std::to_string(std::stoi(evaluate_expression(l)) + std::stoi(evaluate_expression(r)));
+    }
     if ((pos = expr.rfind('-')) != std::string::npos && pos > 0)
         return std::to_string(std::stoi(evaluate_expression(trim(expr.substr(0, pos)))) -
                               std::stoi(evaluate_expression(trim(expr.substr(pos + 1)))));
-    if ((pos = expr.find('*')) != std::string::npos)
-        return std::to_string(std::stoi(evaluate_expression(trim(expr.substr(0, pos)))) *
-                              std::stoi(evaluate_expression(trim(expr.substr(pos + 1)))));
+    if ((pos = expr.find('*')) != std::string::npos) {
+        std::string l = trim(expr.substr(0, pos)), r = trim(expr.substr(pos + 1));
+        if (!l.empty() && !r.empty())
+            return std::to_string(std::stoi(evaluate_expression(l)) * std::stoi(evaluate_expression(r)));
+    }
     if ((pos = expr.rfind('/')) != std::string::npos) {
-        int r = std::stoi(evaluate_expression(trim(expr.substr(pos + 1))));
-        if (r == 0) { std::cerr << "Error: Division by zero." << std::endl; return "0"; }
-        return std::to_string(std::stoi(evaluate_expression(trim(expr.substr(0, pos)))) / r);
+        std::string l = trim(expr.substr(0, pos)), r = trim(expr.substr(pos + 1));
+        if (!l.empty() && !r.empty()) {
+            int rv = std::stoi(evaluate_expression(r));
+            if (rv == 0) { std::cerr << "Error: Division by zero." << std::endl; return "0"; }
+            return std::to_string(std::stoi(evaluate_expression(l)) / rv);
+        }
     }
 
     return resolve_variable(expr);

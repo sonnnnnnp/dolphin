@@ -13,27 +13,26 @@ $new_num  = 1
 rect_create[disp_bg, 10, 10, 300, 70, 20, 20, 20]
 text_create[disp_txt, font, 20, 28, 0, 40, 255, 255, 255]
 
-// ---- ボタン: 1列=x10, 2列=x85, 3列=x160, 4列=x235 ----
-// 行: y=100, 170, 240, 310, 380
-rect_create[b7,  10,  100, 70, 60, 80, 80, 80]
-rect_create[b8,  85,  100, 70, 60, 80, 80, 80]
-rect_create[b9,  160, 100, 70, 60, 80, 80, 80]
-rect_create[bdiv,235, 100, 70, 60, 200, 120, 30]
+// ---- ボタン背景 ----
+rect_create[b7,   10,  100, 70, 60, 80, 80, 80]
+rect_create[b8,   85,  100, 70, 60, 80, 80, 80]
+rect_create[b9,   160, 100, 70, 60, 80, 80, 80]
+rect_create[bdiv, 235, 100, 70, 60, 200, 120, 30]
 
-rect_create[b4,  10,  170, 70, 60, 80, 80, 80]
-rect_create[b5,  85,  170, 70, 60, 80, 80, 80]
-rect_create[b6,  160, 170, 70, 60, 80, 80, 80]
-rect_create[bmul,235, 170, 70, 60, 200, 120, 30]
+rect_create[b4,   10,  170, 70, 60, 80, 80, 80]
+rect_create[b5,   85,  170, 70, 60, 80, 80, 80]
+rect_create[b6,   160, 170, 70, 60, 80, 80, 80]
+rect_create[bmul, 235, 170, 70, 60, 200, 120, 30]
 
-rect_create[b1,  10,  240, 70, 60, 80, 80, 80]
-rect_create[b2,  85,  240, 70, 60, 80, 80, 80]
-rect_create[b3,  160, 240, 70, 60, 80, 80, 80]
-rect_create[bsub,235, 240, 70, 60, 200, 120, 30]
+rect_create[b1,   10,  240, 70, 60, 80, 80, 80]
+rect_create[b2,   85,  240, 70, 60, 80, 80, 80]
+rect_create[b3,   160, 240, 70, 60, 80, 80, 80]
+rect_create[bsub, 235, 240, 70, 60, 200, 120, 30]
 
-rect_create[bc,  10,  310, 70, 60, 180, 60, 60]
-rect_create[b0,  85,  310, 70, 60, 80, 80, 80]
-rect_create[beq, 160, 310, 70, 60, 60, 160, 60]
-rect_create[badd,235, 310, 70, 60, 200, 120, 30]
+rect_create[bc,   10,  310, 70, 60, 180, 60, 60]
+rect_create[b0,   85,  310, 70, 60, 80, 80, 80]
+rect_create[beq,  160, 310, 70, 60, 60, 160, 60]
+rect_create[badd, 235, 310, 70, 60, 200, 120, 30]
 
 // ---- ラベル ----
 text_create[l7,   font, 35,  115, 7, 28, 255, 255, 255]
@@ -61,99 +60,108 @@ gameloop (
     mouse_click[$clicked]
 
     if $clicked == 1 (
-        // 数字ボタン
+        // 7
         if $mx >= 10 && $mx <= 80 && $my >= 100 && $my <= 160 (
             if $new_num == 1 (
                 @display = 7
                 $new_num = 0
             )
-            if $new_num == 0 (
+            else (
                 str_concat[@display, @display, 7]
             )
         )
+        // 8
         if $mx >= 85 && $mx <= 155 && $my >= 100 && $my <= 160 (
             if $new_num == 1 (
                 @display = 8
                 $new_num = 0
             )
-            if $new_num == 0 (
+            else (
                 str_concat[@display, @display, 8]
             )
         )
+        // 9
         if $mx >= 160 && $mx <= 230 && $my >= 100 && $my <= 160 (
             if $new_num == 1 (
                 @display = 9
                 $new_num = 0
             )
-            if $new_num == 0 (
+            else (
                 str_concat[@display, @display, 9]
             )
         )
+        // 4
         if $mx >= 10 && $mx <= 80 && $my >= 170 && $my <= 230 (
             if $new_num == 1 (
                 @display = 4
                 $new_num = 0
             )
-            if $new_num == 0 (
+            else (
                 str_concat[@display, @display, 4]
             )
         )
+        // 5
         if $mx >= 85 && $mx <= 155 && $my >= 170 && $my <= 230 (
             if $new_num == 1 (
                 @display = 5
                 $new_num = 0
             )
-            if $new_num == 0 (
+            else (
                 str_concat[@display, @display, 5]
             )
         )
+        // 6
         if $mx >= 160 && $mx <= 230 && $my >= 170 && $my <= 230 (
             if $new_num == 1 (
                 @display = 6
                 $new_num = 0
             )
-            if $new_num == 0 (
+            else (
                 str_concat[@display, @display, 6]
             )
         )
+        // 1
         if $mx >= 10 && $mx <= 80 && $my >= 240 && $my <= 300 (
             if $new_num == 1 (
                 @display = 1
                 $new_num = 0
             )
-            if $new_num == 0 (
+            else (
                 str_concat[@display, @display, 1]
             )
         )
+        // 2
         if $mx >= 85 && $mx <= 155 && $my >= 240 && $my <= 300 (
             if $new_num == 1 (
                 @display = 2
                 $new_num = 0
             )
-            if $new_num == 0 (
+            else (
                 str_concat[@display, @display, 2]
             )
         )
+        // 3
         if $mx >= 160 && $mx <= 230 && $my >= 240 && $my <= 300 (
             if $new_num == 1 (
                 @display = 3
                 $new_num = 0
             )
-            if $new_num == 0 (
+            else (
                 str_concat[@display, @display, 3]
             )
         )
+        // 0
         if $mx >= 85 && $mx <= 155 && $my >= 310 && $my <= 370 (
             if $new_num == 1 (
                 @display = 0
                 $new_num = 0
             )
-            if $new_num == 0 (
+            else (
                 str_concat[@display, @display, 0]
             )
         )
 
-        // 演算子ボタン
+        // 演算子
         if $mx >= 235 && $mx <= 305 && $my >= 100 && $my <= 160 (
             $accum = @display
             @op = /
@@ -175,7 +183,7 @@ gameloop (
             $new_num = 1
         )
 
-        // = ボタン
+        // =
         if $mx >= 160 && $mx <= 230 && $my >= 310 && $my <= 370 (
             if @op == + (
                 @display = $accum + @display
@@ -194,7 +202,7 @@ gameloop (
             $new_num = 1
         )
 
-        // C ボタン
+        // C
         if $mx >= 10 && $mx <= 80 && $my >= 310 && $my <= 370 (
             @display = 0
             $accum = 0
