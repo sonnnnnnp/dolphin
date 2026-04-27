@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 
 class DolphinInterpreter {
 public:
@@ -47,6 +48,12 @@ private:
     std::unordered_map<std::string, size_t> text_index;
 
     bool mouseClickedThisFrame = false;
+
+    struct SoundEntry {
+        sf::SoundBuffer buffer;
+        sf::Sound       sound;
+    };
+    std::unordered_map<std::string, std::unique_ptr<SoundEntry>> sound_map;
 
     // --- パーサー / 評価 ---
     std::string evaluate_expression(const std::string& expr);

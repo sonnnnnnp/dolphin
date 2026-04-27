@@ -24,7 +24,7 @@ add_executable(dolphin
 )
 
 target_include_directories(dolphin PRIVATE src/interpreter)
-target_link_libraries(dolphin PRIVATE sfml-graphics sfml-window sfml-system)
+target_link_libraries(dolphin PRIVATE sfml-graphics sfml-window sfml-audio sfml-system)
 
 # Windows: DLL を実行ファイルと同じ場所にコピー
 if(WIN32)

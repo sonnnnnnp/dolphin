@@ -6,6 +6,8 @@ img_load[tile,   assets/tile.png]
 img_load[ground, assets/ground.png]
 img_load[coin,   assets/coin.png]
 
+sound_load[coin_se, /System/Library/Sounds/Pop.aiff]
+
 // 足場: x座標, y座標, タイル幅
 $plat_x = {160, 380, 560, 800, 1040, 1280, 1520, 1800, 2100, 2400}
 $plat_y = {440, 390, 450, 370, 420,  350,  460,  380,  360,  440}
@@ -101,6 +103,7 @@ gameloop (
         if $coin_alive[$ci] == 1 && $px + 32 > $ccx && $px < $ccx + 16 && $py + 48 > $ccy && $py < $ccy + 16 (
             arr_set[coin_alive, $ci, 0]
             $score = $score + 1
+            sound_play[coin_se]
         )
         $ci = $ci + 1
     )

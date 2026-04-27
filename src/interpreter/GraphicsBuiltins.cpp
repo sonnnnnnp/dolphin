@@ -182,6 +182,34 @@ void DolphinInterpreter::register_graphics_builtins() {
         text_list[text_index[id]].second.text.setString(interpolate(trim(args[1])));
     };
 
+    // sound_load[id, path]
+    functions["sound_load"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 2) { std::cerr << "Error: sound_load requires id and path." << std::endl; return; }
+        std::string id = trim(args[0]), path = trim(args[1]);
+        auto entry = std::make_unique<SoundEntry>();
+        if (!entry->buffer.loadFromFile(path)) {
+            std::cerr << "Error: Failed to load sound '" << path << "'." << std::endl; return;
+        }
+        entry->sound.setBuffer(entry->buffer);
+        sound_map[id] = std::move(entry);
+    };
+
+    // sound_play[id]
+    functions["sound_play"] = [this](std::vector<std::string>& args) {
+        if (args.empty()) return;
+        std::string id = trim(args[0]);
+        if (!sound_map.count(id)) { std::cerr << "Error: Sound '" << id << "' not loaded." << std::endl; return; }
+        sound_map[id]->sound.play();
+    };
+
+    // sound_vol[id, volume]  0〜100
+    functions["sound_vol"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 2) return;
+        std::string id = trim(args[0]);
+        if (!sound_map.count(id)) return;
+        sound_map[id]->sound.setVolume(std::stof(resolve_variable(trim(args[1]))));
+    };
+
     // mouse_pos[$x, $y] — ウィンドウ内のマウス座標をワールド座標で取得
     functions["mouse_pos"] = [this](std::vector<std::string>& args) {
         if (args.size() < 2 || !gameWindow) return;
