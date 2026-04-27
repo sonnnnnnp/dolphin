@@ -182,6 +182,25 @@ void DolphinInterpreter::register_graphics_builtins() {
         text_list[text_index[id]].second.text.setString(interpolate(trim(args[1])));
     };
 
+    // mouse_pos[$x, $y] — ウィンドウ内のマウス座標をワールド座標で取得
+    functions["mouse_pos"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 2 || !gameWindow) return;
+        sf::Vector2i pos = sf::Mouse::getPosition(*gameWindow);
+        std::string xv = trim(args[0]), yv = trim(args[1]);
+        if (!xv.empty() && (xv[0] == '@' || xv[0] == '$')) xv = xv.substr(1);
+        if (!yv.empty() && (yv[0] == '@' || yv[0] == '$')) yv = yv.substr(1);
+        declare_variable(xv, std::to_string(pos.x + (int)cameraPos.x));
+        declare_variable(yv, std::to_string(pos.y + (int)cameraPos.y));
+    };
+
+    // mouse_click[$var] — 左クリックされたフレームのみ 1
+    functions["mouse_click"] = [this](std::vector<std::string>& args) {
+        if (args.empty()) return;
+        std::string v = trim(args[0]);
+        if (!v.empty() && (v[0] == '@' || v[0] == '$')) v = v.substr(1);
+        declare_variable(v, mouseClickedThisFrame ? "1" : "0");
+    };
+
     // camera_set[x, y] — ビューの左上座標を指定
     functions["camera_set"] = [this](std::vector<std::string>& args) {
         args = resolve_variable_array(args);
@@ -194,9 +213,14 @@ void DolphinInterpreter::register_graphics_builtins() {
         if (!gameWindow) { std::cerr << "Error: call window[] before gameloop." << std::endl; return; }
         auto defaultView = gameWindow->getDefaultView();
         while (gameWindow->isOpen()) {
+            mouseClickedThisFrame = false;
             sf::Event event;
-            while (gameWindow->pollEvent(event))
+            while (gameWindow->pollEvent(event)) {
                 if (event.type == sf::Event::Closed) gameWindow->close();
+                if (event.type == sf::Event::MouseButtonPressed &&
+                    event.mouseButton.button == sf::Mouse::Left)
+                    mouseClickedThisFrame = true;
+            }
             if (!gameWindow->isOpen()) break;
 
             sprite_draw_queue.clear();

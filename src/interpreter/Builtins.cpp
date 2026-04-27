@@ -42,4 +42,20 @@ void DolphinInterpreter::register_builtins() {
         std::string arr_name = trim(args[0]);
         arrays[arr_name].push_back(evaluate_expression(trim(args[1])));
     };
+
+    // str_concat[@result, val1, val2] — 文字列として結合
+    functions["str_concat"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 3) { std::cerr << "Error: str_concat requires result val1 val2." << std::endl; return; }
+        std::string var_name = strip_sigil(trim(args[0]));
+        std::string a = resolve_variable(trim(args[1]));
+        std::string b = resolve_variable(trim(args[2]));
+        declare_variable(var_name, a + b);
+    };
+
+    // str_len[str_or_var, $result] — 文字列の長さを取得
+    functions["str_len"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 2) { std::cerr << "Error: str_len requires str and result_var." << std::endl; return; }
+        std::string str = resolve_variable(trim(args[0]));
+        declare_variable(strip_sigil(trim(args[1])), std::to_string(str.size()));
+    };
 }

@@ -1,0 +1,207 @@
+window[320, 480, Calculator]
+bg[30, 30, 30]
+
+font_load[font, /System/Library/Fonts/Helvetica.ttc]
+
+// ---- 状態 ----
+@display  = 0
+$accum    = 0
+@op       = +
+$new_num  = 1
+
+// ---- ディスプレイ ----
+rect_create[disp_bg, 10, 10, 300, 70, 20, 20, 20]
+text_create[disp_txt, font, 20, 28, 0, 40, 255, 255, 255]
+
+// ---- ボタン: 1列=x10, 2列=x85, 3列=x160, 4列=x235 ----
+// 行: y=100, 170, 240, 310, 380
+rect_create[b7,  10,  100, 70, 60, 80, 80, 80]
+rect_create[b8,  85,  100, 70, 60, 80, 80, 80]
+rect_create[b9,  160, 100, 70, 60, 80, 80, 80]
+rect_create[bdiv,235, 100, 70, 60, 200, 120, 30]
+
+rect_create[b4,  10,  170, 70, 60, 80, 80, 80]
+rect_create[b5,  85,  170, 70, 60, 80, 80, 80]
+rect_create[b6,  160, 170, 70, 60, 80, 80, 80]
+rect_create[bmul,235, 170, 70, 60, 200, 120, 30]
+
+rect_create[b1,  10,  240, 70, 60, 80, 80, 80]
+rect_create[b2,  85,  240, 70, 60, 80, 80, 80]
+rect_create[b3,  160, 240, 70, 60, 80, 80, 80]
+rect_create[bsub,235, 240, 70, 60, 200, 120, 30]
+
+rect_create[bc,  10,  310, 70, 60, 180, 60, 60]
+rect_create[b0,  85,  310, 70, 60, 80, 80, 80]
+rect_create[beq, 160, 310, 70, 60, 60, 160, 60]
+rect_create[badd,235, 310, 70, 60, 200, 120, 30]
+
+// ---- ラベル ----
+text_create[l7,   font, 35,  115, 7, 28, 255, 255, 255]
+text_create[l8,   font, 110, 115, 8, 28, 255, 255, 255]
+text_create[l9,   font, 185, 115, 9, 28, 255, 255, 255]
+text_create[ldiv, font, 255, 115, /, 28, 255, 200, 50]
+
+text_create[l4,   font, 35,  185, 4, 28, 255, 255, 255]
+text_create[l5,   font, 110, 185, 5, 28, 255, 255, 255]
+text_create[l6,   font, 185, 185, 6, 28, 255, 255, 255]
+text_create[lmul, font, 255, 185, *, 28, 255, 200, 50]
+
+text_create[l1,   font, 35,  255, 1, 28, 255, 255, 255]
+text_create[l2,   font, 110, 255, 2, 28, 255, 255, 255]
+text_create[l3,   font, 185, 255, 3, 28, 255, 255, 255]
+text_create[lsub, font, 255, 255, -, 28, 255, 200, 50]
+
+text_create[lc,   font, 30,  325, C, 28, 255, 100, 100]
+text_create[l0,   font, 110, 325, 0, 28, 255, 255, 255]
+text_create[leq,  font, 180, 325, =, 28, 100, 255, 100]
+text_create[ladd, font, 255, 325, +, 28, 255, 200, 50]
+
+gameloop (
+    mouse_pos[$mx, $my]
+    mouse_click[$clicked]
+
+    if $clicked == 1 (
+        // 数字ボタン
+        if $mx >= 10 && $mx <= 80 && $my >= 100 && $my <= 160 (
+            if $new_num == 1 (
+                @display = 7
+                $new_num = 0
+            )
+            if $new_num == 0 (
+                str_concat[@display, @display, 7]
+            )
+        )
+        if $mx >= 85 && $mx <= 155 && $my >= 100 && $my <= 160 (
+            if $new_num == 1 (
+                @display = 8
+                $new_num = 0
+            )
+            if $new_num == 0 (
+                str_concat[@display, @display, 8]
+            )
+        )
+        if $mx >= 160 && $mx <= 230 && $my >= 100 && $my <= 160 (
+            if $new_num == 1 (
+                @display = 9
+                $new_num = 0
+            )
+            if $new_num == 0 (
+                str_concat[@display, @display, 9]
+            )
+        )
+        if $mx >= 10 && $mx <= 80 && $my >= 170 && $my <= 230 (
+            if $new_num == 1 (
+                @display = 4
+                $new_num = 0
+            )
+            if $new_num == 0 (
+                str_concat[@display, @display, 4]
+            )
+        )
+        if $mx >= 85 && $mx <= 155 && $my >= 170 && $my <= 230 (
+            if $new_num == 1 (
+                @display = 5
+                $new_num = 0
+            )
+            if $new_num == 0 (
+                str_concat[@display, @display, 5]
+            )
+        )
+        if $mx >= 160 && $mx <= 230 && $my >= 170 && $my <= 230 (
+            if $new_num == 1 (
+                @display = 6
+                $new_num = 0
+            )
+            if $new_num == 0 (
+                str_concat[@display, @display, 6]
+            )
+        )
+        if $mx >= 10 && $mx <= 80 && $my >= 240 && $my <= 300 (
+            if $new_num == 1 (
+                @display = 1
+                $new_num = 0
+            )
+            if $new_num == 0 (
+                str_concat[@display, @display, 1]
+            )
+        )
+        if $mx >= 85 && $mx <= 155 && $my >= 240 && $my <= 300 (
+            if $new_num == 1 (
+                @display = 2
+                $new_num = 0
+            )
+            if $new_num == 0 (
+                str_concat[@display, @display, 2]
+            )
+        )
+        if $mx >= 160 && $mx <= 230 && $my >= 240 && $my <= 300 (
+            if $new_num == 1 (
+                @display = 3
+                $new_num = 0
+            )
+            if $new_num == 0 (
+                str_concat[@display, @display, 3]
+            )
+        )
+        if $mx >= 85 && $mx <= 155 && $my >= 310 && $my <= 370 (
+            if $new_num == 1 (
+                @display = 0
+                $new_num = 0
+            )
+            if $new_num == 0 (
+                str_concat[@display, @display, 0]
+            )
+        )
+
+        // 演算子ボタン
+        if $mx >= 235 && $mx <= 305 && $my >= 100 && $my <= 160 (
+            $accum = @display
+            @op = /
+            $new_num = 1
+        )
+        if $mx >= 235 && $mx <= 305 && $my >= 170 && $my <= 230 (
+            $accum = @display
+            @op = *
+            $new_num = 1
+        )
+        if $mx >= 235 && $mx <= 305 && $my >= 240 && $my <= 300 (
+            $accum = @display
+            @op = -
+            $new_num = 1
+        )
+        if $mx >= 235 && $mx <= 305 && $my >= 310 && $my <= 370 (
+            $accum = @display
+            @op = +
+            $new_num = 1
+        )
+
+        // = ボタン
+        if $mx >= 160 && $mx <= 230 && $my >= 310 && $my <= 370 (
+            if @op == + (
+                @display = $accum + @display
+            )
+            if @op == - (
+                @display = $accum - @display
+            )
+            if @op == * (
+                @display = $accum * @display
+            )
+            if @op == / (
+                @display = $accum / @display
+            )
+            $accum = 0
+            @op = +
+            $new_num = 1
+        )
+
+        // C ボタン
+        if $mx >= 10 && $mx <= 80 && $my >= 310 && $my <= 370 (
+            @display = 0
+            $accum = 0
+            @op = +
+            $new_num = 1
+        )
+    )
+
+    text_set_str[disp_txt, @display]
+)

@@ -46,6 +46,8 @@ private:
     std::vector<std::pair<std::string, TextEntry>> text_list;
     std::unordered_map<std::string, size_t> text_index;
 
+    bool mouseClickedThisFrame = false;
+
     // --- パーサー / 評価 ---
     std::string evaluate_expression(const std::string& expr);
     std::string resolve_variable(const std::string& name);
