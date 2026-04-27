@@ -2,6 +2,16 @@
 #include <iostream>
 #include <string>
 #include <cctype>
+#include <cmath>
+
+static std::string format_number(double v) {
+    if (std::floor(v) == v && v >= -1e15 && v <= 1e15)
+        return std::to_string((long long)v);
+    std::string s = std::to_string(v);
+    s.erase(s.find_last_not_of('0') + 1);
+    if (s.back() == '.') s.pop_back();
+    return s;
+}
 
 DolphinInterpreter::DolphinInterpreter() {
     register_builtins();
@@ -172,12 +182,12 @@ std::string DolphinInterpreter::evaluate_expression(const std::string& expr) {
     // 比較演算（2文字演算子を先にチェック）
     using CmpFn = std::function<std::string(std::string, std::string)>;
     for (auto& [op, fn] : std::vector<std::pair<std::string, CmpFn>>{
-        {"!=", [](std::string l, std::string r) { try { return std::stoi(l) != std::stoi(r) ? "1" : "0"; } catch (...) { return l != r ? "1" : "0"; } }},
-        {"==", [](std::string l, std::string r) { try { return std::stoi(l) == std::stoi(r) ? "1" : "0"; } catch (...) { return l == r ? "1" : "0"; } }},
-        {">=", [](std::string l, std::string r) { return std::stoi(l) >= std::stoi(r) ? "1" : "0"; }},
-        {"<=", [](std::string l, std::string r) { return std::stoi(l) <= std::stoi(r) ? "1" : "0"; }},
-        {">",  [](std::string l, std::string r) { return std::stoi(l) >  std::stoi(r) ? "1" : "0"; }},
-        {"<",  [](std::string l, std::string r) { return std::stoi(l) <  std::stoi(r) ? "1" : "0"; }},
+        {"!=", [](std::string l, std::string r) { try { return std::stod(l) != std::stod(r) ? "1" : "0"; } catch (...) { return l != r ? "1" : "0"; } }},
+        {"==", [](std::string l, std::string r) { try { return std::stod(l) == std::stod(r) ? "1" : "0"; } catch (...) { return l == r ? "1" : "0"; } }},
+        {">=", [](std::string l, std::string r) { try { return std::stod(l) >= std::stod(r) ? "1" : "0"; } catch (...) { return "0"; } }},
+        {"<=", [](std::string l, std::string r) { try { return std::stod(l) <= std::stod(r) ? "1" : "0"; } catch (...) { return "0"; } }},
+        {">",  [](std::string l, std::string r) { try { return std::stod(l) >  std::stod(r) ? "1" : "0"; } catch (...) { return "0"; } }},
+        {"<",  [](std::string l, std::string r) { try { return std::stod(l) <  std::stod(r) ? "1" : "0"; } catch (...) { return "0"; } }},
     }) {
         if ((pos = expr.find(op)) != std::string::npos) {
             std::string l = evaluate_expression(trim(expr.substr(0, pos)));
@@ -186,26 +196,28 @@ std::string DolphinInterpreter::evaluate_expression(const std::string& expr) {
         }
     }
 
-    // 四則演算（両辺が空の場合はスキップしてリテラルとして扱う）
+    // 四則演算（両辺が空の場合はスキップしてリテラルとして扱う、double で計算）
     if ((pos = expr.find('+')) != std::string::npos) {
         std::string l = trim(expr.substr(0, pos)), r = trim(expr.substr(pos + 1));
         if (!l.empty() && !r.empty())
-            return std::to_string(std::stoi(evaluate_expression(l)) + std::stoi(evaluate_expression(r)));
+            return format_number(std::stod(evaluate_expression(l)) + std::stod(evaluate_expression(r)));
     }
-    if ((pos = expr.rfind('-')) != std::string::npos && pos > 0)
-        return std::to_string(std::stoi(evaluate_expression(trim(expr.substr(0, pos)))) -
-                              std::stoi(evaluate_expression(trim(expr.substr(pos + 1)))));
+    if ((pos = expr.rfind('-')) != std::string::npos && pos > 0) {
+        std::string l = trim(expr.substr(0, pos)), r = trim(expr.substr(pos + 1));
+        if (!l.empty() && !r.empty())
+            return format_number(std::stod(evaluate_expression(l)) - std::stod(evaluate_expression(r)));
+    }
     if ((pos = expr.find('*')) != std::string::npos) {
         std::string l = trim(expr.substr(0, pos)), r = trim(expr.substr(pos + 1));
         if (!l.empty() && !r.empty())
-            return std::to_string(std::stoi(evaluate_expression(l)) * std::stoi(evaluate_expression(r)));
+            return format_number(std::stod(evaluate_expression(l)) * std::stod(evaluate_expression(r)));
     }
     if ((pos = expr.rfind('/')) != std::string::npos) {
         std::string l = trim(expr.substr(0, pos)), r = trim(expr.substr(pos + 1));
         if (!l.empty() && !r.empty()) {
-            int rv = std::stoi(evaluate_expression(r));
+            double rv = std::stod(evaluate_expression(r));
             if (rv == 0) { std::cerr << "Error: Division by zero." << std::endl; return "0"; }
-            return std::to_string(std::stoi(evaluate_expression(l)) / rv);
+            return format_number(std::stod(evaluate_expression(l)) / rv);
         }
     }
 

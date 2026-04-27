@@ -1,38 +1,45 @@
-window[320, 480, Calculator]
+window[320, 460, Calculator]
 bg[30, 30, 30]
 
 font_load[font, /System/Library/Fonts/Helvetica.ttc]
 
 // ---- 状態 ----
-@display  = 0
-$accum    = 0
-@op       = +
-$new_num  = 1
+@display = 0
+$accum   = 0
+@op      = +
+$new_num = 1
+$has_dot = 0
 
 // ---- ディスプレイ ----
 rect_create[disp_bg, 10, 10, 300, 70, 20, 20, 20]
 text_create[disp_txt, font, 20, 28, 0, 40, 255, 255, 255]
 
-// ---- ボタン背景 ----
+// ---- ボタン row1(y=100): 7 8 9 / ----
 rect_create[b7,   10,  100, 70, 60, 80, 80, 80]
 rect_create[b8,   85,  100, 70, 60, 80, 80, 80]
 rect_create[b9,   160, 100, 70, 60, 80, 80, 80]
 rect_create[bdiv, 235, 100, 70, 60, 200, 120, 30]
 
+// ---- row2(y=170): 4 5 6 * ----
 rect_create[b4,   10,  170, 70, 60, 80, 80, 80]
 rect_create[b5,   85,  170, 70, 60, 80, 80, 80]
 rect_create[b6,   160, 170, 70, 60, 80, 80, 80]
 rect_create[bmul, 235, 170, 70, 60, 200, 120, 30]
 
+// ---- row3(y=240): 1 2 3 - ----
 rect_create[b1,   10,  240, 70, 60, 80, 80, 80]
 rect_create[b2,   85,  240, 70, 60, 80, 80, 80]
 rect_create[b3,   160, 240, 70, 60, 80, 80, 80]
 rect_create[bsub, 235, 240, 70, 60, 200, 120, 30]
 
-rect_create[bc,   10,  310, 70, 60, 180, 60, 60]
-rect_create[b0,   85,  310, 70, 60, 80, 80, 80]
+// ---- row4(y=310): 0 . = + ----
+rect_create[b0,   10,  310, 70, 60, 80, 80, 80]
+rect_create[bdot, 85,  310, 70, 60, 80, 80, 80]
 rect_create[beq,  160, 310, 70, 60, 60, 160, 60]
 rect_create[badd, 235, 310, 70, 60, 200, 120, 30]
+
+// ---- row5(y=380): C (全幅) ----
+rect_create[bc, 10, 380, 300, 60, 180, 60, 60]
 
 // ---- ラベル ----
 text_create[l7,   font, 35,  115, 7, 28, 255, 255, 255]
@@ -50,16 +57,22 @@ text_create[l2,   font, 110, 255, 2, 28, 255, 255, 255]
 text_create[l3,   font, 185, 255, 3, 28, 255, 255, 255]
 text_create[lsub, font, 255, 255, -, 28, 255, 200, 50]
 
-text_create[lc,   font, 30,  325, C, 28, 255, 100, 100]
-text_create[l0,   font, 110, 325, 0, 28, 255, 255, 255]
-text_create[leq,  font, 180, 325, =, 28, 100, 255, 100]
+text_create[l0,   font, 35,  325, 0, 28, 255, 255, 255]
+text_create[ldot, font, 110, 325, ., 28, 255, 255, 255]
+text_create[leq,  font, 185, 325, =, 28, 100, 255, 100]
 text_create[ladd, font, 255, 325, +, 28, 255, 200, 50]
+
+text_create[lc,   font, 140, 395, C, 28, 255, 200, 200]
 
 gameloop (
     mouse_pos[$mx, $my]
     mouse_click[$clicked]
 
     if $clicked == 1 (
+        // --- 数字ボタン共通マクロ ---
+        // 新入力モード: そのままセット
+        // 継続モード:   display==0 かつ小数点なし → 置換、それ以外 → 追加
+
         // 7
         if $mx >= 10 && $mx <= 80 && $my >= 100 && $my <= 160 (
             if $new_num == 1 (
@@ -67,7 +80,12 @@ gameloop (
                 $new_num = 0
             )
             else (
-                str_concat[@display, @display, 7]
+                if @display == 0 && $has_dot == 0 (
+                    @display = 7
+                )
+                else (
+                    str_concat[@display, @display, 7]
+                )
             )
         )
         // 8
@@ -77,7 +95,12 @@ gameloop (
                 $new_num = 0
             )
             else (
-                str_concat[@display, @display, 8]
+                if @display == 0 && $has_dot == 0 (
+                    @display = 8
+                )
+                else (
+                    str_concat[@display, @display, 8]
+                )
             )
         )
         // 9
@@ -87,7 +110,12 @@ gameloop (
                 $new_num = 0
             )
             else (
-                str_concat[@display, @display, 9]
+                if @display == 0 && $has_dot == 0 (
+                    @display = 9
+                )
+                else (
+                    str_concat[@display, @display, 9]
+                )
             )
         )
         // 4
@@ -97,7 +125,12 @@ gameloop (
                 $new_num = 0
             )
             else (
-                str_concat[@display, @display, 4]
+                if @display == 0 && $has_dot == 0 (
+                    @display = 4
+                )
+                else (
+                    str_concat[@display, @display, 4]
+                )
             )
         )
         // 5
@@ -107,7 +140,12 @@ gameloop (
                 $new_num = 0
             )
             else (
-                str_concat[@display, @display, 5]
+                if @display == 0 && $has_dot == 0 (
+                    @display = 5
+                )
+                else (
+                    str_concat[@display, @display, 5]
+                )
             )
         )
         // 6
@@ -117,7 +155,12 @@ gameloop (
                 $new_num = 0
             )
             else (
-                str_concat[@display, @display, 6]
+                if @display == 0 && $has_dot == 0 (
+                    @display = 6
+                )
+                else (
+                    str_concat[@display, @display, 6]
+                )
             )
         )
         // 1
@@ -127,7 +170,12 @@ gameloop (
                 $new_num = 0
             )
             else (
-                str_concat[@display, @display, 1]
+                if @display == 0 && $has_dot == 0 (
+                    @display = 1
+                )
+                else (
+                    str_concat[@display, @display, 1]
+                )
             )
         )
         // 2
@@ -137,7 +185,12 @@ gameloop (
                 $new_num = 0
             )
             else (
-                str_concat[@display, @display, 2]
+                if @display == 0 && $has_dot == 0 (
+                    @display = 2
+                )
+                else (
+                    str_concat[@display, @display, 2]
+                )
             )
         )
         // 3
@@ -147,43 +200,71 @@ gameloop (
                 $new_num = 0
             )
             else (
-                str_concat[@display, @display, 3]
+                if @display == 0 && $has_dot == 0 (
+                    @display = 3
+                )
+                else (
+                    str_concat[@display, @display, 3]
+                )
             )
         )
         // 0
-        if $mx >= 85 && $mx <= 155 && $my >= 310 && $my <= 370 (
+        if $mx >= 10 && $mx <= 80 && $my >= 310 && $my <= 370 (
             if $new_num == 1 (
                 @display = 0
                 $new_num = 0
             )
             else (
-                str_concat[@display, @display, 0]
+                if @display == 0 && $has_dot == 0 (
+                    // 先頭ゼロ禁止: 何もしない
+                )
+                else (
+                    str_concat[@display, @display, 0]
+                )
+            )
+        )
+        // . (小数点)
+        if $mx >= 85 && $mx <= 155 && $my >= 310 && $my <= 370 (
+            if $has_dot == 0 (
+                if $new_num == 1 (
+                    @display = 0.
+                    $new_num = 0
+                    $has_dot = 1
+                )
+                else (
+                    str_concat[@display, @display, .]
+                    $has_dot = 1
+                )
             )
         )
 
-        // 演算子
+        // --- 演算子 ---
         if $mx >= 235 && $mx <= 305 && $my >= 100 && $my <= 160 (
             $accum = @display
             @op = /
             $new_num = 1
+            $has_dot = 0
         )
         if $mx >= 235 && $mx <= 305 && $my >= 170 && $my <= 230 (
             $accum = @display
             @op = *
             $new_num = 1
+            $has_dot = 0
         )
         if $mx >= 235 && $mx <= 305 && $my >= 240 && $my <= 300 (
             $accum = @display
             @op = -
             $new_num = 1
+            $has_dot = 0
         )
         if $mx >= 235 && $mx <= 305 && $my >= 310 && $my <= 370 (
             $accum = @display
             @op = +
             $new_num = 1
+            $has_dot = 0
         )
 
-        // =
+        // --- = ---
         if $mx >= 160 && $mx <= 230 && $my >= 310 && $my <= 370 (
             if @op == + (
                 @display = $accum + @display
@@ -200,14 +281,16 @@ gameloop (
             $accum = 0
             @op = +
             $new_num = 1
+            $has_dot = 0
         )
 
-        // C
-        if $mx >= 10 && $mx <= 80 && $my >= 310 && $my <= 370 (
+        // --- C ---
+        if $my >= 380 && $my <= 440 (
             @display = 0
             $accum = 0
             @op = +
             $new_num = 1
+            $has_dot = 0
         )
     )
 
