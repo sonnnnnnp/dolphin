@@ -38,6 +38,14 @@ private:
     std::vector<sf::Sprite> sprite_draw_queue;
     sf::Vector2f cameraPos{0.f, 0.f};
 
+    std::unordered_map<std::string, std::unique_ptr<sf::Font>> font_map;
+    std::vector<std::pair<std::string, sf::CircleShape>> circle_list;
+    std::unordered_map<std::string, size_t> circle_index;
+
+    struct TextEntry { sf::Text text; };
+    std::vector<std::pair<std::string, TextEntry>> text_list;
+    std::unordered_map<std::string, size_t> text_index;
+
     // --- パーサー / 評価 ---
     std::string evaluate_expression(const std::string& expr);
     std::string resolve_variable(const std::string& name);

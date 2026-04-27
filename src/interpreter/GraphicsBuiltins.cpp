@@ -109,6 +109,79 @@ void DolphinInterpreter::register_graphics_builtins() {
         entry.sprite.setOrigin(flip ? w : 0.f, 0.f);
     };
 
+    // font_load[id, path]
+    functions["font_load"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 2) { std::cerr << "Error: font_load requires id and path." << std::endl; return; }
+        std::string id = trim(args[0]), path = trim(args[1]);
+        auto font = std::make_unique<sf::Font>();
+        if (!font->loadFromFile(path)) { std::cerr << "Error: Failed to load font '" << path << "'." << std::endl; return; }
+        font_map[id] = std::move(font);
+    };
+
+    // circle_create[id, x, y, radius, r, g, b]
+    functions["circle_create"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 7) { std::cerr << "Error: circle_create requires id x y radius r g b." << std::endl; return; }
+        std::string id = args[0];
+        std::vector<std::string> n = resolve_variable_array(std::vector<std::string>(args.begin() + 1, args.end()));
+        sf::CircleShape circle(std::stof(n[2]));
+        circle.setPosition(std::stof(n[0]), std::stof(n[1]));
+        circle.setFillColor(sf::Color(std::stoi(n[3]), std::stoi(n[4]), std::stoi(n[5])));
+        if (circle_index.count(id)) {
+            circle_list[circle_index[id]].second = circle;
+        } else {
+            circle_index[id] = circle_list.size();
+            circle_list.push_back({id, circle});
+        }
+    };
+
+    // circle_set[id, x, y]
+    functions["circle_set"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 3) { std::cerr << "Error: circle_set requires id x y." << std::endl; return; }
+        std::string id = args[0];
+        std::vector<std::string> n = resolve_variable_array(std::vector<std::string>(args.begin() + 1, args.end()));
+        if (!circle_index.count(id)) { std::cerr << "Error: circle '" << id << "' not found." << std::endl; return; }
+        circle_list[circle_index[id]].second.setPosition(std::stof(n[0]), std::stof(n[1]));
+    };
+
+    // text_create[id, font_id, x, y, str, size, r, g, b]
+    functions["text_create"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 9) { std::cerr << "Error: text_create requires id font_id x y str size r g b." << std::endl; return; }
+        std::string id = trim(args[0]), font_id = trim(args[1]);
+        if (!font_map.count(font_id)) { std::cerr << "Error: Font '" << font_id << "' not loaded." << std::endl; return; }
+        std::vector<std::string> n = resolve_variable_array(std::vector<std::string>(args.begin() + 2, args.end()));
+        // n: x, y, str, size, r, g, b
+        sf::Text text;
+        text.setFont(*font_map[font_id]);
+        text.setPosition(std::stof(n[0]), std::stof(n[1]));
+        text.setString(n[2]);
+        text.setCharacterSize(static_cast<unsigned int>(std::stoi(n[3])));
+        text.setFillColor(sf::Color(std::stoi(n[4]), std::stoi(n[5]), std::stoi(n[6])));
+        TextEntry entry{text};
+        if (text_index.count(id)) {
+            text_list[text_index[id]].second = std::move(entry);
+        } else {
+            text_index[id] = text_list.size();
+            text_list.push_back({id, std::move(entry)});
+        }
+    };
+
+    // text_set[id, x, y]
+    functions["text_set"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 3) { std::cerr << "Error: text_set requires id x y." << std::endl; return; }
+        std::string id = trim(args[0]);
+        std::vector<std::string> n = resolve_variable_array(std::vector<std::string>(args.begin() + 1, args.end()));
+        if (!text_index.count(id)) { std::cerr << "Error: text '" << id << "' not found." << std::endl; return; }
+        text_list[text_index[id]].second.text.setPosition(std::stof(n[0]), std::stof(n[1]));
+    };
+
+    // text_set_str[id, str]  ← $var/@var をテンプレート展開する
+    functions["text_set_str"] = [this](std::vector<std::string>& args) {
+        if (args.size() < 2) { std::cerr << "Error: text_set_str requires id and str." << std::endl; return; }
+        std::string id = trim(args[0]);
+        if (!text_index.count(id)) { std::cerr << "Error: text '" << id << "' not found." << std::endl; return; }
+        text_list[text_index[id]].second.text.setString(interpolate(trim(args[1])));
+    };
+
     // camera_set[x, y] — ビューの左上座標を指定
     functions["camera_set"] = [this](std::vector<std::string>& args) {
         args = resolve_variable_array(args);
@@ -136,8 +209,12 @@ void DolphinInterpreter::register_graphics_builtins() {
             gameWindow->clear(clearColor);
             for (auto& [id, shape] : shape_list)
                 gameWindow->draw(shape);
+            for (auto& [id, circle] : circle_list)
+                gameWindow->draw(circle);
             for (auto& sp : sprite_draw_queue)
                 gameWindow->draw(sp);
+            for (auto& [id, entry] : text_list)
+                gameWindow->draw(entry.text);
             gameWindow->display();
         }
         gameWindow->setView(defaultView);
