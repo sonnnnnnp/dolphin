@@ -10,5 +10,57 @@
         "locale": "cpp",
         "ios": "cpp"
     },
-    "C_Cpp.errorSquiggles": "disabled"
+    "C_Cpp.errorSquiggles": "disabled",
+    "editor.tokenColorCustomizations": {
+        "textMateRules": [
+            {
+                "scope": "comment.line.double-slash.dol",
+                "settings": {"foreground": "#6A9955"}
+            },
+            {
+                "scope": "keyword.control.dol",
+                "settings": {"foreground": "#C586C0", "fontStyle": "bold"}
+            },
+            {
+                "scope": "entity.name.function.dol",
+                "settings": {"foreground": "#DCDCAA"}
+            },
+            {
+                "scope": "variable.other.dol",
+                "settings": {"foreground": "#9CDCFE"}
+            },
+            {
+                "scope": "constant.numeric.dol",
+                "settings": {"foreground": "#B5CEA8"}
+            },
+            {
+                "scope": "string.unquoted.dol",
+                "settings": {"foreground": "#CE9178"}
+            },
+            {
+                "scope": "keyword.operator.dol",
+                "settings": {"foreground": "#D4D4D4"}
+            },
+            {
+                "scope": "punctuation.section.brackets.begin.dol",
+                "settings": {"foreground": "#569CD6"}
+            },
+            {
+                "scope": "punctuation.section.brackets.end.dol",
+                "settings": {"foreground": "#569CD6"}
+            },
+            {
+                "scope": "punctuation.bracket.dol",
+                "settings": {"foreground": "#569CD6"}
+            },
+            {
+                "scope": "punctuation.definition.array.begin.dol",
+                "settings": {"foreground": "#FFD700"}
+            },
+            {
+                "scope": "punctuation.definition.array.end.dol",
+                "settings": {"foreground": "#FFD700"}
+            }
+        ]
+    }
 }
