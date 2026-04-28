@@ -58,12 +58,12 @@ void DolphinInterpreter::register_graphics_builtins() {
         shape_list[shape_index[id]].second.setPosition(std::stof(n[0]), std::stof(n[1]));
     };
 
-    // key_check[KeyName, $var]
+    // key_check[KeyName, @var]
     functions["key_check"] = [this](std::vector<std::string>& args) {
         if (args.size() < 2) { std::cerr << "Error: key_check requires key_name and var." << std::endl; return; }
         std::string key_name = resolve_variable(trim(args[0]));
         std::string raw      = trim(args[1]);
-        std::string var_name = (!raw.empty() && (raw[0] == '@' || raw[0] == '$')) ? raw.substr(1) : raw;
+        std::string var_name = (!raw.empty() && raw[0] == '@') ? raw.substr(1) : raw;
         declare_variable(var_name, sf::Keyboard::isKeyPressed(str_to_key(key_name)) ? "1" : "0");
     };
 
@@ -210,22 +210,22 @@ void DolphinInterpreter::register_graphics_builtins() {
         sound_map[id]->sound.setVolume(std::stof(resolve_variable(trim(args[1]))));
     };
 
-    // mouse_pos[$x, $y] — ウィンドウ内のマウス座標をワールド座標で取得
+    // mouse_pos[@x, @y] — ウィンドウ内のマウス座標をワールド座標で取得
     functions["mouse_pos"] = [this](std::vector<std::string>& args) {
         if (args.size() < 2 || !gameWindow) return;
         sf::Vector2i pos = sf::Mouse::getPosition(*gameWindow);
         std::string xv = trim(args[0]), yv = trim(args[1]);
-        if (!xv.empty() && (xv[0] == '@' || xv[0] == '$')) xv = xv.substr(1);
-        if (!yv.empty() && (yv[0] == '@' || yv[0] == '$')) yv = yv.substr(1);
+        if (!xv.empty() && xv[0] == '@') xv = xv.substr(1);
+        if (!yv.empty() && yv[0] == '@') yv = yv.substr(1);
         declare_variable(xv, std::to_string(pos.x + (int)cameraPos.x));
         declare_variable(yv, std::to_string(pos.y + (int)cameraPos.y));
     };
 
-    // mouse_click[$var] — 左クリックされたフレームのみ 1
+    // mouse_click[@var] — 左クリックされたフレームのみ 1
     functions["mouse_click"] = [this](std::vector<std::string>& args) {
         if (args.empty()) return;
         std::string v = trim(args[0]);
-        if (!v.empty() && (v[0] == '@' || v[0] == '$')) v = v.substr(1);
+        if (!v.empty() && v[0] == '@') v = v.substr(1);
         declare_variable(v, mouseClickedThisFrame ? "1" : "0");
     };
 

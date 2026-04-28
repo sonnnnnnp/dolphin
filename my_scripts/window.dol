@@ -1,7 +1,7 @@
-$w = 800
-$h = 600
+@w = 800
+@h = 600
 
-window[$w, $h, Hi]
+window[@w, @h, Hi]
 
 gameloop (
 )

@@ -1,14 +1,14 @@
 #include "DolphinInterpreter.h"
 #include <iostream>
 
-// シジル ($/@) を除いた変数名を返す
+// シジル (@) を除いた変数名を返す
 static std::string strip_sigil(const std::string& s) {
-    if (!s.empty() && (s[0] == '@' || s[0] == '$')) return s.substr(1);
+    if (!s.empty() && s[0] == '@') return s.substr(1);
     return s;
 }
 
 void DolphinInterpreter::register_builtins() {
-    // input[$var] / input[@var]
+    // input[@var]
     functions["input"] = [this](std::vector<std::string>& args) {
         if (args.empty()) { std::cerr << "Error: input requires 1 argument." << std::endl; return; }
         std::string input_val;

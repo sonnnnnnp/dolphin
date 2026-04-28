@@ -54,8 +54,8 @@ void DolphinInterpreter::execute(const std::string& code) {
         line = trim(line);
         if (line.empty() || line.find("//") == 0) continue;
 
-        // 変数宣言: $num = expr  /  @str = val  /  $arr = {1,2,3}  /  $arr[i] = val
-        if ((line[0] == '@' || line[0] == '$') && line.find('=') != std::string::npos) {
+        // 変数宣言: @var = expr  /  @arr = {1,2,3}  /  @arr[i] = val
+        if (line[0] == '@' && line.find('=') != std::string::npos) {
             size_t eq        = line.find('=');
             std::string lhs  = trim(line.substr(1, eq - 1));
             std::string rhs  = trim(line.substr(eq + 1));
@@ -235,7 +235,7 @@ std::string DolphinInterpreter::evaluate_expression(const std::string& expr) {
 // ---- 変数 / 関数ディスパッチ ----
 
 std::string DolphinInterpreter::resolve_variable(const std::string& name) {
-    if (!name.empty() && (name[0] == '@' || name[0] == '$')) {
+    if (!name.empty() && name[0] == '@') {
         std::string key = name.substr(1);
         size_t bracket = key.find('[');
         if (bracket != std::string::npos) {
@@ -286,7 +286,7 @@ std::string DolphinInterpreter::interpolate(const std::string& tmpl) {
     std::string result;
     for (size_t i = 0; i < tmpl.size(); ) {
         char c = tmpl[i];
-        if ((c == '$' || c == '@') &&
+        if (c == '@' &&
             i + 1 < tmpl.size() &&
             (std::isalpha((unsigned char)tmpl[i + 1]) || tmpl[i + 1] == '_')) {
             size_t start = i++;
