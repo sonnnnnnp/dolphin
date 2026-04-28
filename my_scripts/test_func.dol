@@ -1,0 +1,54 @@
+// ---- ユーザー定義関数テスト ----
+
+// 足し算
+add[$a, $b] (
+    # $a + $b
+)
+
+// 絶対値
+abs[$n] (
+    if $n < 0 (
+        # $n * -1
+    )
+    # $n
+)
+
+// クランプ
+clamp[$val, $min, $max] (
+    if $val < $min (
+        # $min
+    )
+    if $val > $max (
+        # $max
+    )
+    # $val
+)
+
+// 戻り値なし（副作用だけ）
+greet[$name] (
+    log[Hello, @name!]
+)
+
+// --- 実行 ---
+
+@result = add[10, 20]
+log[@result]            // → 30
+
+@result = abs[-42]
+log[@result]            // → 42
+
+@result = clamp[150, 0, 100]
+log[@result]            // → 100
+
+@result = clamp[-5, 0, 100]
+log[@result]            // → 0
+
+greet[Dolphin]          // → Hello, Dolphin!
+
+// 式の中でも使える
+@x = add[3, 4] + add[1, 2]
+log[@x]                 // → 10
+
+// エラーケース（コメントアウトを外すとエラーメッセージが出る）
+// $outside = 1
+// # 999

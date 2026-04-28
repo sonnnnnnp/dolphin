@@ -54,6 +54,28 @@ void DolphinInterpreter::execute(const std::string& code) {
         line = trim(line);
         if (line.empty() || line.find("//") == 0) continue;
 
+        // # expr — return 文（ローカルスコープ外はエラー）
+        if (line[0] == '#') {
+            if (local_stack.empty()) {
+                std::cerr << "Error: '#' (return) cannot be used outside a function." << std::endl;
+                continue;
+            }
+            throw ReturnException{evaluate_expression(trim(line.substr(1)))};
+        }
+
+        // $var = expr — ローカル変数代入
+        if (line[0] == '$' && line.find('=') != std::string::npos) {
+            if (local_stack.empty()) {
+                std::cerr << "Error: '$' variables cannot be used outside a function." << std::endl;
+                continue;
+            }
+            size_t eq       = line.find('=');
+            std::string lhs = trim(line.substr(1, eq - 1));
+            std::string rhs = trim(line.substr(eq + 1));
+            local_stack.back()[lhs] = evaluate_expression(rhs);
+            continue;
+        }
+
         // 変数宣言: @var = expr  /  @arr = {1,2,3}  /  @arr[i] = val
         if (line[0] == '@' && line.find('=') != std::string::npos) {
             size_t eq        = line.find('=');
@@ -89,6 +111,12 @@ void DolphinInterpreter::execute(const std::string& code) {
             }
 
             declare_variable(lhs, evaluate_expression(rhs));
+            continue;
+        }
+
+        // ユーザー定義関数: name[$a, $b] (
+        if (is_function_def(line)) {
+            parse_function_def(ss, line);
             continue;
         }
 
@@ -229,12 +257,45 @@ std::string DolphinInterpreter::evaluate_expression(const std::string& expr) {
         }
     }
 
+    // ユーザー定義関数呼び出し: name[arg1, arg2, ...]
+    {
+        size_t b = expr.find('[');
+        if (b != std::string::npos && !expr.empty() && expr.back() == ']') {
+            std::string fn_name = trim(expr.substr(0, b));
+            bool valid = !fn_name.empty();
+            for (char c : fn_name)
+                if (!std::isalnum((unsigned char)c) && c != '_') { valid = false; break; }
+            if (valid && user_functions.count(fn_name)) {
+                std::string arg_str = expr.substr(b + 1, expr.size() - b - 2);
+                std::vector<std::string> call_args;
+                if (!trim(arg_str).empty()) {
+                    std::istringstream as(arg_str);
+                    std::string item;
+                    while (std::getline(as, item, ','))
+                        call_args.push_back(evaluate_expression(trim(item)));
+                }
+                return call_user_function(fn_name, call_args);
+            }
+        }
+    }
+
     return resolve_variable(expr);
 }
 
 // ---- 変数 / 関数ディスパッチ ----
 
 std::string DolphinInterpreter::resolve_variable(const std::string& name) {
+    if (!name.empty() && name[0] == '$') {
+        if (local_stack.empty()) {
+            std::cerr << "Error: '$' variables cannot be used outside a function." << std::endl;
+            return "0";
+        }
+        std::string key = name.substr(1);
+        auto& frame = local_stack.back();
+        if (frame.count(key)) return frame[key];
+        std::cerr << "Error: Local variable '" << name << "' is not defined." << std::endl;
+        return "0";
+    }
     if (!name.empty() && name[0] == '@') {
         std::string key = name.substr(1);
         size_t bracket = key.find('[');
@@ -267,10 +328,15 @@ std::vector<std::string> DolphinInterpreter::resolve_variable_array(const std::v
 }
 
 void DolphinInterpreter::run_function(const std::string& name, std::vector<std::string> args) {
-    if (functions.count(name))
+    if (functions.count(name)) {
         functions[name](args);
-    else
+    } else if (user_functions.count(name)) {
+        std::vector<std::string> resolved;
+        for (auto& a : args) resolved.push_back(evaluate_expression(a));
+        call_user_function(name, resolved);
+    } else {
         std::cerr << "Error: Function '" << name << "' is not defined." << std::endl;
+    }
 }
 
 std::string DolphinInterpreter::trim(const std::string& str) {
@@ -302,4 +368,60 @@ std::string DolphinInterpreter::interpolate(const std::string& tmpl) {
         }
     }
     return result;
+}
+
+// ---- ユーザー定義関数 ----
+
+bool DolphinInterpreter::is_function_def(const std::string& line) {
+    size_t bracket = line.find('[');
+    if (bracket == std::string::npos) return false;
+    std::string name = trim(line.substr(0, bracket));
+    if (name.empty()) return false;
+    for (char c : name)
+        if (!std::isalnum((unsigned char)c) && c != '_') return false;
+    if (functions.count(name) || keyword_handlers.count(name)) return false;
+    size_t close = line.find(']', bracket);
+    if (close == std::string::npos) return false;
+    std::string after = trim(line.substr(close + 1));
+    return !after.empty() && after[0] == '(';
+}
+
+void DolphinInterpreter::parse_function_def(std::istringstream& ss, const std::string& line) {
+    size_t bracket = line.find('[');
+    size_t close_b = line.find(']', bracket);
+    std::string name       = trim(line.substr(0, bracket));
+    std::string param_str  = line.substr(bracket + 1, close_b - bracket - 1);
+
+    std::vector<std::string> params;
+    if (!trim(param_str).empty()) {
+        std::istringstream ps(param_str);
+        std::string p;
+        while (std::getline(ps, p, ',')) {
+            std::string pt = trim(p);
+            if (!pt.empty() && pt[0] == '$')
+                params.push_back(pt.substr(1));
+        }
+    }
+
+    user_functions[name] = {params, read_block(ss, line)};
+}
+
+std::string DolphinInterpreter::call_user_function(const std::string& name, const std::vector<std::string>& args) {
+    auto& fn = user_functions[name];
+
+    std::unordered_map<std::string, std::string> frame;
+    for (size_t i = 0; i < fn.params.size() && i < args.size(); i++)
+        frame[fn.params[i]] = args[i];
+
+    local_stack.push_back(std::move(frame));
+
+    std::string ret = "0";
+    try {
+        execute(fn.body);
+    } catch (ReturnException& e) {
+        ret = e.value;
+    }
+
+    local_stack.pop_back();
+    return ret;
 }
