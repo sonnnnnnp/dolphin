@@ -1,0 +1,121 @@
+// Pong — 左プレイヤー: W/S  右プレイヤー: Up/Down
+window[800, 600, Pong]
+bg[15, 15, 35]
+font_load[f, /System/Library/Fonts/Helvetica.ttc]
+
+// 初期状態
+@lp_y = 260
+@rp_y = 260
+@bx   = 394
+@by   = 294
+@bvx  = 5
+@bvy  = 3
+@sl   = 0
+@sr   = 0
+
+// センターライン（装飾）
+rect_create[cline, 396, 0, 4, 600, 50, 50, 80]
+
+// パドル・ボール
+rect_create[lp,   20,  260, 12, 80, 255, 255, 255]
+rect_create[rp,   768, 260, 12, 80, 255, 255, 255]
+rect_create[ball, 394, 294, 12, 12, 255, 220, 80]
+
+// スコア表示
+text_create[tl, f, 300, 20, 0, 64, 255, 255, 255]
+text_create[tr, f, 460, 20, 0, 64, 255, 255, 255]
+
+gameloop (
+
+    // ===== 左パドル（W / S）=====
+    key_check[W, @kw]
+    key_check[S, @ks]
+    if @kw == 1 (
+        @lp_y = @lp_y - 6
+    )
+    if @ks == 1 (
+        @lp_y = @lp_y + 6
+    )
+    if @lp_y < 0 (
+        @lp_y = 0
+    )
+    if @lp_y > 520 (
+        @lp_y = 520
+    )
+
+    // ===== 右パドル（Up / Down）=====
+    key_check[Up,   @ku]
+    key_check[Down, @kd]
+    if @ku == 1 (
+        @rp_y = @rp_y - 6
+    )
+    if @kd == 1 (
+        @rp_y = @rp_y + 6
+    )
+    if @rp_y < 0 (
+        @rp_y = 0
+    )
+    if @rp_y > 520 (
+        @rp_y = 520
+    )
+
+    // ===== ボール移動 =====
+    @bx = @bx + @bvx
+    @by = @by + @bvy
+
+    // 上下壁バウンド
+    if @by < 0 (
+        @by  = 0
+        @bvy = 0 - @bvy
+    )
+    if @by > 588 (
+        @by  = 588
+        @bvy = 0 - @bvy
+    )
+
+    // 左パドル衝突（x=20〜32）
+    // ヒット位置でbyの角度が変わる
+    if @bx <= 32 && @bvx < 0 && @by + 12 >= @lp_y && @by <= @lp_y + 80 (
+        @bvx = 0 - @bvx
+        @bx  = 33
+        @hit = @by - @lp_y - 34
+        @bvy = @hit / 6
+        if @bvy == 0 (
+            @bvy = 2
+        )
+    )
+
+    // 右パドル衝突（x=768〜780）
+    if @bx + 12 >= 768 && @bvx > 0 && @by + 12 >= @rp_y && @by <= @rp_y + 80 (
+        @bvx = 0 - @bvx
+        @bx  = 755
+        @hit = @by - @rp_y - 34
+        @bvy = @hit / 6
+        if @bvy == 0 (
+            @bvy = -2
+        )
+    )
+
+    // ===== 得点（外に出たら相手に点、サーブは失点側へ）=====
+    if @bx < 0 (
+        @sr = @sr + 1
+        @bx  = 394
+        @by  = 294
+        @bvx = -5
+        @bvy = 3
+    )
+    if @bx > 800 (
+        @sl = @sl + 1
+        @bx  = 394
+        @by  = 294
+        @bvx = 5
+        @bvy = -3
+    )
+
+    // ===== 描画更新 =====
+    rect_set[lp,   20,  @lp_y]
+    rect_set[rp,   768, @rp_y]
+    rect_set[ball, @bx, @by]
+    text_set_str[tl, @sl]
+    text_set_str[tr, @sr]
+)
