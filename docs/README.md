@@ -90,6 +90,34 @@ log[座標: (@x, @y)]
 log[スコア: @score 点]
 ```
 
+### ユーザー定義関数
+
+`name[$param1, $param2] ( ... )` で関数を定義する。引数・戻り値どちらもサポート。
+
+- 引数は `$` プレフィックスで受け取る（ローカル変数）
+- `$var = expr` で関数内ローカル変数を宣言・更新
+- `# expr` で値を返す（`return`）
+- ローカル変数は関数外では参照できない
+
+```
+// 合計を返す関数
+sum[$a, $b] (
+    # $a + $b
+)
+
+@result = sum[10, 20]    // @result = 30
+log[@result]
+```
+
+```
+// 副作用だけの関数（戻り値なし）
+greet[$name] (
+    log[こんにちは、@name！]
+)
+
+greet[dolphin]
+```
+
 ---
 
 ## 組み込み関数
@@ -135,14 +163,18 @@ gameloop (
 
 | 関数 | 説明 |
 |------|------|
-| `rect_create[id, x, y, w, h, r, g, b]` | 矩形を作成・登録 |
+| `rect_create[id, x, y, w, h, r, g, b]` | 矩形を作成・登録（永続） |
 | `rect_set[id, x, y]` | 矩形の位置を更新 |
+| `rect_draw[x, y, w, h, r, g, b]` | そのフレームだけ矩形を描画（次フレームで自動消去） |
 
 描画順は `rect_create` を呼んだ順（先が下のレイヤー）。
 
 ```
 rect_create[player, 100, 400, 40, 60, 255, 0, 0]
 rect_set[player, @px, @py]
+
+// 一時的な矩形（毎フレーム呼ぶ）
+rect_draw[@px, @py, 40, 60, 255, 0, 0]
 ```
 
 ### 円
@@ -165,13 +197,21 @@ circle_set[ball, @bx, @by]
 | `img_draw[id, x, y]` | 座標に描画（gameloop 内で毎フレーム呼ぶ）|
 | `img_flip[id, 1\|0]` | 左右反転（1=反転, 0=通常）|
 
-`img_draw` は呼んだ順に描画される。矩形・円より前面。
-
 ```
 img_load[player, assets/player.png]
 img_flip[player, @facing]
 img_draw[player, @px, @py]
 ```
+
+### 描画レイヤー順（下から上）
+
+1. `rect_create` で登録した矩形
+2. `circle_create` で登録した円
+3. `rect_draw` で一時描画した矩形
+4. `img_draw` で描画したスプライト
+5. `text_create` で登録したテキスト（最前面）
+
+---
 
 ### テキスト
 
@@ -251,6 +291,45 @@ if @bmi > 25 ( @msg = 肥満(1度)です )
 
 log[BMI: @bmi  @msg]
 ```
+
+### Pong (`my_scripts/pong.dol`)
+
+左プレイヤー W/S・右プレイヤー Up/Down で操作。ボールのヒット位置で反射角が変わる。
+
+```
+window[800, 600, Pong]
+bg[15, 15, 35]
+font_load[f, /System/Library/Fonts/Helvetica.ttc]
+
+@lp_y = 260
+@rp_y = 260
+@bx   = 394
+@by   = 294
+@bvx  = 5
+@bvy  = 3
+@sl   = 0
+@sr   = 0
+
+rect_create[cline, 396, 0,   4, 600, 50, 50, 80]
+rect_create[lp,   20,  260, 12, 80,  255, 255, 255]
+rect_create[rp,   768, 260, 12, 80,  255, 255, 255]
+rect_create[ball, 394, 294, 12, 12,  255, 220, 80]
+text_create[tl, f, 300, 20, 0, 64, 255, 255, 255]
+text_create[tr, f, 460, 20, 0, 64, 255, 255, 255]
+
+gameloop (
+    // パドル操作・ボール移動・得点判定 ...
+    rect_set[lp,   20,  @lp_y]
+    rect_set[rp,   768, @rp_y]
+    rect_set[ball, @bx, @by]
+    text_set_str[tl, @sl]
+    text_set_str[tr, @sr]
+)
+```
+
+### ブロック崩し (`my_scripts/breakout.dol`)
+
+50ブロック（10列×5行）、ライフ制、スピードアップ、タイトル/ゲームオーバー/クリア画面あり。`rect_draw[]` を使って毎フレームブロックを描画している。
 
 ### 横スクロールマリオ (`my_scripts/mario.dol`)
 
