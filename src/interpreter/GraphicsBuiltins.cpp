@@ -236,6 +236,16 @@ void DolphinInterpreter::register_graphics_builtins() {
         cameraPos = {std::stof(args[0]), std::stof(args[1])};
     };
 
+    // rect_draw[x, y, w, h, r, g, b] — 今フレームだけ矩形を描画（毎フレームクリア）
+    functions["rect_draw"] = [this](std::vector<std::string>& args) {
+        args = resolve_variable_array(args);
+        if (args.size() < 7) { std::cerr << "Error: rect_draw requires x y w h r g b." << std::endl; return; }
+        sf::RectangleShape rect(sf::Vector2f(std::stof(args[2]), std::stof(args[3])));
+        rect.setPosition(std::stof(args[0]), std::stof(args[1]));
+        rect.setFillColor(sf::Color(std::stoi(args[4]), std::stoi(args[5]), std::stoi(args[6])));
+        rect_draw_queue.push_back(rect);
+    };
+
     // gameloop ( ... )
     keyword_handlers["gameloop"] = [this](const std::string& block) {
         if (!gameWindow) { std::cerr << "Error: call window[] before gameloop." << std::endl; return; }
@@ -252,6 +262,7 @@ void DolphinInterpreter::register_graphics_builtins() {
             if (!gameWindow->isOpen()) break;
 
             sprite_draw_queue.clear();
+            rect_draw_queue.clear();
             execute(block);
 
             sf::View view(sf::FloatRect(
@@ -263,6 +274,8 @@ void DolphinInterpreter::register_graphics_builtins() {
                 gameWindow->draw(shape);
             for (auto& [id, circle] : circle_list)
                 gameWindow->draw(circle);
+            for (auto& rect : rect_draw_queue)
+                gameWindow->draw(rect);
             for (auto& sp : sprite_draw_queue)
                 gameWindow->draw(sp);
             for (auto& [id, entry] : text_list)

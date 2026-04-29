@@ -62,6 +62,7 @@ private:
     std::vector<std::pair<std::string, TextEntry>> text_list;
     std::unordered_map<std::string, size_t> text_index;
 
+    std::vector<sf::RectangleShape> rect_draw_queue;
     bool mouseClickedThisFrame = false;
 
     struct SoundEntry {

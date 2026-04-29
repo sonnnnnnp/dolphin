@@ -1,0 +1,303 @@
+window[800, 600, Breakout]
+bg[10, 10, 25]
+font_load[f, /System/Library/Fonts/Helvetica.ttc]
+
+sound_load[se_block, assets/coin.wav]
+sound_load[se_miss,  assets/hurt.wav]
+
+// ---- ブロック: 10列 × 5行 = 50個  bi = row*10 + col ----
+// 列x: 30 + col*74 (幅68px, 隙間6px)
+// 行y: 55 + row*28 (高22px, 隙間6px)
+@bx = {30,104,178,252,326,400,474,548,622,696, 30,104,178,252,326,400,474,548,622,696, 30,104,178,252,326,400,474,548,622,696, 30,104,178,252,326,400,474,548,622,696, 30,104,178,252,326,400,474,548,622,696}
+@by = {55,55,55,55,55,55,55,55,55,55, 83,83,83,83,83,83,83,83,83,83, 111,111,111,111,111,111,111,111,111,111, 139,139,139,139,139,139,139,139,139,139, 167,167,167,167,167,167,167,167,167,167}
+@balive = {1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1, 1,1,1,1,1,1,1,1,1,1}
+@bpts   = {50,50,50,50,50,50,50,50,50,50, 40,40,40,40,40,40,40,40,40,40, 30,30,30,30,30,30,30,30,30,30, 20,20,20,20,20,20,20,20,20,20, 10,10,10,10,10,10,10,10,10,10}
+
+// 行ごとのブロック色 (通常色 / ハイライト色)
+@row_r  = {200, 210, 185, 45,  30}
+@row_g  = {50,  115, 185, 185, 155}
+@row_b  = {50,  30,  30,  65,  210}
+@row_rl = {240, 250, 220, 85,  70}
+@row_gl = {90,  160, 220, 220, 195}
+@row_bl = {90,  70,  70,  105, 250}
+
+// ---- ゲーム状態: 0=タイトル 1=プレイ中 2=ゲームオーバー 3=クリア ----
+@state         = 0
+@score         = 0
+@lives         = 3
+@alive_count   = 50
+@blocks_broken = 0
+@speed_tier    = 0
+
+// ---- パドル ----
+@px = 350
+@py = 550
+@pw = 100
+
+// ---- ボール ----
+@ball_x  = 394
+@ball_y  = 534
+@bvx     = 4
+@bvy     = -5
+@launched = 0
+
+// ---- HUD背景バー (常時描画) ----
+rect_create[hud_bg, 0, 0, 800, 44, 18, 18, 38]
+
+text_create[t_score, f, 10,  12, Score: 0,  22, 255, 255, 255]
+text_create[t_lives, f, 630, 12, Lives: 3,  22, 255, 160, 160]
+text_create[t_speed, f, 352, 13, SPD 1,     20, 100, 200, 255]
+text_create[t_msg,   f, 248, 230, ,          52, 255, 220, 60]
+text_create[t_sub,   f, 175, 316, ,          26, 180, 180, 200]
+
+gameloop (
+    key_check[Left,  @kl]
+    key_check[Right, @kr]
+    key_check[Space, @ksp]
+
+    // ===== タイトル画面 =====
+    if @state == 0 (
+        text_set_str[t_msg, BREAKOUT]
+        text_set[t_msg, 248, 230]
+        text_set_str[t_sub, Press SPACE to start]
+        text_set[t_sub, 260, 316]
+        if @ksp == 1 (
+            @state = 1
+            text_set_str[t_msg, ]
+            text_set_str[t_sub, ]
+        )
+    )
+
+    // ===== プレイ中 =====
+    if @state == 1 (
+
+        // パドル移動
+        if @kl == 1 (
+            @px = @px - 7
+        )
+        if @kr == 1 (
+            @px = @px + 7
+        )
+        if @px < 0 (
+            @px = 0
+        )
+        if @px > 700 (
+            @px = 700
+        )
+
+        // ボール待機 (ミス後: パドル中央に追従, Space で発射)
+        if @launched == 0 (
+            @ball_x = @px + 44
+            @ball_y = 534
+            if @ksp == 1 (
+                @launched = 1
+            )
+        )
+
+        // ボール移動 & 判定
+        if @launched == 1 (
+            @ball_x = @ball_x + @bvx
+            @ball_y = @ball_y + @bvy
+
+            // 左壁
+            if @ball_x <= 0 (
+                @ball_x = 0
+                if @bvx < 0 (
+                    @bvx = 0 - @bvx
+                )
+            )
+            // 右壁
+            if @ball_x + 12 >= 800 (
+                @ball_x = 788
+                if @bvx > 0 (
+                    @bvx = 0 - @bvx
+                )
+            )
+            // 上壁 (HUD下端)
+            if @ball_y <= 44 (
+                @ball_y = 44
+                if @bvy < 0 (
+                    @bvy = 0 - @bvy
+                )
+            )
+
+            // パドル衝突 (ヒット位置で反射角を変える)
+            if @bvy > 0 && @ball_y + 12 >= @py && @ball_y + 12 <= @py + 18 && @ball_x + 12 > @px && @ball_x < @px + @pw (
+                @bvy = 0 - @bvy
+                @ball_y = @py - 12
+                @hit_offset = @ball_x + 6 - @px - 50
+                @bvx = @hit_offset / 8
+                // 速度ゼロ・ほぼゼロを防ぐ (方向を維持)
+                if @bvx < 1 && @bvx > -1 (
+                    if @hit_offset < 0 (
+                        @bvx = -2
+                    )
+                    if @hit_offset >= 0 (
+                        @bvx = 2
+                    )
+                )
+                if @bvx > 9 (
+                    @bvx = 9
+                )
+                if @bvx < -9 (
+                    @bvx = -9
+                )
+            )
+
+            // ブロック衝突 (1フレームに1ブロックまで)
+            @bi = 0
+            @hit_this_frame = 0
+            while @bi < 50 (
+                if @hit_this_frame == 0 && @balive[@bi] == 1 (
+                    @blx = @bx[@bi]
+                    @bly = @by[@bi]
+                    if @ball_x + 12 > @blx && @ball_x < @blx + 68 && @ball_y + 12 > @bly && @ball_y < @bly + 22 (
+                        @hit_this_frame = 1
+                        arr_set[balive, @bi, 0]
+                        @bvy = 0 - @bvy
+                        @score = @score + @bpts[@bi]
+                        @alive_count = @alive_count - 1
+                        @blocks_broken = @blocks_broken + 1
+                        sound_play[se_block]
+
+                        // 10ブロックごとにスピードアップ (最大 tier 3)
+                        if @speed_tier < 3 (
+                            @tier_check = @blocks_broken % 10
+                            if @tier_check == 0 (
+                                @speed_tier = @speed_tier + 1
+                                if @bvx > 0 (
+                                    @bvx = @bvx + 1
+                                )
+                                if @bvx < 0 (
+                                    @bvx = @bvx - 1
+                                )
+                                if @bvy > 0 (
+                                    @bvy = @bvy + 1
+                                )
+                                if @bvy < 0 (
+                                    @bvy = @bvy - 1
+                                )
+                            )
+                        )
+                    )
+                )
+                @bi = @bi + 1
+            )
+
+            // ミス (ボール落下)
+            if @ball_y > 620 (
+                @lives = @lives - 1
+                @launched = 0
+                @bvx = 4
+                @bvy = -5
+                sound_play[se_miss]
+                if @lives <= 0 (
+                    @state = 2
+                )
+            )
+
+            // クリア判定
+            if @alive_count <= 0 (
+                @state = 3
+            )
+        )
+
+        // HUD テキスト更新
+        text_set_str[t_score, Score: @score]
+        text_set_str[t_lives, Lives: @lives]
+        @sp_num = @speed_tier + 1
+        text_set_str[t_speed, SPD @sp_num]
+    )
+
+    // ===== ゲームオーバー =====
+    if @state == 2 (
+        text_set_str[t_msg, GAME OVER]
+        text_set[t_msg, 237, 230]
+        text_set_str[t_sub, Score: @score  |  SPACE to retry]
+        text_set[t_sub, 175, 316]
+        if @ksp == 1 (
+            @state = 1
+            @score = 0
+            @lives = 3
+            @alive_count = 50
+            @blocks_broken = 0
+            @speed_tier = 0
+            @px = 350
+            @launched = 0
+            @bvx = 4
+            @bvy = -5
+            @ri = 0
+            while @ri < 50 (
+                arr_set[balive, @ri, 1]
+                @ri = @ri + 1
+            )
+            text_set_str[t_msg, ]
+            text_set_str[t_sub, ]
+        )
+    )
+
+    // ===== ステージクリア =====
+    if @state == 3 (
+        text_set_str[t_msg, STAGE CLEAR!]
+        text_set[t_msg, 200, 230]
+        text_set_str[t_sub, Score: @score  |  SPACE to retry]
+        text_set[t_sub, 175, 316]
+        if @ksp == 1 (
+            @state = 1
+            @score = 0
+            @lives = 3
+            @alive_count = 50
+            @blocks_broken = 0
+            @speed_tier = 0
+            @px = 350
+            @launched = 0
+            @bvx = 4
+            @bvy = -5
+            @ri = 0
+            while @ri < 50 (
+                arr_set[balive, @ri, 1]
+                @ri = @ri + 1
+            )
+            text_set_str[t_msg, ]
+            text_set_str[t_sub, ]
+        )
+    )
+
+    // ===== 描画 =====
+
+    // ブロック (行ごとに色を切り替え)
+    @bi = 0
+    while @bi < 50 (
+        if @balive[@bi] == 1 (
+            @brow = 0
+            if @bi >= 10 (
+                @brow = 1
+            )
+            if @bi >= 20 (
+                @brow = 2
+            )
+            if @bi >= 30 (
+                @brow = 3
+            )
+            if @bi >= 40 (
+                @brow = 4
+            )
+            @cr  = @row_r[@brow]
+            @cg  = @row_g[@brow]
+            @cb  = @row_b[@brow]
+            @crl = @row_rl[@brow]
+            @cgl = @row_gl[@brow]
+            @cbl = @row_bl[@brow]
+            rect_draw[@bx[@bi], @by[@bi], 68, 22, @cr, @cg, @cb]
+            rect_draw[@bx[@bi]+2, @by[@bi]+1, 64, 3, @crl, @cgl, @cbl]
+        )
+        @bi = @bi + 1
+    )
+
+    // パドル
+    rect_draw[@px, @py, 100, 14, 140, 140, 220]
+    rect_draw[@px+2, @py+1, 96, 5, 195, 195, 255]
+
+    // ボール
+    rect_draw[@ball_x, @ball_y, 12, 12, 255, 240, 80]
+)
