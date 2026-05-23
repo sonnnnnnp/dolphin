@@ -1,0 +1,11 @@
+[package]
+name = "dolphin"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "dolphin"
+
+[dependencies]
+macroquad = "0.4"
+async-recursion = "1"

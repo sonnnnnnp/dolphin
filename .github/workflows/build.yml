@@ -28,36 +28,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libx11-dev libxrandr-dev libxcursor-dev libxi-dev \
-            libudev-dev libgl1-mesa-dev libfreetype-dev \
-            libopenal-dev libvorbis-dev libflac-dev libogg-dev
-
-      - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+            libasound2-dev libx11-dev libxrandr-dev libxcursor-dev \
+            libxi-dev libxinerama-dev libgl1-mesa-dev
 
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cargo build --release
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: dolphin-${{ matrix.name }}
-          path: |
-            build/${{ matrix.artifact }}
-            build/Release/${{ matrix.artifact }}
-            build/*.dll
+          path: target/release/${{ matrix.artifact }}
 
-      # リリース作成時はバイナリをアタッチ
       - name: Upload to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            build/${{ matrix.artifact }}
-            build/Release/${{ matrix.artifact }}
-            build/*.dll
+          files: target/release/${{ matrix.artifact }}

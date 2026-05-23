@@ -26,7 +26,7 @@ clamp[$val, $min, $max] (
 
 // 戻り値なし（副作用だけ）
 greet[$name] (
-    log[Hello, @name!]
+    log[Hello, $name!]
 )
 
 // --- 実行 ---
