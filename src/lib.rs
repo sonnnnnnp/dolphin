@@ -18,10 +18,10 @@ use runtime::interp::Interpreter;
 pub fn run_source(src: &str, out: &mut dyn Write) -> Result<(), Diagnostic> {
     let tokens = syntax::lexer::tokenize(src)?;
     let program = syntax::parser::parse(&tokens)?;
-    sema::resolver::resolve(&program)?;
 
     let mut interp = Interpreter::new(out);
     stdlib::register(&mut interp);
+    sema::resolver::resolve(&program, |name| interp.native(name).is_some())?;
     interp.run(&program)?;
     Ok(())
 }

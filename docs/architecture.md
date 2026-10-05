@@ -30,9 +30,9 @@
 | 層 | 入力 → 出力 | 役割 | 状態 |
 |---|---|---|---|
 | Lexer | `&str` → `Vec<Token>` | 字句に分割する。`[ ]` `{ }` の中の改行を捨てる | ✅ |
-| Parser | `&[Token]` → `Program` | design.md 4 章の EBNF を再帰下降で解析する | 🚧 |
-| Resolver | `&Program` → `()` | 関数の事前登録、未定義の関数呼び出し、関数の外での `$x`、引数の数を実行前に検査する | 🚧 |
-| Interpreter | `&Program` → 出力 | AST を木たどりで評価する | 🚧 |
+| Parser | `&[Token]` → `Program` | design.md 4 章の EBNF を再帰下降で解析する | ✅ |
+| Resolver | `&Program` → `()` | 関数の重複・未定義の関数・引数の数・関数の外での `$x` と `#`・未定義の `$x` を実行前に検査する | ✅ |
+| Interpreter | `&Program` → 出力 | AST を木たどりで評価する。呼び出しの深さは 1000 段まで | ✅ |
 | Diagnostics | 各層のエラー → 文字列 | すべての層のエラーを同じ形で表示する | ✅ |
 | 標準ライブラリ | `&[Value]` → `Value` | ネイティブ関数を Interpreter に登録する | 🚧 |
 
@@ -150,6 +150,7 @@ type NativeFn = fn(&mut Interpreter<'_>, &[Value]) -> Result<Value, String>;
 ```
 
 - エラーはメッセージだけ返し、呼び出し位置は Interpreter が付ける
+- Resolver は「その名前が組み込み関数か」だけを Interpreter に問い合わせる。そのため `run_source` は、標準ライブラリを登録してから Resolver を呼ぶ
 - `&mut Interpreter` を受け取るので、`log` は `interp.out` に書ける。テストでは `out` に `Vec<u8>` を渡して出力を取り出す
 
 ### 4.4 エラー
@@ -191,6 +192,7 @@ main.dol:2:6: エラー: 文字列が閉じられていません
 | 段階 4 HTTP | tokio は複数スレッドで動くが、インタプリタは `Rc` を使っていて別スレッドに渡せない（`Send` でない） | サーバーは別スレッドで動かし、リクエストはチャネルでインタプリタのスレッドに送る。インタプリタは 1 スレッドで順番に処理する（JavaScript のイベントループと同じ型） |
 | 段階 5 GUI | macroquad がメインループを握る | `gameloop` を「毎フレーム呼ばれる関数」として登録し、macroquad の側から呼ぶ（design.md 7.2） |
 | メモリ | `Rc` は循環参照を解放できない（配列が自分自身を含む場合など） | 当面は許容する。問題になったら GC を自作する |
+| スタック | 木たどりは Dolphin の呼び出し 1 段で Rust の再帰が何段も深くなり、Windows の既定スタック（1 MB）ではすぐあふれる | 呼び出しの深さを 1000 段に制限し、CLI は 256 MB のスタックを持つスレッドで動かす |
 | 性能 | 木たどりは遅い | 段階 6 でバイトコード VM にする。Resolver の層があるので差し替えやすい |
 
 ---
@@ -202,7 +204,7 @@ main.dol:2:6: エラー: 文字列が閉じられていません
 | `cargo run -- examples/count.dol` | スクリプトを実行する |
 | `cargo run -- --tokens examples/count.dol` | トークン列を表示する |
 | `cargo test` | 単体テストを実行する |
-| `cargo test -- --ignored` | ゴールデンテストも実行する（Interpreter の完成までは ignore） |
+| `cargo run -- --ast examples/count.dol` | AST を S 式で表示する |
 | `cargo fmt` / `cargo clippy` | 整形と静的解析。CI でも同じものを実行する |
 
 テストの置き場所:

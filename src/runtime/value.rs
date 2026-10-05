@@ -27,6 +27,21 @@ impl Value {
             Value::Array(_) => "配列",
         }
     }
+
+    /// `==` の結果。型が違えば false。配列は要素を順に比べる
+    pub fn equals(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::Nil, Value::Nil) => true,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Num(a), Value::Num(b)) => a == b,
+            (Value::Str(a), Value::Str(b)) => a == b,
+            (Value::Array(a), Value::Array(b)) => {
+                let (a, b) = (a.borrow(), b.borrow());
+                a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.equals(y))
+            }
+            _ => false,
+        }
+    }
 }
 
 /// `log` や文字列展開での表示
