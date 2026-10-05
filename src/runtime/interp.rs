@@ -194,14 +194,9 @@ impl<'a> Interpreter<'a> {
                 for part in parts {
                     match part {
                         StrPart::Text(text) => s.push_str(text),
-                        StrPart::Var(name) => match self.globals.get(name) {
+                        StrPart::Var(var) => match self.get_var(var) {
                             Some(value) => s.push_str(&value.to_string()),
-                            None => {
-                                return Err(RuntimeError::new(
-                                    span,
-                                    format!("未定義の変数 `@{name}`"),
-                                ));
-                            }
+                            None => return Err(undefined(var, span)),
                         },
                     }
                 }

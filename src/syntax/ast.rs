@@ -188,10 +188,14 @@ impl fmt::Display for Expr {
                 for part in parts {
                     match part {
                         StrPart::Text(text) => {
-                            let escaped = text.escape_debug().to_string().replace('@', "\\@");
+                            let escaped = text
+                                .escape_debug()
+                                .to_string()
+                                .replace('@', "\\@")
+                                .replace('$', "\\$");
                             write!(f, "{escaped}")?;
                         }
-                        StrPart::Var(name) => write!(f, "@{name}")?,
+                        StrPart::Var(var) => write!(f, "{var}")?,
                     }
                 }
                 write!(f, "\"")

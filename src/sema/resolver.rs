@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::diag::Diagnostic;
 use crate::syntax::ast::{Expr, ExprKind, FuncDef, Program, Stmt, StmtKind, Var};
+use crate::syntax::lexer::StrPart;
 use crate::syntax::span::Span;
 
 type RResult = Result<(), Diagnostic>;
@@ -138,7 +139,11 @@ impl<'a> Resolver<'a> {
 
     fn expr(&self, expr: &'a Expr, locals: Locals<'a, '_>) -> RResult {
         match &expr.kind {
-            ExprKind::Number(_) | ExprKind::Str(_) | ExprKind::Bool(_) => Ok(()),
+            ExprKind::Number(_) | ExprKind::Bool(_) => Ok(()),
+            ExprKind::Str(parts) => parts.iter().try_for_each(|part| match part {
+                StrPart::Var(var) => self.var(var, expr.span, locals),
+                StrPart::Text(_) => Ok(()),
+            }),
             ExprKind::Var(var) => self.var(var, expr.span, locals),
             ExprKind::Call { name, args } => {
                 if let Some(&n) = self.functions.get(name.as_str()) {
@@ -291,6 +296,18 @@ add[$a, $b] (
     fn undefined_local() {
         assert_eq!(
             check("f[$a] (\n    # $b\n)"),
+            Err("未定義の変数 `$b`".into())
+        );
+    }
+
+    #[test]
+    fn local_in_string() {
+        assert_eq!(
+            check("log[\"$x\"]"),
+            Err("`$x` は関数の中でのみ使えます".into())
+        );
+        assert_eq!(
+            check("f[$a] (\n    log[\"$a $b\"]\n)"),
             Err("未定義の変数 `$b`".into())
         );
     }

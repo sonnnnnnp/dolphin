@@ -1,0 +1,9 @@
+// 文字列の中の @x と $x は値に展開する
+greet[$name] (
+    $mark = "!"
+    # "Hello, $name$mark"
+)
+log[greet["Dolphin"]]
+
+@price = 100
+log["$100 は \$price、@price は \@price"]
