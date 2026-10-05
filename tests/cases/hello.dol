@@ -1,0 +1,7 @@
+@name = "Dolphin"
+log["Hello, @name!"]
+
+add[$a, $b] (
+    # $a + $b
+)
+log[add[1, 2]]

@@ -2,7 +2,7 @@
 
 [English](README.en.md)
 
-`@` で変数を宣言する、C++ 製の小さなインタプリタ言語。拡張子は `.dol`。
+`@` で変数を宣言する、小さなインタプリタ言語。現在 Rust で作り直し中（旧実装は C++）。拡張子は `.dol`。
 
 ## このプロジェクトについて
 
@@ -104,6 +104,6 @@ Visual Studio のジェネレータでは、実行ファイルは `build/Debug/d
 
 | ブランチ | 内容 |
 |---|---|
-| `main` | 作り直し中の実装 |
+| `main` | 作り直し中の実装（Rust） |
 | [`archive/cpp`](https://github.com/sonnnnnnp/dolphin/tree/archive/cpp) | 初期実装（C++17 + SFML）。サンプルスクリプトは `my_scripts/` |
 | [`archive/rust`](https://github.com/sonnnnnnp/dolphin/tree/archive/rust) | 初期実装を Rust + macroquad に移植したもの |
