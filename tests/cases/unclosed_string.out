@@ -1,0 +1,4 @@
+unclosed_string.dol:2:6: エラー: 文字列が閉じられていません
+  |
+2 | @b = "open
+  |      ^

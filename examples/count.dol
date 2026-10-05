@@ -1,0 +1,17 @@
+// 合計を返す
+add[$a, $b] (
+    # $a + $b
+)
+
+@nums = {10, 20, 30}
+@i = 0
+while @i < 3 (
+    if @nums[@i] > 15 (
+        log["@i 番目は 15 より大きい"]
+    )
+    else (
+        @nums[@i] = add[@nums[@i], 100]
+    )
+    @i = @i + 1
+)
+log[@nums]
