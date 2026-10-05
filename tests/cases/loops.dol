@@ -1,0 +1,41 @@
+// break と continue は、いちばん内側の while に効く
+@i = 0
+while true (
+    @i = @i + 1
+    if @i % 2 == 0 (
+        continue
+    )
+    if @i > 7 (
+        break
+    )
+    log[@i]
+)
+
+// 入れ子: 内側の break は内側の while だけを抜ける
+@row = 0
+while @row < 3 (
+    @col = 0
+    @line = ""
+    while true (
+        if @col > @row (
+            break
+        )
+        @line = @line + "*"
+        @col = @col + 1
+    )
+    log[@line]
+    @row = @row + 1
+)
+
+// 関数の中の while から # で返す
+find[$arr, $target] (
+    $i = 0
+    while $i < arr_len[$arr] (
+        if $arr[$i] == $target (
+            # $i
+        )
+        $i = $i + 1
+    )
+    # -1
+)
+log[find[{5, 7, 9}, 9], find[{5, 7, 9}, 1]]

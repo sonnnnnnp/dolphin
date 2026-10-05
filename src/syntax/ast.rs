@@ -35,6 +35,10 @@ pub enum StmtKind {
     },
     /// `# expr`
     Return(Option<Expr>),
+    /// `while` を抜ける
+    Break,
+    /// `while` の次の繰り返しへ進む
+    Continue,
     /// `@x = expr` / `@x[i] = expr`
     Assign {
         target: Var,
@@ -156,6 +160,8 @@ impl fmt::Display for Stmt {
             StmtKind::While { cond, body } => write!(f, "(while {cond} {})", BlockDisplay(body)),
             StmtKind::Return(Some(value)) => write!(f, "(# {value})"),
             StmtKind::Return(None) => write!(f, "(#)"),
+            StmtKind::Break => write!(f, "(break)"),
+            StmtKind::Continue => write!(f, "(continue)"),
             StmtKind::Assign {
                 target,
                 index: Some(index),

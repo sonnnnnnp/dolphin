@@ -3,6 +3,7 @@
 //! - 関数はトップレベルにだけ定義でき、名前は重複せず、組み込み関数とも重ならない
 //! - 呼び出す関数が定義されていて、引数の数が合っている（組み込み関数は個数を実行時に検査）
 //! - `$x` と `#` は関数の中でだけ使える
+//! - `break` と `continue` は `while` の中でだけ使える
 //! - 読む `$x` は、引数か、関数内のどこかで代入されている
 //!
 //! `@x` の未定義は、関数の中から代入されることもあるので実行時に検査する
@@ -59,7 +60,7 @@ pub fn resolve(program: &Program, lookup: impl Fn(&str) -> Option<Callee>) -> RR
     for stmt in &program.stmts {
         match &stmt.kind {
             StmtKind::FuncDef(def) => resolver.func_def(def)?,
-            _ => resolver.stmt(stmt, None)?,
+            _ => resolver.stmt(stmt, None, false)?,
         }
     }
     Ok(())
@@ -86,14 +87,17 @@ impl<'a> Resolver<'a> {
             }
         }
         collect_locals(&def.body, &mut locals);
-        self.block(&def.body, Some(&locals))
+        self.block(&def.body, Some(&locals), false)
     }
 
-    fn block(&self, block: &'a [Stmt], locals: Locals<'a, '_>) -> RResult {
-        block.iter().try_for_each(|stmt| self.stmt(stmt, locals))
+    /// `in_loop` は `while` の中か（`break` / `continue` を使えるか）
+    fn block(&self, block: &'a [Stmt], locals: Locals<'a, '_>, in_loop: bool) -> RResult {
+        block
+            .iter()
+            .try_for_each(|stmt| self.stmt(stmt, locals, in_loop))
     }
 
-    fn stmt(&self, stmt: &'a Stmt, locals: Locals<'a, '_>) -> RResult {
+    fn stmt(&self, stmt: &'a Stmt, locals: Locals<'a, '_>, in_loop: bool) -> RResult {
         match &stmt.kind {
             StmtKind::FuncDef(def) => Err(Diagnostic::new(
                 def.span,
@@ -105,16 +109,28 @@ impl<'a> Resolver<'a> {
                 else_block,
             } => {
                 self.expr(cond, locals)?;
-                self.block(then_block, locals)?;
+                self.block(then_block, locals, in_loop)?;
                 match else_block {
-                    Some(block) => self.block(block, locals),
+                    Some(block) => self.block(block, locals, in_loop),
                     None => Ok(()),
                 }
             }
             StmtKind::While { cond, body } => {
                 self.expr(cond, locals)?;
-                self.block(body, locals)
+                self.block(body, locals, true)
             }
+            StmtKind::Break | StmtKind::Continue if !in_loop => {
+                let keyword = if let StmtKind::Break = stmt.kind {
+                    "break"
+                } else {
+                    "continue"
+                };
+                Err(Diagnostic::new(
+                    stmt.span,
+                    format!("`{keyword}` は while の中でのみ使えます"),
+                ))
+            }
+            StmtKind::Break | StmtKind::Continue => Ok(()),
             StmtKind::Return(value) => {
                 if locals.is_none() {
                     return Err(Diagnostic::new(stmt.span, "`#` は関数の中でのみ使えます"));
@@ -335,6 +351,27 @@ add[$a, $b] (
         assert_eq!(
             check("f[$a] (\n    log[\"$a $b\"]\n)"),
             Err("未定義の変数 `$b`".into())
+        );
+    }
+
+    #[test]
+    fn break_outside_loop() {
+        assert_eq!(
+            check("break"),
+            Err("`break` は while の中でのみ使えます".into())
+        );
+        assert_eq!(
+            check("if true (\n    continue\n)"),
+            Err("`continue` は while の中でのみ使えます".into())
+        );
+        // 関数は while の外にあるので、関数の中の break は外側のループを抜けられない
+        assert_eq!(
+            check("f[] (\n    break\n)"),
+            Err("`break` は while の中でのみ使えます".into())
+        );
+        assert_eq!(
+            check("while true (\n    if true (\n        break\n    )\n)"),
+            Ok(())
         );
     }
 

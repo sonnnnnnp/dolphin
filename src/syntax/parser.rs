@@ -124,6 +124,14 @@ impl<'t> Parser<'t> {
                 };
                 StmtKind::Return(value)
             }
+            TokenKind::Break => {
+                self.advance();
+                StmtKind::Break
+            }
+            TokenKind::Continue => {
+                self.advance();
+                StmtKind::Continue
+            }
             _ => return self.simple_statement(),
         };
         Ok(Stmt { kind, span })

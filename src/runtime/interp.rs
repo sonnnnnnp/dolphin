@@ -30,6 +30,10 @@ enum Flow {
     Normal,
     /// `#` が実行された。関数の終わりまで戻る
     Return(Value),
+    /// `break` が実行された。いちばん内側の while を抜ける
+    Break,
+    /// `continue` が実行された。いちばん内側の while の条件に戻る
+    Continue,
 }
 
 pub struct Interpreter<'a> {
@@ -114,8 +118,9 @@ impl<'a> Interpreter<'a> {
 
     fn exec_block(&mut self, block: &[Stmt]) -> RResult<Flow> {
         for stmt in block {
-            if let Flow::Return(value) = self.exec(stmt)? {
-                return Ok(Flow::Return(value));
+            let flow = self.exec(stmt)?;
+            if !matches!(flow, Flow::Normal) {
+                return Ok(flow);
             }
         }
         Ok(Flow::Normal)
@@ -139,8 +144,10 @@ impl<'a> Interpreter<'a> {
             }
             StmtKind::While { cond, body } => {
                 while self.eval_cond(cond)? {
-                    if let Flow::Return(value) = self.exec_block(body)? {
-                        return Ok(Flow::Return(value));
+                    match self.exec_block(body)? {
+                        Flow::Normal | Flow::Continue => {}
+                        Flow::Break => break,
+                        Flow::Return(value) => return Ok(Flow::Return(value)),
                     }
                 }
             }
@@ -151,6 +158,8 @@ impl<'a> Interpreter<'a> {
                 };
                 return Ok(Flow::Return(value));
             }
+            StmtKind::Break => return Ok(Flow::Break),
+            StmtKind::Continue => return Ok(Flow::Continue),
             StmtKind::Assign {
                 target,
                 index: None,
@@ -361,7 +370,8 @@ impl<'a> Interpreter<'a> {
 
         match result {
             Ok(Flow::Return(value)) => Ok(value),
-            Ok(Flow::Normal) => Ok(Value::Nil),
+            // break / continue が関数の外へ出ないことは Resolver が保証している
+            Ok(Flow::Normal | Flow::Break | Flow::Continue) => Ok(Value::Nil),
             Err(mut e) => {
                 e.trace.push((def.name.clone(), span));
                 Err(e)
