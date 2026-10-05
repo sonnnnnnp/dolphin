@@ -1,5 +1,7 @@
 //! ソース文字列をトークン列に分割する（design.md 3 章）
 
+use std::fmt;
+
 use super::span::Span;
 use crate::diag::Diagnostic;
 
@@ -54,6 +56,51 @@ pub enum TokenKind {
 
     Newline,
     Eof,
+}
+
+/// エラーメッセージ用の表示
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use TokenKind::*;
+        let s = match self {
+            Global(name) => return write!(f, "`@{name}`"),
+            Local(name) => return write!(f, "`${name}`"),
+            Ident(name) => return write!(f, "`{name}`"),
+            Number(n) => return write!(f, "`{n}`"),
+            Str(_) => "文字列",
+            If => "`if`",
+            Else => "`else`",
+            While => "`while`",
+            True => "`true`",
+            False => "`false`",
+            LBracket => "`[`",
+            RBracket => "`]`",
+            LParen => "`(`",
+            RParen => "`)`",
+            LBrace => "`{`",
+            RBrace => "`}`",
+            Comma => "`,`",
+            Assign => "`=`",
+            Hash => "`#`",
+            Plus => "`+`",
+            Minus => "`-`",
+            Star => "`*`",
+            Slash => "`/`",
+            Percent => "`%`",
+            Eq => "`==`",
+            NotEq => "`!=`",
+            Lt => "`<`",
+            LtEq => "`<=`",
+            Gt => "`>`",
+            GtEq => "`>=`",
+            AndAnd => "`&&`",
+            OrOr => "`||`",
+            Bang => "`!`",
+            Newline => "改行",
+            Eof => "ファイルの終わり",
+        };
+        f.write_str(s)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,14 +1,23 @@
 use std::{env, fs, io, process};
 
-use dolphin::syntax::lexer;
+use dolphin::syntax::{lexer, parser};
+
+enum Mode {
+    Run,
+    /// トークン列を表示する
+    Tokens,
+    /// AST を S 式で表示する
+    Ast,
+}
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
-    let (dump_tokens, path) = match args.as_slice() {
-        [flag, path] if flag == "--tokens" => (true, path),
-        [path] => (false, path),
+    let (mode, path) = match args.as_slice() {
+        [flag, path] if flag == "--tokens" => (Mode::Tokens, path),
+        [flag, path] if flag == "--ast" => (Mode::Ast, path),
+        [path] => (Mode::Run, path),
         _ => {
-            eprintln!("使い方: dolphin [--tokens] <file.dol>");
+            eprintln!("使い方: dolphin [--tokens | --ast] <file.dol>");
             process::exit(2);
         }
     };
@@ -20,14 +29,16 @@ fn main() {
         }
     };
 
-    let result = if dump_tokens {
-        lexer::tokenize(&src).map(|tokens| {
+    let result = match mode {
+        Mode::Run => dolphin::run_source(&src, &mut io::stdout()),
+        Mode::Tokens => lexer::tokenize(&src).map(|tokens| {
             for token in tokens {
                 println!("{}:{}\t{:?}", token.span.line, token.span.col, token.kind);
             }
-        })
-    } else {
-        dolphin::run_source(&src, &mut io::stdout())
+        }),
+        Mode::Ast => lexer::tokenize(&src)
+            .and_then(|tokens| parser::parse(&tokens))
+            .map(|program| print!("{program}")),
     };
     if let Err(diag) = result {
         eprint!("{}", diag.render(path, &src));
