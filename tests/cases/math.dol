@@ -1,0 +1,13 @@
+log[abs[-3], floor[2.7], ceil[2.1], round[2.5], round[-2.5]]
+log[sqrt[16], pow[2, 10], min[3, 1, 2], max[3, 1, 2]]
+
+// 乱数は値が毎回変わるので、範囲だけ確かめる
+@i = 0
+@ok = true
+while @i < 100 (
+    @r = random[]
+    @n = random_int[1, 6]
+    @ok = @ok && @r >= 0 && @r < 1 && @n >= 1 && @n <= 6 && floor[@n] == @n
+    @i = @i + 1
+)
+log[@ok]

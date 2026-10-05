@@ -82,10 +82,10 @@ dolphin/
 │  └─ stdlib/
 │     ├─ mod.rs          全モジュールの登録、引数検査の共通処理
 │     ├─ io.rs           log, input
-│     ├─ string.rs       str_len, str_concat
-│     ├─ array.rs        arr_len, arr_push
+│     ├─ string.rs       str_*、to_str、to_num
+│     ├─ array.rs        arr_len, arr_push, arr_pop
 │     ├─ map.rs          map_len, map_keys, map_has, map_remove
-│     ├─ math.rs         ⬜
+│     ├─ math.rs         abs, floor, …, random（乱数は xorshift64* を自前で実装）
 │     ├─ fs.rs  json.rs  ⬜ 段階 3
 │     ├─ http.rs         ⬜ 段階 4（feature = "http"）
 │     └─ gfx.rs          ⬜ 段階 5（feature = "gfx"）
@@ -177,7 +177,7 @@ main.dol:2:6: エラー: 文字列が閉じられていません
 | 段階 | 構文・意味 | ランタイム・標準ライブラリ | ツール・品質 |
 |---|---|---|---|
 | 1 コア | Parser、AST、Resolver | Value、Interpreter、io / string / array | ゴールデンテスト、CI |
-| 2 実用化 | マップ ✅、文字列操作 | string の拡充、map、math | エラー表示の改善、REPL（rustyline） |
+| 2 実用化 | マップ ✅、文字列操作 ✅ | string の拡充 ✅、map ✅、math ✅ | エラー表示の改善、REPL（rustyline） |
 | 3 複数ファイル | `import` | モジュールの読み込み、fs、json（serde_json） | `dolphin check` |
 | 4 バックエンド | — | http（axum + tokio） | サンプルの API |
 | 5 デスクトップ | `gameloop` | gfx（macroquad） | サンプルのゲーム |

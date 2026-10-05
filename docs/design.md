@@ -201,6 +201,31 @@ while @i < 3 (
 | 表示 | `{"name": "Dolphin", "age": 3}`。空は `{:}`。配列やマップの中の文字列は `"` で囲む | 案 |
 | 組み込み関数 | `map_len` `map_keys`（キーの配列）`map_has` `map_remove`（取り除いた値を返す） | 案 |
 
+### 5.5 組み込み関数
+
+引数の型や数が違うときは実行時エラー。文字列の位置と長さはすべて文字単位（`str_len["イルカ"]` は 3）。
+
+| 分類 | 関数 | 内容 |
+|---|---|---|
+| 入出力 | `log[...]` | 引数を空白区切りで出力して改行 |
+| | `input[]` | 1 行読んで文字列で返す（末尾の改行は除く） |
+| 文字列 | `str_len[s]` | 文字数 |
+| | `str_concat[...]` | 値を文字列にしてつなげる |
+| | `str_upper[s]` / `str_lower[s]` / `str_trim[s]` | 大文字・小文字・前後の空白を除く |
+| | `str_contains[s, sub]` | 含むか（真偽値） |
+| | `str_find[s, sub]` | 最初の位置。なければ -1 |
+| | `str_replace[s, from, to]` | すべて置き換える |
+| | `str_split[s, sep]` | 配列に分ける。`sep` が `""` なら 1 文字ずつ |
+| | `str_join[arr, sep]` | 配列の要素をつなげる |
+| | `str_sub[s, start, end]` | `start` から `end` の手前まで |
+| 変換 | `to_str[v]` | `log` と同じ表示の文字列 |
+| | `to_num[v]` | 文字列を数値に（前後の空白は無視）。変換できなければエラー |
+| 配列 | `arr_len[a]` / `arr_push[a, v]` / `arr_pop[a]` | 長さ・末尾に追加・末尾を取り出す |
+| マップ | `map_len[m]` / `map_keys[m]` / `map_has[m, k]` / `map_remove[m, k]` | 5.4 |
+| 数学 | `abs` `floor` `ceil` `round` `sqrt` | 引数 1 つ。`round` は 0.5 を 0 から遠いほうへ丸める |
+| | `pow[a, b]` / `min[...]` / `max[...]` | べき乗・最小・最大 |
+| | `random[]` / `random_int[min, max]` | 0 以上 1 未満 / `min` 以上 `max` 以下の整数 |
+
 ---
 
 ## 6. 旧実装からの主な変更（案）

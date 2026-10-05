@@ -1,0 +1,13 @@
+// 文字列関数。位置と長さは文字単位
+@t = str_trim["  Hello, Dolphin  "]
+log[@t]
+log[str_upper[@t], str_lower[@t]]
+log[str_contains[@t, "Dol"], str_find[@t, "Dol"], str_find[@t, "x"]]
+log[str_replace[@t, "l", "L"]]
+@parts = str_split["a,b,,c", ","]
+log[@parts, arr_len[@parts]]
+log[str_split["イルカ", ""]]
+log[str_join[{"x", 1, true}, "-"]]
+log[str_sub["イルカの家", 0, 3], str_sub[@t, 7, str_len[@t]]]
+log[to_num[" 42 "] + 1, to_str[3.5] + "!", to_num[7]]
+log[arr_pop[@parts], @parts]
