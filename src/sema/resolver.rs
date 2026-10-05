@@ -16,12 +16,22 @@ use crate::syntax::span::Span;
 
 type RResult = Result<(), Diagnostic>;
 
-/// `is_native` は組み込み関数の名前かどうかを返す
-pub fn resolve(program: &Program, is_native: impl Fn(&str) -> bool) -> RResult {
+/// プログラムの外ですでに定義されている関数
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Callee {
+    /// 組み込み関数。引数の数は実行時に検査する
+    Native,
+    /// 以前の入力で定義した関数（REPL）
+    User { arity: usize },
+}
+
+/// `lookup` は、プログラムの外で定義済みの関数を名前から引く。
+/// プログラム内で同じ名前を定義した場合はそちらが優先（REPL での再定義）
+pub fn resolve(program: &Program, lookup: impl Fn(&str) -> Option<Callee>) -> RResult {
     let mut functions = HashMap::new();
     for stmt in &program.stmts {
         if let StmtKind::FuncDef(def) = &stmt.kind {
-            if is_native(&def.name) {
+            if lookup(&def.name) == Some(Callee::Native) {
                 return Err(Diagnostic::new(
                     def.span,
                     format!(
@@ -44,7 +54,7 @@ pub fn resolve(program: &Program, is_native: impl Fn(&str) -> bool) -> RResult {
 
     let resolver = Resolver {
         functions,
-        is_native: &is_native,
+        lookup: &lookup,
     };
     for stmt in &program.stmts {
         match &stmt.kind {
@@ -61,7 +71,7 @@ type Locals<'a, 'b> = Option<&'b HashSet<&'a str>>;
 struct Resolver<'a> {
     /// 関数名 → 引数の数
     functions: HashMap<&'a str, usize>,
-    is_native: &'a dyn Fn(&str) -> bool,
+    lookup: &'a dyn Fn(&str) -> Option<Callee>,
 }
 
 impl<'a> Resolver<'a> {
@@ -146,18 +156,30 @@ impl<'a> Resolver<'a> {
             }),
             ExprKind::Var(var) => self.var(var, expr.span, locals),
             ExprKind::Call { name, args } => {
-                if let Some(&n) = self.functions.get(name.as_str()) {
-                    if args.len() != n {
-                        return Err(Diagnostic::new(
-                            expr.span,
-                            format!(
-                                "`{name}` の引数は {n} 個です（{} 個渡されました）",
-                                args.len()
-                            ),
-                        ));
-                    }
-                } else if !(self.is_native)(name) {
-                    return Err(Diagnostic::new(expr.span, format!("未定義の関数 `{name}`")));
+                let arity = match self.functions.get(name.as_str()) {
+                    Some(&n) => Some(n),
+                    None => match (self.lookup)(name) {
+                        Some(Callee::User { arity }) => Some(arity),
+                        Some(Callee::Native) => None,
+                        None => {
+                            return Err(Diagnostic::new(
+                                expr.span,
+                                format!("未定義の関数 `{name}`"),
+                            ));
+                        }
+                    },
+                };
+                // 組み込み関数（arity が None）の引数の数は実行時に検査する
+                if let Some(n) = arity
+                    && args.len() != n
+                {
+                    return Err(Diagnostic::new(
+                        expr.span,
+                        format!(
+                            "`{name}` の引数は {n} 個です（{} 個渡されました）",
+                            args.len()
+                        ),
+                    ));
                 }
                 args.iter().try_for_each(|arg| self.expr(arg, locals))
             }
@@ -234,7 +256,7 @@ mod tests {
 
     fn check(src: &str) -> Result<(), String> {
         let program = parse(&tokenize(src).unwrap()).unwrap();
-        resolve(&program, |name| name == "log").map_err(|e| e.message)
+        resolve(&program, |name| (name == "log").then_some(Callee::Native)).map_err(|e| e.message)
     }
 
     #[test]

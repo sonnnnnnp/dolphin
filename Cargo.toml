@@ -3,4 +3,11 @@ name = "dolphin"
 version = "0.1.0"
 edition = "2024"
 
+# コア言語（lib）は外部クレートに依存しない。CLI の便利機能だけ feature で足す
 [dependencies]
+rustyline = { version = "18.0.1", optional = true }
+
+[features]
+default = ["repl"]
+# REPL の行編集（矢印キー・履歴）。wasm 版などでは外す
+repl = ["dep:rustyline"]

@@ -63,10 +63,15 @@ impl<'t> Parser<'t> {
     /// 「{expected}が必要です（{今のトークン}がありました）」
     fn unexpected(&self, expected: &str) -> Diagnostic {
         let token = self.peek();
-        Diagnostic::new(
+        let diag = Diagnostic::new(
             token.span,
             format!("{expected}が必要です（{}がありました）", token.kind),
-        )
+        );
+        if token.kind == TokenKind::Eof {
+            diag.at_eof()
+        } else {
+            diag
+        }
     }
 
     fn skip_newlines(&mut self) {

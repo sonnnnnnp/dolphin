@@ -10,6 +10,7 @@ use super::env::{Frame, Scope};
 use super::error::RuntimeError;
 use super::map::Map;
 use super::value::Value;
+use crate::sema::resolver::Callee;
 use crate::syntax::ast::{
     BinaryOp, Expr, ExprKind, FuncDef, Program, Stmt, StmtKind, UnaryOp, Var,
 };
@@ -59,6 +60,17 @@ impl<'a> Interpreter<'a> {
         self.natives.get(name).copied()
     }
 
+    /// Resolver に渡す、定義済みの関数の情報
+    pub fn callee(&self, name: &str) -> Option<Callee> {
+        if let Some(def) = self.functions.get(name) {
+            Some(Callee::User {
+                arity: def.params.len(),
+            })
+        } else {
+            self.natives.get(name).map(|_| Callee::Native)
+        }
+    }
+
     pub fn get_var(&self, var: &Var) -> Option<&Value> {
         match var {
             Var::Global(name) => self.globals.get(name),
@@ -77,7 +89,9 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    pub fn run(&mut self, program: &Program) -> RResult<()> {
+    /// プログラムを実行する。最後の文が式なら、その値を返す（REPL で表示するため）。
+    /// 何度呼んでも変数と関数は残る
+    pub fn run(&mut self, program: &Program) -> RResult<Option<Value>> {
         // 定義より前の行から呼べるように、先に全関数を登録する（design.md 5.2）
         for stmt in &program.stmts {
             if let StmtKind::FuncDef(def) = &stmt.kind {
@@ -85,8 +99,15 @@ impl<'a> Interpreter<'a> {
             }
         }
         // トップレベルの `#` は Resolver が弾いているので、Flow は見なくてよい
-        self.exec_block(&program.stmts)?;
-        Ok(())
+        let Some((last, rest)) = program.stmts.split_last() else {
+            return Ok(None);
+        };
+        self.exec_block(rest)?;
+        if let StmtKind::Expr(expr) = &last.kind {
+            return Ok(Some(self.eval(expr)?));
+        }
+        self.exec(last)?;
+        Ok(None)
     }
 
     // ---- 文 ----

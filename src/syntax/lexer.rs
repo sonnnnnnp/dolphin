@@ -292,7 +292,7 @@ impl Lexer {
         loop {
             let esc_span = self.span();
             let Some(c) = self.bump() else {
-                return self.error(start, "文字列が閉じられていません");
+                return Err(Diagnostic::new(start, "文字列が閉じられていません").at_eof());
             };
             match c {
                 '"' => break,
@@ -302,7 +302,9 @@ impl Lexer {
                     Some(other) => {
                         return self.error(esc_span, format!("不明なエスケープ `\\{other}`"));
                     }
-                    None => return self.error(start, "文字列が閉じられていません"),
+                    None => {
+                        return Err(Diagnostic::new(start, "文字列が閉じられていません").at_eof());
+                    }
                 },
                 '@' | '$' => {
                     let name = self.ident();
