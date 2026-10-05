@@ -1,0 +1,36 @@
+// 定義より前から呼べる・再帰・早期 return・ローカル変数
+log[fib[20]]
+log[sign[-5], sign[0], sign[3]]
+log[sum_to[100]]
+log[nothing[]]
+
+fib[$n] (
+    if $n < 2 (
+        # $n
+    )
+    # fib[$n - 1] + fib[$n - 2]
+)
+
+sign[$x] (
+    if $x < 0 (
+        # -1
+    )
+    if $x == 0 (
+        # 0
+    )
+    # 1
+)
+
+sum_to[$n] (
+    $total = 0
+    $i = 1
+    while $i <= $n (
+        $total = $total + $i
+        $i = $i + 1
+    )
+    # $total
+)
+
+nothing[] (
+    @touched = true
+)

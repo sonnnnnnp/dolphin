@@ -5,7 +5,6 @@ use std::fs;
 use std::path::Path;
 
 #[test]
-#[ignore = "Parser・Resolver・Interpreter の実装後に外す"]
 fn golden() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases");
     let mut failures = Vec::new();

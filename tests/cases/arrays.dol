@@ -1,0 +1,9 @@
+@nums = {10, 20, 30}
+@nums[1] = @nums[0] + 5
+arr_push[@nums, 40]
+log[@nums, arr_len[@nums]]
+@grid = {{1, 2}, {3, 4}}
+log[@grid[1][0]]
+@name = "Dolphin"
+log["Hello, @name! \@escaped"]
+log[str_len["イルカ"], str_concat["v", 1, ".", 0]]

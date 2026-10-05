@@ -1,4 +1,4 @@
-use std::{env, fs, io, process};
+use std::{env, fs, io, process, thread};
 
 use dolphin::syntax::{lexer, parser};
 
@@ -10,7 +10,21 @@ enum Mode {
     Ast,
 }
 
+/// 木たどり評価は Dolphin の関数呼び出し 1 段ごとに Rust の再帰が何段も深くなる。
+/// MAX_DEPTH 段まで呼んでもあふれないよう、大きめのスタックのスレッドで動かす
+const STACK_SIZE: usize = 256 * 1024 * 1024;
+
 fn main() {
+    let cli = thread::Builder::new()
+        .stack_size(STACK_SIZE)
+        .spawn(run_cli)
+        .expect("スレッドを作れませんでした");
+    // パニックした場合、メッセージはすでに表示されている
+    process::exit(cli.join().unwrap_or(101));
+}
+
+/// 終了コードを返す
+fn run_cli() -> i32 {
     let args: Vec<String> = env::args().skip(1).collect();
     let (mode, path) = match args.as_slice() {
         [flag, path] if flag == "--tokens" => (Mode::Tokens, path),
@@ -18,14 +32,14 @@ fn main() {
         [path] => (Mode::Run, path),
         _ => {
             eprintln!("使い方: dolphin [--tokens | --ast] <file.dol>");
-            process::exit(2);
+            return 2;
         }
     };
     let src = match fs::read_to_string(path) {
         Ok(src) => src,
         Err(e) => {
             eprintln!("{path}: {e}");
-            process::exit(1);
+            return 1;
         }
     };
 
@@ -40,8 +54,11 @@ fn main() {
             .and_then(|tokens| parser::parse(&tokens))
             .map(|program| print!("{program}")),
     };
-    if let Err(diag) = result {
-        eprint!("{}", diag.render(path, &src));
-        process::exit(1);
+    match result {
+        Ok(()) => 0,
+        Err(diag) => {
+            eprint!("{}", diag.render(path, &src));
+            1
+        }
     }
 }
