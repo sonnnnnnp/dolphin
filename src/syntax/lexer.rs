@@ -2,14 +2,16 @@
 
 use std::fmt;
 
+use super::ast::Var;
 use super::span::Span;
 use crate::diag::Diagnostic;
 
-/// 文字列リテラルの中身。`"Hi, @name!"` は Text("Hi, "), Var("name"), Text("!") になる
+/// 文字列リテラルの中身。`"Hi, @name!"` は Text("Hi, "), Var(@name), Text("!") になる。
+/// `$x` も同じように展開する
 #[derive(Debug, Clone, PartialEq)]
 pub enum StrPart {
     Text(String),
-    Var(String),
+    Var(Var),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -294,21 +296,27 @@ impl Lexer {
                 '"' => break,
                 '\\' => match self.bump() {
                     Some('n') => text.push('\n'),
-                    Some(c @ ('"' | '\\' | '@')) => text.push(c),
+                    Some(c @ ('"' | '\\' | '@' | '$')) => text.push(c),
                     Some(other) => {
                         return self.error(esc_span, format!("不明なエスケープ `\\{other}`"));
                     }
                     None => return self.error(start, "文字列が閉じられていません"),
                 },
-                '@' => {
+                '@' | '$' => {
                     let name = self.ident();
                     if name.is_empty() {
-                        text.push('@');
+                        // `$100` のように識別子が続かなければ、ただの文字
+                        text.push(c);
                     } else {
                         if !text.is_empty() {
                             parts.push(StrPart::Text(std::mem::take(&mut text)));
                         }
-                        parts.push(StrPart::Var(name));
+                        let var = if c == '@' {
+                            Var::Global(name)
+                        } else {
+                            Var::Local(name)
+                        };
+                        parts.push(StrPart::Var(var));
                     }
                 }
                 _ => text.push(c),
@@ -410,12 +418,14 @@ mod tests {
     #[test]
     fn string_interpolation() {
         assert_eq!(
-            kinds(r#""Hi, @name! \@x""#),
+            kinds(r#""Hi, @name! $x costs $100 \@a \$b""#),
             vec![
                 Str(vec![
                     StrPart::Text("Hi, ".into()),
-                    StrPart::Var("name".into()),
-                    StrPart::Text("! @x".into()),
+                    StrPart::Var(Var::Global("name".into())),
+                    StrPart::Text("! ".into()),
+                    StrPart::Var(Var::Local("x".into())),
+                    StrPart::Text(" costs $100 @a $b".into()),
                 ]),
                 Eof,
             ]
