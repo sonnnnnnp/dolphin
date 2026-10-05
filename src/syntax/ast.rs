@@ -77,6 +77,8 @@ pub enum ExprKind {
     },
     /// `{a, b, c}`
     Array(Vec<Expr>),
+    /// `{"k": v, ...}`。空は `{:}`
+    Map(Vec<(Expr, Expr)>),
     /// `target[index]`
     Index {
         target: Box<Expr>,
@@ -212,6 +214,12 @@ impl fmt::Display for Expr {
             ExprKind::Array(items) => {
                 write!(f, "{{")?;
                 write_seq(f, items)?;
+                write!(f, "}}")
+            }
+            ExprKind::Map(entries) if entries.is_empty() => write!(f, "{{:}}"),
+            ExprKind::Map(entries) => {
+                write!(f, "{{")?;
+                write_seq(f, entries.iter().map(|(k, v)| format!("{k}: {v}")))?;
                 write!(f, "}}")
             }
             ExprKind::Index { target, index } => write!(f, "([] {target} {index})"),

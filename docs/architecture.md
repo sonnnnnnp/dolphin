@@ -75,6 +75,7 @@ dolphin/
 │  │  └─ resolver.rs     実行前の検査
 │  ├─ runtime/
 │  │  ├─ value.rs        値の型
+│  │  ├─ map.rs          順序つきマップ
 │  │  ├─ env.rs          Scope（変数表）と Frame（呼び出し 1 回分）
 │  │  ├─ error.rs        RuntimeError（呼び出し履歴つき）
 │  │  └─ interp.rs       評価器
@@ -83,6 +84,7 @@ dolphin/
 │     ├─ io.rs           log, input
 │     ├─ string.rs       str_len, str_concat
 │     ├─ array.rs        arr_len, arr_push
+│     ├─ map.rs          map_len, map_keys, map_has, map_remove
 │     ├─ math.rs         ⬜
 │     ├─ fs.rs  json.rs  ⬜ 段階 3
 │     ├─ http.rs         ⬜ 段階 4（feature = "http"）
@@ -134,14 +136,13 @@ enum Value {
     Bool(bool),
     Num(f64),
     Str(Rc<str>),
-    Array(Rc<RefCell<Vec<Value>>>),  // design.md 7.1 の決定次第で変わる
+    Array(Rc<RefCell<Vec<Value>>>),
+    Map(Rc<RefCell<Map>>),           // runtime/map.rs
 }
 ```
 
-| 7.1 配列の渡し方 | Rust での実装 | 似ている言語 |
-|---|---|---|
-| 参照渡し | `Rc<RefCell<Vec>>`（いまの実装） | Python、JavaScript |
-| 値渡し | `Rc<Vec>` + `Rc::make_mut`（書き換えるときだけコピーする） | Swift、PHP |
+- 配列とマップは**参照渡し**（design.md 7.1）。`Value` を clone しても `Rc` が増えるだけで、同じものを指す。書き換えは `RefCell::borrow_mut` で行う
+- `Map` は自作の順序つきマップ。`Vec<(キー, 値)>` に追加順で持ち、`HashMap<キー, 位置>` を索引にする。コア言語は外部クレートを使わない方針なので、`indexmap` は使わない
 
 ### 4.3 組み込み関数（`runtime/interp.rs`）
 
@@ -176,7 +177,7 @@ main.dol:2:6: エラー: 文字列が閉じられていません
 | 段階 | 構文・意味 | ランタイム・標準ライブラリ | ツール・品質 |
 |---|---|---|---|
 | 1 コア | Parser、AST、Resolver | Value、Interpreter、io / string / array | ゴールデンテスト、CI |
-| 2 実用化 | マップ、文字列操作 | string の拡充、map、math | エラー表示の改善、REPL（rustyline） |
+| 2 実用化 | マップ ✅、文字列操作 | string の拡充、map、math | エラー表示の改善、REPL（rustyline） |
 | 3 複数ファイル | `import` | モジュールの読み込み、fs、json（serde_json） | `dolphin check` |
 | 4 バックエンド | — | http（axum + tokio） | サンプルの API |
 | 5 デスクトップ | `gameloop` | gfx（macroquad） | サンプルのゲーム |

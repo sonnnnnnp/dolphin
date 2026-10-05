@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use super::env::{Frame, Scope};
 use super::error::RuntimeError;
+use super::map::Map;
 use super::value::Value;
 use crate::syntax::ast::{
     BinaryOp, Expr, ExprKind, FuncDef, Program, Stmt, StmtKind, UnaryOp, Var,
@@ -142,24 +143,14 @@ impl<'a> Interpreter<'a> {
                 index: Some(index),
                 value,
             } => {
-                let items = match self.get_var(target) {
-                    Some(Value::Array(items)) => Rc::clone(items),
-                    Some(other) => {
-                        return Err(RuntimeError::new(
-                            stmt.span,
-                            format!(
-                                "`{target}` は配列ではありません（{}です）",
-                                other.type_name()
-                            ),
-                        ));
-                    }
+                // 配列とマップは参照なので、clone しても同じものを書き換える
+                let container = match self.get_var(target) {
+                    Some(container) => container.clone(),
                     None => return Err(undefined(target, stmt.span)),
                 };
-                let i = self.eval(index)?;
+                let key = self.eval(index)?;
                 let value = self.eval(value)?;
-                let mut items = items.borrow_mut();
-                let i = to_index(&i, items.len(), index.span)?;
-                items[i] = value;
+                index_set(&container, &key, value, stmt.span, index.span)?;
             }
             StmtKind::Expr(expr) => {
                 self.eval(expr)?;
@@ -213,21 +204,19 @@ impl<'a> Interpreter<'a> {
                     .collect::<RResult<Vec<_>>>()?;
                 Value::Array(Rc::new(RefCell::new(values)))
             }
+            ExprKind::Map(entries) => {
+                let mut map = Map::default();
+                for (key, value) in entries {
+                    let k = self.eval(key)?;
+                    let k = to_key(&k, key.span)?;
+                    map.insert(k, self.eval(value)?);
+                }
+                Value::Map(Rc::new(RefCell::new(map)))
+            }
             ExprKind::Index { target, index } => {
-                let target_value = self.eval(target)?;
-                let i = self.eval(index)?;
-                let Value::Array(items) = target_value else {
-                    return Err(RuntimeError::new(
-                        target.span,
-                        format!(
-                            "添字を使えるのは配列だけです（{}でした）",
-                            target_value.type_name()
-                        ),
-                    ));
-                };
-                let items = items.borrow();
-                let i = to_index(&i, items.len(), index.span)?;
-                items[i].clone()
+                let container = self.eval(target)?;
+                let key = self.eval(index)?;
+                index_get(&container, &key, target.span, index.span)?
             }
             ExprKind::Unary { op, operand } => match (op, self.eval(operand)?) {
                 (UnaryOp::Neg, Value::Num(n)) => Value::Num(-n),
@@ -362,6 +351,72 @@ impl<'a> Interpreter<'a> {
 
 fn undefined(var: &Var, span: Span) -> RuntimeError {
     RuntimeError::new(span, format!("未定義の変数 `{var}`"))
+}
+
+/// `container[key]` を読む。配列なら番号、マップなら文字列のキー
+fn index_get(container: &Value, key: &Value, target_span: Span, key_span: Span) -> RResult<Value> {
+    match container {
+        Value::Array(items) => {
+            let items = items.borrow();
+            let i = to_index(key, items.len(), key_span)?;
+            Ok(items[i].clone())
+        }
+        Value::Map(map) => {
+            let k = to_key(key, key_span)?;
+            map.borrow()
+                .get(&k)
+                .cloned()
+                .ok_or_else(|| RuntimeError::new(key_span, format!("キー {k:?} がありません")))
+        }
+        other => Err(not_container(other, target_span)),
+    }
+}
+
+/// `container[key] = value`。マップにキーがなければ追加する
+fn index_set(
+    container: &Value,
+    key: &Value,
+    value: Value,
+    target_span: Span,
+    key_span: Span,
+) -> RResult<()> {
+    match container {
+        Value::Array(items) => {
+            let mut items = items.borrow_mut();
+            let i = to_index(key, items.len(), key_span)?;
+            items[i] = value;
+        }
+        Value::Map(map) => {
+            let k = to_key(key, key_span)?;
+            map.borrow_mut().insert(k, value);
+        }
+        other => return Err(not_container(other, target_span)),
+    }
+    Ok(())
+}
+
+fn not_container(value: &Value, span: Span) -> RuntimeError {
+    RuntimeError::new(
+        span,
+        format!(
+            "添字を使えるのは配列とマップだけです（{}でした）",
+            value.type_name()
+        ),
+    )
+}
+
+/// マップのキーとして使える値（文字列）か確かめる（design.md 5.4）
+fn to_key(value: &Value, span: Span) -> RResult<Rc<str>> {
+    match value {
+        Value::Str(s) => Ok(Rc::clone(s)),
+        other => Err(RuntimeError::new(
+            span,
+            format!(
+                "マップのキーは文字列である必要があります（{}でした）",
+                other.type_name()
+            ),
+        )),
+    }
 }
 
 /// 添字として使える値（0 以上 len 未満の整数）か確かめる

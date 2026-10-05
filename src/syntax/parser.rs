@@ -345,14 +345,9 @@ impl<'t> Parser<'t> {
                     span: token.span,
                 });
             }
-            // array_lit = "{" [ args ] "}"
             TokenKind::LBrace => {
                 self.advance();
-                let items = self.args(&TokenKind::RBrace)?;
-                return Ok(Expr {
-                    kind: ExprKind::Array(items),
-                    span: token.span,
-                });
+                return self.brace_literal(token.span);
             }
             // "(" expression ")"
             TokenKind::LParen => {
@@ -368,6 +363,43 @@ impl<'t> Parser<'t> {
             kind,
             span: token.span,
         })
+    }
+
+    /// array_lit = "{" [ args ] "}"
+    /// map_lit   = "{" ":" "}" | "{" entry { "," entry } "}"
+    ///
+    /// `{` の後に呼ぶ。最初の要素の後に `:` があればマップ、なければ配列（design.md 4.1）
+    fn brace_literal(&mut self, span: Span) -> PResult<Expr> {
+        let kind = if self.eat(&TokenKind::Colon) {
+            self.expect(&TokenKind::RBrace)?;
+            ExprKind::Map(Vec::new())
+        } else if self.eat(&TokenKind::RBrace) {
+            ExprKind::Array(Vec::new())
+        } else {
+            let first = self.expression()?;
+            if self.eat(&TokenKind::Colon) {
+                let mut entries = vec![(first, self.expression()?)];
+                while !self.eat(&TokenKind::RBrace) {
+                    if !self.eat(&TokenKind::Comma) {
+                        return Err(self.unexpected("`,` か `}`"));
+                    }
+                    let key = self.expression()?;
+                    self.expect(&TokenKind::Colon)?;
+                    entries.push((key, self.expression()?));
+                }
+                ExprKind::Map(entries)
+            } else {
+                let mut items = vec![first];
+                while !self.eat(&TokenKind::RBrace) {
+                    if !self.eat(&TokenKind::Comma) {
+                        return Err(self.unexpected("`,` か `}`"));
+                    }
+                    items.push(self.expression()?);
+                }
+                ExprKind::Array(items)
+            }
+        };
+        Ok(Expr { kind, span })
     }
 
     /// args = expression { "," expression }
@@ -498,6 +530,27 @@ else (
             ast("@n = {1, 2}\n@n[0] = @n[1]\n@e = {}"),
             "(= @n {1 2})\n(= ([] @n 0) ([] @n 1))\n(= @e {})\n"
         );
+    }
+
+    #[test]
+    fn maps() {
+        assert_eq!(
+            ast("@m = {\"a\": 1, @k: {:}}\n@m[\"a\"] = {}"),
+            "(= @m {\"a\": 1 @k: {:}})\n(= ([] @m \"a\") {})\n"
+        );
+        // { } の中の改行は無視されるので複数行に書ける
+        assert_eq!(
+            ast("@m = {\n    \"x\": 1,\n    \"y\": 2\n}"),
+            "(= @m {\"x\": 1 \"y\": 2})\n"
+        );
+    }
+
+    #[test]
+    fn mixed_array_and_map() {
+        let e = error("@m = {\"a\": 1, 2}");
+        assert_eq!(e.message, "`:`が必要です（`}`がありました）");
+        let e = error("@a = {1, 2: 3}");
+        assert_eq!(e.message, "`,` か `}`が必要です（`:`がありました）");
     }
 
     #[test]

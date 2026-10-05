@@ -162,6 +162,10 @@ impl<'a> Resolver<'a> {
                 args.iter().try_for_each(|arg| self.expr(arg, locals))
             }
             ExprKind::Array(items) => items.iter().try_for_each(|item| self.expr(item, locals)),
+            ExprKind::Map(entries) => entries.iter().try_for_each(|(key, value)| {
+                self.expr(key, locals)?;
+                self.expr(value, locals)
+            }),
             ExprKind::Index { target, index } => {
                 self.expr(target, locals)?;
                 self.expr(index, locals)

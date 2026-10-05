@@ -1,0 +1,13 @@
+// 配列とマップは参照渡し（design.md 7.1）
+birthday[$u] (
+    $u["age"] = $u["age"] + 1
+)
+@user = {"age": 3}
+birthday[@user]
+log[@user]
+
+@a = {1, 2}
+@b = @a
+arr_push[@b, 3]
+@b[0] = 100
+log[@a]

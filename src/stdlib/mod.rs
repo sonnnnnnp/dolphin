@@ -2,6 +2,7 @@
 
 pub mod array;
 pub mod io;
+pub mod map;
 pub mod string;
 
 use crate::runtime::interp::Interpreter;
@@ -11,6 +12,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     io::register(interp);
     string::register(interp);
     array::register(interp);
+    map::register(interp);
 }
 
 fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), String> {
