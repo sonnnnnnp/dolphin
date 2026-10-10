@@ -1,0 +1,4 @@
+import_bad_arg.dol:1:6: エラー: import の 1 番目の引数は文字列です（数値が渡されました）
+  |
+1 | @a = import[1]
+  |      ^

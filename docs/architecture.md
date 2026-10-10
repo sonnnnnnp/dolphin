@@ -77,6 +77,7 @@ dolphin/
 │  ├─ runtime/
 │  │  ├─ value.rs        値の型
 │  │  ├─ map.rs          順序つきマップ
+│  │  ├─ module.rs       モジュール（import したファイル 1 つ分の `@` 変数と関数）
 │  │  ├─ env.rs          Scope（変数表）と Frame（呼び出し 1 回分）
 │  │  ├─ error.rs        RuntimeError（呼び出し履歴つき）
 │  │  └─ interp.rs       評価器
@@ -139,6 +140,7 @@ enum Value {
     Str(Rc<str>),
     Array(Rc<RefCell<Vec<Value>>>),
     Map(Rc<RefCell<Map>>),           // runtime/map.rs
+    Module(Rc<Module>),              // runtime/module.rs。import の結果
 }
 ```
 
@@ -191,7 +193,7 @@ main.dol:2:6: エラー: 文字列が閉じられていません
 |---|---|---|---|
 | 1 コア | Parser、AST、Resolver | Value、Interpreter、io / string / array | ゴールデンテスト、CI |
 | 2 実用化 | マップ ✅、文字列操作 ✅ | string の拡充 ✅、map ✅、math ✅ | REPL ✅ |
-| 3 複数ファイル | `import` | モジュールの読み込み、fs、json（serde_json） | `dolphin check` |
+| 3 複数ファイル | `import` ✅（`.` による名前空間） | モジュールの読み込み ✅、fs、json（serde_json） | `dolphin check` |
 | 4 バックエンド | — | http（axum + tokio） | サンプルの API |
 | 5 デスクトップ | `gameloop` | gfx（macroquad） | サンプルのゲーム |
 | 6 任意 | — | バイトコード VM | ベンチマーク（fib など） |

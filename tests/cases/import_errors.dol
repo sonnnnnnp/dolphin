@@ -1,0 +1,3 @@
+@u = import["lib/util.dol"]
+log[@u.get_version[]]
+@u.fail[]

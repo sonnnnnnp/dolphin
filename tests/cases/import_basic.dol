@@ -1,0 +1,22 @@
+@u = import["lib/util.dol"]
+log[@u.add[1, 2], @u.version]
+
+// @ 変数はファイルごとに別。本体の @count と util の @count はぶつからない
+@count = 5
+log[@u.next[], @u.next[], @count]
+log[@u.count]
+
+// 同じファイルを 2 回 import しても、実行は 1 回で同じモジュール
+@again = import["lib/util.dol"]
+log[@again == @u, @again.next[]]
+
+// 別のファイルが import したものも同じ
+@s = import["lib/second.dol"]
+log[@s.bump[], @s.via_util[], @u.count]
+log[@u, @s.count]
+
+// 本体の関数と同名でもぶつからない
+add[$a, $b] (
+    # $a * $b
+)
+log[add[3, 4], @u.add[3, 4]]

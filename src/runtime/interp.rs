@@ -3,19 +3,25 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::io::Write;
+use std::fs;
+use std::io::{self, Write};
+use std::mem;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use super::env::{Frame, Scope};
-use super::error::RuntimeError;
+use super::error::{RuntimeError, TraceEntry};
 use super::map::Map;
+use super::module::Module;
 use super::value::Value;
-use crate::sema::resolver::Callee;
+use crate::diag::Origin;
+use crate::sema::resolver::{self, Callee};
 use crate::syntax::ast::{
     BinaryOp, Expr, ExprKind, FuncDef, Program, Stmt, StmtKind, UnaryOp, Var,
 };
 use crate::syntax::lexer::StrPart;
 use crate::syntax::span::Span;
+use crate::syntax::{lexer, parser};
 
 /// 組み込み関数。エラー位置は呼び出し側で付けるので、メッセージだけ返す
 pub type NativeFn = fn(&mut Interpreter<'_>, &[Value]) -> Result<Value, String>;
@@ -36,22 +42,39 @@ enum Flow {
     Continue,
 }
 
+/// import したファイルの状態（design.md 5.7）
+enum ModuleState {
+    /// 実行中。この状態のファイルをもう一度 import したら循環
+    Loading,
+    Loaded(Rc<Module>),
+}
+
 pub struct Interpreter<'a> {
     /// `log` の出力先。テストでは Vec<u8> を渡して出力を取り出す
     pub out: &'a mut dyn Write,
-    globals: Scope,
+    /// 今実行しているコードが属するモジュール。`@x` と関数名はここから引く。
+    /// 最初は実行中の本体で、import したファイルや、そのファイルの関数を実行している間は切り替わる
+    current: Rc<Module>,
+    /// 本体のあるディレクトリ。モジュールの表示名をここからの相対パスにする
+    root_dir: PathBuf,
+    /// import 済みのファイル（正規化したパス → 状態）
+    modules: HashMap<PathBuf, ModuleState>,
+    /// 実行中の import の連なり（循環のエラー表示用）
+    loading: Vec<Rc<str>>,
     frames: Vec<Frame>,
-    functions: HashMap<String, Rc<FuncDef>>,
     natives: HashMap<&'static str, NativeFn>,
 }
 
 impl<'a> Interpreter<'a> {
-    pub fn new(out: &'a mut dyn Write) -> Self {
+    /// `base_dir` は、本体が `import` する相対パスの基準
+    pub fn new(out: &'a mut dyn Write, base_dir: PathBuf) -> Self {
         Self {
             out,
-            globals: Scope::default(),
+            current: Rc::new(Module::new("".into(), base_dir.clone(), None)),
+            root_dir: base_dir,
+            modules: HashMap::new(),
+            loading: Vec::new(),
             frames: Vec::new(),
-            functions: HashMap::new(),
             natives: HashMap::new(),
         }
     }
@@ -66,26 +89,34 @@ impl<'a> Interpreter<'a> {
 
     /// Resolver に渡す、定義済みの関数の情報
     pub fn callee(&self, name: &str) -> Option<Callee> {
-        if let Some(def) = self.functions.get(name) {
-            Some(Callee::User {
-                arity: def.params.len(),
-            })
-        } else {
-            self.natives.get(name).map(|_| Callee::Native)
+        let arity = self
+            .current
+            .functions
+            .borrow()
+            .get(name)
+            .map(|def| def.params.len());
+        match arity {
+            Some(arity) => Some(Callee::User { arity }),
+            None => self.native_callee(name),
         }
     }
 
-    pub fn get_var(&self, var: &Var) -> Option<&Value> {
+    /// 組み込み関数か。`import` は評価器が直接扱うが、Resolver からは組み込み関数に見える
+    fn native_callee(&self, name: &str) -> Option<Callee> {
+        (name == "import" || self.natives.contains_key(name)).then_some(Callee::Native)
+    }
+
+    pub fn get_var(&self, var: &Var) -> Option<Value> {
         match var {
-            Var::Global(name) => self.globals.get(name),
-            Var::Local(name) => self.frames.last()?.locals.get(name),
+            Var::Global(name) => self.current.globals.borrow().get(name).cloned(),
+            Var::Local(name) => self.frames.last()?.locals.get(name).cloned(),
         }
     }
 
     /// `$x` は関数の中でしか使えないことを Resolver が保証している前提
     pub fn set_var(&mut self, var: &Var, value: Value) {
         match var {
-            Var::Global(name) => self.globals.set(name, value),
+            Var::Global(name) => self.current.globals.borrow_mut().set(name, value),
             Var::Local(name) => {
                 let frame = self.frames.last_mut().expect("関数の外で $ 変数");
                 frame.locals.set(name, value);
@@ -99,7 +130,11 @@ impl<'a> Interpreter<'a> {
         // 定義より前の行から呼べるように、先に全関数を登録する（design.md 5.2）
         for stmt in &program.stmts {
             if let StmtKind::FuncDef(def) = &stmt.kind {
-                self.functions.insert(def.name.clone(), Rc::clone(def));
+                let def = Rc::clone(def);
+                self.current
+                    .functions
+                    .borrow_mut()
+                    .insert(def.name.clone(), def);
             }
         }
         // トップレベルの `#` は Resolver が弾いているので、Flow は見なくてよい
@@ -243,6 +278,33 @@ impl<'a> Interpreter<'a> {
                 }
                 Value::Map(Rc::new(RefCell::new(map)))
             }
+            ExprKind::Member { target, name } => {
+                let module = self.eval_module(target)?;
+                let value = module.globals.borrow().get(name).cloned();
+                value.ok_or_else(|| {
+                    RuntimeError::new(
+                        span,
+                        format!("{} に変数 `@{name}` がありません", module_label(&module)),
+                    )
+                })?
+            }
+            ExprKind::MemberCall { target, name, args } => {
+                let module = self.eval_module(target)?;
+                let args = args
+                    .iter()
+                    .map(|arg| self.eval(arg))
+                    .collect::<RResult<Vec<_>>>()?;
+                let def = module.functions.borrow().get(name).cloned();
+                match def {
+                    Some(def) => self.call_user(&module, &def, args, span)?,
+                    None => {
+                        return Err(RuntimeError::new(
+                            span,
+                            format!("{} に関数 `{name}` がありません", module_label(&module)),
+                        ));
+                    }
+                }
+            }
             ExprKind::Index { target, index } => {
                 let container = self.eval(target)?;
                 let key = self.eval(index)?;
@@ -327,8 +389,13 @@ impl<'a> Interpreter<'a> {
             .map(|arg| self.eval(arg))
             .collect::<RResult<Vec<_>>>()?;
 
-        if let Some(def) = self.functions.get(name).cloned() {
-            return self.call_user(&def, args, span);
+        let def = self.current.functions.borrow().get(name).cloned();
+        if let Some(def) = def {
+            let module = Rc::clone(&self.current);
+            return self.call_user(&module, &def, args, span);
+        }
+        if name == "import" {
+            return self.import(&args, span);
         }
         match self.native(name) {
             Some(f) => f(self, &args).map_err(|message| RuntimeError::new(span, message)),
@@ -336,7 +403,14 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn call_user(&mut self, def: &FuncDef, args: Vec<Value>, span: Span) -> RResult<Value> {
+    /// `module` の関数 `def` を呼ぶ。実行している間は、`@x` と関数名を `module` から引く
+    fn call_user(
+        &mut self,
+        module: &Rc<Module>,
+        def: &FuncDef,
+        args: Vec<Value>,
+        span: Span,
+    ) -> RResult<Value> {
         if args.len() != def.params.len() {
             return Err(RuntimeError::new(
                 span,
@@ -365,7 +439,9 @@ impl<'a> Interpreter<'a> {
             func_name: def.name.clone(),
             locals,
         });
+        let caller = mem::replace(&mut self.current, Rc::clone(module));
         let result = self.exec_block(&def.body);
+        self.current = caller;
         self.frames.pop();
 
         match result {
@@ -373,11 +449,150 @@ impl<'a> Interpreter<'a> {
             // break / continue が関数の外へ出ないことは Resolver が保証している
             Ok(Flow::Normal | Flow::Break | Flow::Continue) => Ok(Value::Nil),
             Err(mut e) => {
-                e.trace.push((def.name.clone(), span));
+                // 別のファイルの関数で起きたエラーは、そのファイルの行を引用する
+                if e.origin.is_none() {
+                    e.origin = module.origin.clone();
+                }
+                e.trace.push(TraceEntry {
+                    what: format!("{} の中", def.name),
+                    span,
+                    file: file_of(&self.current),
+                });
                 Err(e)
             }
         }
     }
+
+    fn eval_module(&mut self, target: &Expr) -> RResult<Rc<Module>> {
+        match self.eval(target)? {
+            Value::Module(module) => Ok(module),
+            other => Err(RuntimeError::new(
+                target.span,
+                format!(
+                    "`.` を使えるのはモジュールだけです（{}でした）",
+                    other.type_name()
+                ),
+            )),
+        }
+    }
+
+    // ---- import（design.md 5.7） ----
+
+    /// ファイルを読んで実行し、モジュールを返す。同じファイルは 1 回しか実行しない
+    fn import(&mut self, args: &[Value], span: Span) -> RResult<Value> {
+        let rel = match args {
+            [Value::Str(rel)] => rel,
+            [other] => {
+                return Err(RuntimeError::new(
+                    span,
+                    format!(
+                        "import の 1 番目の引数は文字列です（{}が渡されました）",
+                        other.type_name()
+                    ),
+                ));
+            }
+            _ => {
+                return Err(RuntimeError::new(
+                    span,
+                    format!("import の引数は 1 個です（{} 個渡されました）", args.len()),
+                ));
+            }
+        };
+
+        let full = self.current.dir.join(&**rel);
+        let shown = self.display_path(&full);
+        let key = fs::canonicalize(&full).map_err(|e| {
+            let reason = match e.kind() {
+                io::ErrorKind::NotFound => "ファイルが見つかりません".to_string(),
+                _ => e.to_string(),
+            };
+            RuntimeError::new(span, format!("`{rel}` を開けません: {reason}"))
+        })?;
+        match self.modules.get(&key) {
+            Some(ModuleState::Loaded(module)) => return Ok(Value::Module(Rc::clone(module))),
+            Some(ModuleState::Loading) => {
+                let start = self.loading.iter().position(|n| *n == shown).unwrap_or(0);
+                let mut chain: Vec<&str> = self.loading[start..].iter().map(|n| &**n).collect();
+                chain.push(&shown);
+                return Err(RuntimeError::new(
+                    span,
+                    format!("import が循環しています: {}", chain.join(" → ")),
+                ));
+            }
+            None => {}
+        }
+        let src = fs::read_to_string(&full)
+            .map_err(|e| RuntimeError::new(span, format!("`{rel}` を読み込めません: {e}")))?;
+
+        let origin = Rc::new(Origin {
+            path: shown.to_string(),
+            src,
+        });
+        let entry = TraceEntry {
+            what: format!("{shown} の読み込み中"),
+            span,
+            file: file_of(&self.current),
+        };
+        let dir = full.parent().map(Path::to_path_buf).unwrap_or_default();
+        let module = Rc::new(Module::new(
+            Rc::clone(&shown),
+            dir,
+            Some(Rc::clone(&origin)),
+        ));
+
+        // 読み込み中のエラーは、そのファイルの行を引用し、import した位置を呼び出し履歴に載せる
+        let program = lexer::tokenize(&origin.src)
+            .and_then(|tokens| parser::parse(&tokens))
+            .and_then(|program| {
+                resolver::resolve(&program, |name| self.native_callee(name))?;
+                Ok(program)
+            })
+            .map_err(|diag| RuntimeError {
+                message: diag.message,
+                span: diag.span,
+                trace: vec![entry.clone()],
+                origin: Some(Rc::clone(&origin)),
+            })?;
+
+        self.modules.insert(key.clone(), ModuleState::Loading);
+        self.loading.push(shown);
+        let importer = mem::replace(&mut self.current, Rc::clone(&module));
+        let result = self.run(&program);
+        self.current = importer;
+        self.loading.pop();
+
+        match result {
+            Ok(_) => {
+                self.modules
+                    .insert(key, ModuleState::Loaded(Rc::clone(&module)));
+                Ok(Value::Module(module))
+            }
+            Err(mut e) => {
+                // 失敗したファイルは、直して再実行できるよう覚えない
+                self.modules.remove(&key);
+                if e.origin.is_none() {
+                    e.origin = Some(origin);
+                }
+                e.trace.push(entry);
+                Err(e)
+            }
+        }
+    }
+
+    /// モジュールの表示名。本体のあるディレクトリからの相対パスにする
+    fn display_path(&self, full: &Path) -> Rc<str> {
+        let path = full.strip_prefix(&self.root_dir).unwrap_or(full);
+        path.to_string_lossy().replace('\\', "/").into()
+    }
+}
+
+/// 呼び出し履歴に載せる、ファイルの名前。実行中の本体は None
+fn file_of(module: &Module) -> Option<Rc<str>> {
+    (!module.name.is_empty()).then(|| Rc::clone(&module.name))
+}
+
+fn module_label(module: &Module) -> String {
+    format!("モジュール {:?}", &*module.name)
 }
 
 fn undefined(var: &Var, span: Span) -> RuntimeError {

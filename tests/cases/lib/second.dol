@@ -1,0 +1,11 @@
+@count = 100
+@util = import["util.dol"]
+
+bump[] (
+    @count = @count + 1
+    # @count
+)
+
+via_util[] (
+    # @util.next[]
+)

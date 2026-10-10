@@ -1,0 +1,4 @@
+import_no_file.dol:1:6: エラー: `lib/nothing.dol` を開けません: ファイルが見つかりません
+  |
+1 | @a = import["lib/nothing.dol"]
+  |      ^

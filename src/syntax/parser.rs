@@ -317,23 +317,40 @@ impl<'t> Parser<'t> {
         })
     }
 
-    /// postfix = primary { "[" expression "]" }
+    /// postfix = primary { "[" expression "]" | "." member }
+    /// member  = IDENT [ "[" [ args ] "]" ]
     fn postfix(&mut self) -> PResult<Expr> {
         let mut expr = self.primary()?;
-        while self.at(&TokenKind::LBracket) {
-            self.advance();
-            let index = self.expression()?;
-            self.expect(&TokenKind::RBracket)?;
+        loop {
             let span = expr.span;
-            expr = Expr {
-                kind: ExprKind::Index {
-                    target: Box::new(expr),
-                    index: Box::new(index),
-                },
-                span,
-            };
+            if self.eat(&TokenKind::LBracket) {
+                let index = self.expression()?;
+                self.expect(&TokenKind::RBracket)?;
+                expr = Expr {
+                    kind: ExprKind::Index {
+                        target: Box::new(expr),
+                        index: Box::new(index),
+                    },
+                    span,
+                };
+            } else if self.eat(&TokenKind::Dot) {
+                let TokenKind::Ident(name) = &self.peek().kind else {
+                    return Err(self.unexpected("名前"));
+                };
+                let name = name.clone();
+                self.advance();
+                let target = Box::new(expr);
+                let kind = if self.eat(&TokenKind::LBracket) {
+                    let args = self.args(&TokenKind::RBracket)?;
+                    ExprKind::MemberCall { target, name, args }
+                } else {
+                    ExprKind::Member { target, name }
+                };
+                expr = Expr { kind, span };
+            } else {
+                return Ok(expr);
+            }
         }
-        Ok(expr)
     }
 
     fn primary(&mut self) -> PResult<Expr> {
@@ -461,10 +478,18 @@ fn binary(op: BinaryOp, lhs: Expr, rhs: Expr, span: Span) -> Expr {
 /// 代入の左辺を (変数, 添字) に分解する
 fn assign_target(expr: Expr) -> PResult<(Var, Option<Expr>)> {
     let invalid = || Diagnostic::new(expr.span, "代入できるのは変数か配列の要素だけです");
+    let module_var = || {
+        Diagnostic::new(
+            expr.span,
+            "モジュールの変数は外から書き換えられません（書き換えたいときは、そのファイルに setter 関数を書いてください）",
+        )
+    };
     match expr.kind {
+        ExprKind::Member { .. } => Err(module_var()),
         ExprKind::Var(var) => Ok((var, None)),
         ExprKind::Index { target, index } => match target.kind {
             ExprKind::Var(var) => Ok((var, Some(*index))),
+            ExprKind::Member { .. } => Err(module_var()),
             _ => Err(invalid()),
         },
         _ => Err(invalid()),
@@ -543,6 +568,41 @@ else (
             ast("@n = {1, 2}\n@n[0] = @n[1]\n@e = {}"),
             "(= @n {1 2})\n(= ([] @n 0) ([] @n 1))\n(= @e {})\n"
         );
+    }
+
+    #[test]
+    fn module_member_and_call() {
+        assert_eq!(
+            ast("@x = @u.add[1, 2] + @u.version"),
+            "(= @x (+ ((. @u add) 1 2) (. @u version)))\n"
+        );
+        // `.名前[...]` は常に関数呼び出し。モジュールの配列の要素は括弧で囲んで読む
+        assert_eq!(
+            ast("log[@u.items[0], (@u.items)[0], @a.b.f[]]"),
+            "(log ((. @u items) 0) ([] (. @u items) 0) ((. (. @a b) f)))\n"
+        );
+        // 数値の小数点とは区別される
+        assert_eq!(ast("@x = 1.5"), "(= @x 1.5)\n");
+    }
+
+    #[test]
+    fn module_member_errors() {
+        assert_eq!(
+            error("@u.").message,
+            "名前が必要です（ファイルの終わりがありました）"
+        );
+        assert!(
+            error("@u.count = 1")
+                .message
+                .contains("外から書き換えられません")
+        );
+        assert!(
+            error("(@u.items)[0] = 1")
+                .message
+                .contains("外から書き換えられません")
+        );
+        // 関数定義は名前空間つきでは書けない
+        assert!(parse(&tokenize("@u.f[$a] (\n)").unwrap()).is_err());
     }
 
     #[test]

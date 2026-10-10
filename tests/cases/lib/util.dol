@@ -1,0 +1,21 @@
+@version = "1.0"
+@count = 0
+@loaded = "util"
+log["util.dol を読み込み中"]
+
+add[$a, $b] (
+    # $a + $b
+)
+
+next[] (
+    @count = @count + 1
+    # @count
+)
+
+get_version[] (
+    # @version
+)
+
+fail[] (
+    # 1 / 0
+)

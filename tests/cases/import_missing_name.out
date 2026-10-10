@@ -1,0 +1,5 @@
+util.dol を読み込み中
+import_missing_name.dol:2:5: エラー: モジュール "lib/util.dol" に変数 `@nope` がありません
+  |
+2 | log[@u.nope]
+  |     ^

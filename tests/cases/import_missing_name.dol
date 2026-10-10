@@ -1,0 +1,2 @@
+@u = import["lib/util.dol"]
+log[@u.nope]

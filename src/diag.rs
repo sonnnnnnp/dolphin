@@ -1,8 +1,16 @@
 //! エラー表示。Lexer・Parser・Resolver・実行時のエラーはすべてこの形で表示する
 
 use std::fmt;
+use std::rc::Rc;
 
 use crate::syntax::span::Span;
+
+/// import したファイルのパスとソース。エラーがそのファイルで起きたときの表示に使う
+#[derive(Debug, PartialEq)]
+pub struct Origin {
+    pub path: String,
+    pub src: String,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Diagnostic {
@@ -13,6 +21,8 @@ pub struct Diagnostic {
     /// 入力が途中で終わったせいのエラーか（閉じていない `(` や `"` など）。
     /// REPL はこれが true なら、エラーにせず次の行を読む
     pub unexpected_eof: bool,
+    /// import したファイルで起きたエラーなら、そのファイル。None なら実行中の本体
+    pub origin: Option<Rc<Origin>>,
 }
 
 impl Diagnostic {
@@ -22,6 +32,7 @@ impl Diagnostic {
             span,
             notes: Vec::new(),
             unexpected_eof: false,
+            origin: None,
         }
     }
 
@@ -39,6 +50,11 @@ impl Diagnostic {
     ///   |      ^
     /// ```
     pub fn render(&self, path: &str, src: &str) -> String {
+        // import したファイルで起きたエラーは、そのファイルの行を引用する
+        let (path, src) = match &self.origin {
+            Some(origin) => (origin.path.as_str(), origin.src.as_str()),
+            None => (path, src),
+        };
         let Span { line, col } = self.span;
         let mut s = format!("{path}:{line}:{col}: エラー: {}\n", self.message);
         if let Some(text) = src.lines().nth(line - 1) {

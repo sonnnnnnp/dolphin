@@ -83,6 +83,17 @@ pub enum ExprKind {
     Array(Vec<Expr>),
     /// `{"k": v, ...}`。空は `{:}`
     Map(Vec<(Expr, Expr)>),
+    /// `@u.name`。モジュールの `@` 変数を読む
+    Member {
+        target: Box<Expr>,
+        name: String,
+    },
+    /// `@u.name[args]`。モジュールの関数を呼ぶ
+    MemberCall {
+        target: Box<Expr>,
+        name: String,
+        args: Vec<Expr>,
+    },
     /// `target[index]`
     Index {
         target: Box<Expr>,
@@ -227,6 +238,14 @@ impl fmt::Display for Expr {
                 write!(f, "{{")?;
                 write_seq(f, entries.iter().map(|(k, v)| format!("{k}: {v}")))?;
                 write!(f, "}}")
+            }
+            ExprKind::Member { target, name } => write!(f, "(. {target} {name})"),
+            ExprKind::MemberCall { target, name, args } => {
+                write!(f, "((. {target} {name})")?;
+                for arg in args {
+                    write!(f, " {arg}")?;
+                }
+                write!(f, ")")
             }
             ExprKind::Index { target, index } => write!(f, "([] {target} {index})"),
             ExprKind::Unary { op, operand } => write!(f, "({op} {operand})"),

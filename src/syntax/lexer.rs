@@ -40,6 +40,7 @@ pub enum TokenKind {
     RBrace,
     Comma,
     Colon,
+    Dot,
     Assign,
     Hash,
 
@@ -88,6 +89,7 @@ impl fmt::Display for TokenKind {
             RBrace => "`}`",
             Comma => "`,`",
             Colon => "`:`",
+            Dot => "`.`",
             Assign => "`=`",
             Hash => "`#`",
             Plus => "`+`",
@@ -361,6 +363,7 @@ impl Lexer {
             }
             ',' => Comma,
             ':' => Colon,
+            '.' => Dot,
             '#' => Hash,
             '+' => Plus,
             '-' => Minus,

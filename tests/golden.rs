@@ -19,7 +19,7 @@ fn golden() {
         let expected = fs::read_to_string(path.with_extension("out")).unwrap_or_default();
 
         let mut out = Vec::new();
-        let result = dolphin::run_source(&src, &mut out);
+        let result = dolphin::run_source_in(&src, dir.clone(), &mut out);
         let mut actual = String::from_utf8(out).unwrap();
         if let Err(diag) = result {
             actual += &diag.render(&name, &src);

@@ -1,0 +1,1 @@
+@b = import["cycle_b.dol"]

@@ -4,4 +4,5 @@ pub mod env;
 pub mod error;
 pub mod interp;
 pub mod map;
+pub mod module;
 pub mod value;

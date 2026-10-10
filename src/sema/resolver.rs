@@ -204,6 +204,12 @@ impl<'a> Resolver<'a> {
                 self.expr(key, locals)?;
                 self.expr(value, locals)
             }),
+            // モジュールの中身は実行時にしか分からない
+            ExprKind::Member { target, .. } => self.expr(target, locals),
+            ExprKind::MemberCall { target, args, .. } => {
+                self.expr(target, locals)?;
+                args.iter().try_for_each(|arg| self.expr(arg, locals))
+            }
             ExprKind::Index { target, index } => {
                 self.expr(target, locals)?;
                 self.expr(index, locals)

@@ -1,0 +1,1 @@
+@a = import["lib/nothing.dol"]

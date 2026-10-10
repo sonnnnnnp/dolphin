@@ -1,12 +1,27 @@
-use crate::diag::Diagnostic;
+use std::rc::Rc;
+
+use crate::diag::{Diagnostic, Origin};
 use crate::syntax::span::Span;
+
+/// 呼び出し履歴の 1 件
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraceEntry {
+    /// 「f の中」「util.dol の読み込み中」
+    pub what: String,
+    /// 呼び出し位置
+    pub span: Span,
+    /// 呼び出し位置があるファイル。実行中の本体なら None
+    pub file: Option<Rc<str>>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeError {
     pub message: String,
     pub span: Span,
-    /// 内側から順に（関数名, 呼び出し位置）
-    pub trace: Vec<(String, Span)>,
+    /// 内側から順に
+    pub trace: Vec<TraceEntry>,
+    /// import したファイルで起きたエラーなら、そのファイル
+    pub origin: Option<Rc<Origin>>,
 }
 
 impl RuntimeError {
@@ -15,6 +30,7 @@ impl RuntimeError {
             message: message.into(),
             span,
             trace: Vec::new(),
+            origin: None,
         }
     }
 }
@@ -25,8 +41,9 @@ const TRACE_SHOWN: usize = 5;
 impl From<RuntimeError> for Diagnostic {
     fn from(e: RuntimeError) -> Self {
         let mut diag = Diagnostic::new(e.span, e.message);
+        diag.origin = e.origin;
         let n = e.trace.len();
-        for (i, (func, span)) in e.trace.into_iter().enumerate() {
+        for (i, entry) in e.trace.into_iter().enumerate() {
             if n > TRACE_SHOWN * 2 && (TRACE_SHOWN..n - TRACE_SHOWN).contains(&i) {
                 if i == TRACE_SHOWN {
                     diag.notes
@@ -34,10 +51,10 @@ impl From<RuntimeError> for Diagnostic {
                 }
                 continue;
             }
-            diag.notes.push(format!(
-                "{func} の中（{}:{} から呼び出し）",
-                span.line, span.col
-            ));
+            let Span { line, col } = entry.span;
+            let file = entry.file.map(|f| format!("{f}:")).unwrap_or_default();
+            diag.notes
+                .push(format!("{}（{file}{line}:{col} から呼び出し）", entry.what));
         }
         diag
     }

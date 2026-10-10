@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::{env, fs, io, process, thread};
 
 use dolphin::syntax::{lexer, parser};
@@ -51,7 +52,10 @@ fn run_cli() -> i32 {
     };
 
     let result = match mode {
-        Mode::Run => dolphin::run_source(&src, &mut io::stdout()),
+        Mode::Run => {
+            let dir = Path::new(path).parent().unwrap_or(Path::new(""));
+            dolphin::run_source_in(&src, dir.to_path_buf(), &mut io::stdout())
+        }
         Mode::Tokens => lexer::tokenize(&src).map(|tokens| {
             for token in tokens {
                 println!("{}:{}\t{:?}", token.span.line, token.span.col, token.kind);

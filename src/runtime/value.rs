@@ -5,6 +5,7 @@ use std::fmt;
 use std::rc::Rc;
 
 use super::map::Map;
+use super::module::Module;
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -16,6 +17,8 @@ pub enum Value {
     /// 配列とマップは参照渡し（design.md 7.1）。clone しても同じものを指す
     Array(Rc<RefCell<Vec<Value>>>),
     Map(Rc<RefCell<Map>>),
+    /// `import` の結果。同じものを指す（design.md 5.7）
+    Module(Rc<Module>),
 }
 
 impl Value {
@@ -28,6 +31,7 @@ impl Value {
             Value::Str(_) => "文字列",
             Value::Array(_) => "配列",
             Value::Map(_) => "マップ",
+            Value::Module(_) => "モジュール",
         }
     }
 
@@ -41,6 +45,7 @@ impl Value {
             // 同じものなら中身を見ずに true（自分自身を含む配列で無限に比べないため）
             (Value::Array(a), Value::Array(b)) if Rc::ptr_eq(a, b) => true,
             (Value::Map(a), Value::Map(b)) if Rc::ptr_eq(a, b) => true,
+            (Value::Module(a), Value::Module(b)) => Rc::ptr_eq(a, b),
             (Value::Array(a), Value::Array(b)) => {
                 let (a, b) = (a.borrow(), b.borrow());
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.equals(y))
@@ -85,6 +90,7 @@ fn write_value(
         Value::Num(n) => return write!(f, "{n}"),
         Value::Str(s) if quote_str => return write!(f, "{s:?}"),
         Value::Str(s) => return write!(f, "{s}"),
+        Value::Module(m) => return write!(f, "<module {:?}>", &*m.name),
         Value::Array(items) => Rc::as_ptr(items).cast::<()>(),
         Value::Map(map) => Rc::as_ptr(map).cast::<()>(),
     };

@@ -1,0 +1,6 @@
+before
+lib/toplevel_error.dol:2:8: エラー: 0 で割ることはできません
+  |
+2 | @x = 1 / 0
+  |        ^
+  = lib/toplevel_error.dol の読み込み中（1:6 から呼び出し）

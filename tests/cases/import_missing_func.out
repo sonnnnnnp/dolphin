@@ -1,0 +1,5 @@
+util.dol を読み込み中
+import_missing_func.dol:2:1: エラー: モジュール "lib/util.dol" に関数 `nope` がありません
+  |
+2 | @u.nope[1]
+  | ^

@@ -10,6 +10,7 @@ pub mod stdlib;
 pub mod syntax;
 
 use std::io::Write;
+use std::path::PathBuf;
 
 use diag::Diagnostic;
 use runtime::interp::Interpreter;
@@ -17,7 +18,12 @@ use runtime::value::Value;
 
 /// ソースを解析して実行する。`log` の出力は `out` に書く
 pub fn run_source(src: &str, out: &mut dyn Write) -> Result<(), Diagnostic> {
-    Session::new(out).eval(src)?;
+    run_source_in(src, PathBuf::from("."), out)
+}
+
+/// `import` の相対パスを `base_dir` から引いて実行する（普通は実行するファイルのあるディレクトリ）
+pub fn run_source_in(src: &str, base_dir: PathBuf, out: &mut dyn Write) -> Result<(), Diagnostic> {
+    Session::with_base_dir(out, base_dir).eval(src)?;
     Ok(())
 }
 
@@ -27,8 +33,13 @@ pub struct Session<'a> {
 }
 
 impl<'a> Session<'a> {
+    /// `import` の相対パスはカレントディレクトリから引く
     pub fn new(out: &'a mut dyn Write) -> Self {
-        let mut interp = Interpreter::new(out);
+        Self::with_base_dir(out, PathBuf::from("."))
+    }
+
+    pub fn with_base_dir(out: &'a mut dyn Write, base_dir: PathBuf) -> Self {
+        let mut interp = Interpreter::new(out, base_dir);
         stdlib::register(&mut interp);
         Self { interp }
     }
