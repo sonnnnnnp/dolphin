@@ -3,6 +3,7 @@
 //! 関数の一覧と仕様は design.md 5.5
 
 pub mod array;
+pub mod fs;
 pub mod io;
 pub mod map;
 pub mod math;
@@ -17,6 +18,7 @@ use crate::runtime::value::Value;
 
 pub fn register(interp: &mut Interpreter<'_>) {
     io::register(interp);
+    fs::register(interp);
     string::register(interp);
     array::register(interp);
     map::register(interp);

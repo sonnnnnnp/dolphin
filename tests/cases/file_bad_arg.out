@@ -1,0 +1,4 @@
+file_bad_arg.dol:1:1: エラー: file_write の 2 番目の引数は文字列です（数値が渡されました）
+  |
+1 | file_write["target/x.txt", 1]
+  | ^

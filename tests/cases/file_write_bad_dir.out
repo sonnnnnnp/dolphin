@@ -1,0 +1,4 @@
+file_write_bad_dir.dol:1:1: エラー: `target/no_such_dir/x.txt` を書き込めません: ファイルが見つかりません
+  |
+1 | file_write["target/no_such_dir/x.txt", "a"]
+  | ^

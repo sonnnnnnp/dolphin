@@ -1,0 +1,24 @@
+// カレントディレクトリは cargo test のときパッケージのルート
+@path = "target/golden_file_io.txt"
+file_write[@path, "こんにちは\n"]
+log[file_exists[@path]]
+file_append[@path, "second line\n"]
+file_append[@path, "third"]
+log[file_read[@path]]
+
+// 書き込むと中身は置き換わる
+file_write[@path, "replaced"]
+log[file_read[@path]]
+
+// 行ごとに処理する
+file_write[@path, "a,1\nb,2\nc,3"]
+@total = 0
+@lines = str_split[file_read[@path], "\n"]
+@i = 0
+while @i < arr_len[@lines] (
+    @total = @total + to_num[str_split[@lines[@i], ","][1]]
+    @i = @i + 1
+)
+log[@total]
+
+log[file_exists["target/no_such_file.txt"], file_exists["target"]]

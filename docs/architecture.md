@@ -84,11 +84,12 @@ dolphin/
 │  └─ stdlib/
 │     ├─ mod.rs          全モジュールの登録、引数検査の共通処理
 │     ├─ io.rs           log, input
+│     ├─ fs.rs           file_read, file_write, file_append, file_exists
 │     ├─ string.rs       str_*、to_str、to_num
 │     ├─ array.rs        arr_len, arr_push, arr_pop
 │     ├─ map.rs          map_len, map_keys, map_has, map_remove
 │     ├─ math.rs         abs, floor, …, random（乱数は xorshift64* を自前で実装）
-│     ├─ fs.rs  json.rs  ⬜ 段階 3
+│     ├─ json.rs         ⬜ 段階 4
 │     ├─ http.rs         ⬜ 段階 4（feature = "http"）
 │     └─ gfx.rs          ⬜ 段階 5（feature = "gfx"）
 ├─ tests/
