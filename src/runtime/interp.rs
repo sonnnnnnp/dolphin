@@ -8,7 +8,9 @@ use std::rc::Rc;
 
 use super::env::{Frame, Scope};
 use super::error::RuntimeError;
+use super::map::Map;
 use super::value::Value;
+use crate::sema::resolver::Callee;
 use crate::syntax::ast::{
     BinaryOp, Expr, ExprKind, FuncDef, Program, Stmt, StmtKind, UnaryOp, Var,
 };
@@ -28,6 +30,10 @@ enum Flow {
     Normal,
     /// `#` が実行された。関数の終わりまで戻る
     Return(Value),
+    /// `break` が実行された。いちばん内側の while を抜ける
+    Break,
+    /// `continue` が実行された。いちばん内側の while の条件に戻る
+    Continue,
 }
 
 pub struct Interpreter<'a> {
@@ -58,6 +64,17 @@ impl<'a> Interpreter<'a> {
         self.natives.get(name).copied()
     }
 
+    /// Resolver に渡す、定義済みの関数の情報
+    pub fn callee(&self, name: &str) -> Option<Callee> {
+        if let Some(def) = self.functions.get(name) {
+            Some(Callee::User {
+                arity: def.params.len(),
+            })
+        } else {
+            self.natives.get(name).map(|_| Callee::Native)
+        }
+    }
+
     pub fn get_var(&self, var: &Var) -> Option<&Value> {
         match var {
             Var::Global(name) => self.globals.get(name),
@@ -76,7 +93,9 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    pub fn run(&mut self, program: &Program) -> RResult<()> {
+    /// プログラムを実行する。最後の文が式なら、その値を返す（REPL で表示するため）。
+    /// 何度呼んでも変数と関数は残る
+    pub fn run(&mut self, program: &Program) -> RResult<Option<Value>> {
         // 定義より前の行から呼べるように、先に全関数を登録する（design.md 5.2）
         for stmt in &program.stmts {
             if let StmtKind::FuncDef(def) = &stmt.kind {
@@ -84,16 +103,24 @@ impl<'a> Interpreter<'a> {
             }
         }
         // トップレベルの `#` は Resolver が弾いているので、Flow は見なくてよい
-        self.exec_block(&program.stmts)?;
-        Ok(())
+        let Some((last, rest)) = program.stmts.split_last() else {
+            return Ok(None);
+        };
+        self.exec_block(rest)?;
+        if let StmtKind::Expr(expr) = &last.kind {
+            return Ok(Some(self.eval(expr)?));
+        }
+        self.exec(last)?;
+        Ok(None)
     }
 
     // ---- 文 ----
 
     fn exec_block(&mut self, block: &[Stmt]) -> RResult<Flow> {
         for stmt in block {
-            if let Flow::Return(value) = self.exec(stmt)? {
-                return Ok(Flow::Return(value));
+            let flow = self.exec(stmt)?;
+            if !matches!(flow, Flow::Normal) {
+                return Ok(flow);
             }
         }
         Ok(Flow::Normal)
@@ -117,8 +144,10 @@ impl<'a> Interpreter<'a> {
             }
             StmtKind::While { cond, body } => {
                 while self.eval_cond(cond)? {
-                    if let Flow::Return(value) = self.exec_block(body)? {
-                        return Ok(Flow::Return(value));
+                    match self.exec_block(body)? {
+                        Flow::Normal | Flow::Continue => {}
+                        Flow::Break => break,
+                        Flow::Return(value) => return Ok(Flow::Return(value)),
                     }
                 }
             }
@@ -129,6 +158,8 @@ impl<'a> Interpreter<'a> {
                 };
                 return Ok(Flow::Return(value));
             }
+            StmtKind::Break => return Ok(Flow::Break),
+            StmtKind::Continue => return Ok(Flow::Continue),
             StmtKind::Assign {
                 target,
                 index: None,
@@ -142,24 +173,14 @@ impl<'a> Interpreter<'a> {
                 index: Some(index),
                 value,
             } => {
-                let items = match self.get_var(target) {
-                    Some(Value::Array(items)) => Rc::clone(items),
-                    Some(other) => {
-                        return Err(RuntimeError::new(
-                            stmt.span,
-                            format!(
-                                "`{target}` は配列ではありません（{}です）",
-                                other.type_name()
-                            ),
-                        ));
-                    }
+                // 配列とマップは参照なので、clone しても同じものを書き換える
+                let container = match self.get_var(target) {
+                    Some(container) => container.clone(),
                     None => return Err(undefined(target, stmt.span)),
                 };
-                let i = self.eval(index)?;
+                let key = self.eval(index)?;
                 let value = self.eval(value)?;
-                let mut items = items.borrow_mut();
-                let i = to_index(&i, items.len(), index.span)?;
-                items[i] = value;
+                index_set(&container, &key, value, stmt.span, index.span)?;
             }
             StmtKind::Expr(expr) => {
                 self.eval(expr)?;
@@ -213,21 +234,19 @@ impl<'a> Interpreter<'a> {
                     .collect::<RResult<Vec<_>>>()?;
                 Value::Array(Rc::new(RefCell::new(values)))
             }
+            ExprKind::Map(entries) => {
+                let mut map = Map::default();
+                for (key, value) in entries {
+                    let k = self.eval(key)?;
+                    let k = to_key(&k, key.span)?;
+                    map.insert(k, self.eval(value)?);
+                }
+                Value::Map(Rc::new(RefCell::new(map)))
+            }
             ExprKind::Index { target, index } => {
-                let target_value = self.eval(target)?;
-                let i = self.eval(index)?;
-                let Value::Array(items) = target_value else {
-                    return Err(RuntimeError::new(
-                        target.span,
-                        format!(
-                            "添字を使えるのは配列だけです（{}でした）",
-                            target_value.type_name()
-                        ),
-                    ));
-                };
-                let items = items.borrow();
-                let i = to_index(&i, items.len(), index.span)?;
-                items[i].clone()
+                let container = self.eval(target)?;
+                let key = self.eval(index)?;
+                index_get(&container, &key, target.span, index.span)?
             }
             ExprKind::Unary { op, operand } => match (op, self.eval(operand)?) {
                 (UnaryOp::Neg, Value::Num(n)) => Value::Num(-n),
@@ -351,7 +370,8 @@ impl<'a> Interpreter<'a> {
 
         match result {
             Ok(Flow::Return(value)) => Ok(value),
-            Ok(Flow::Normal) => Ok(Value::Nil),
+            // break / continue が関数の外へ出ないことは Resolver が保証している
+            Ok(Flow::Normal | Flow::Break | Flow::Continue) => Ok(Value::Nil),
             Err(mut e) => {
                 e.trace.push((def.name.clone(), span));
                 Err(e)
@@ -362,6 +382,72 @@ impl<'a> Interpreter<'a> {
 
 fn undefined(var: &Var, span: Span) -> RuntimeError {
     RuntimeError::new(span, format!("未定義の変数 `{var}`"))
+}
+
+/// `container[key]` を読む。配列なら番号、マップなら文字列のキー
+fn index_get(container: &Value, key: &Value, target_span: Span, key_span: Span) -> RResult<Value> {
+    match container {
+        Value::Array(items) => {
+            let items = items.borrow();
+            let i = to_index(key, items.len(), key_span)?;
+            Ok(items[i].clone())
+        }
+        Value::Map(map) => {
+            let k = to_key(key, key_span)?;
+            map.borrow()
+                .get(&k)
+                .cloned()
+                .ok_or_else(|| RuntimeError::new(key_span, format!("キー {k:?} がありません")))
+        }
+        other => Err(not_container(other, target_span)),
+    }
+}
+
+/// `container[key] = value`。マップにキーがなければ追加する
+fn index_set(
+    container: &Value,
+    key: &Value,
+    value: Value,
+    target_span: Span,
+    key_span: Span,
+) -> RResult<()> {
+    match container {
+        Value::Array(items) => {
+            let mut items = items.borrow_mut();
+            let i = to_index(key, items.len(), key_span)?;
+            items[i] = value;
+        }
+        Value::Map(map) => {
+            let k = to_key(key, key_span)?;
+            map.borrow_mut().insert(k, value);
+        }
+        other => return Err(not_container(other, target_span)),
+    }
+    Ok(())
+}
+
+fn not_container(value: &Value, span: Span) -> RuntimeError {
+    RuntimeError::new(
+        span,
+        format!(
+            "添字を使えるのは配列とマップだけです（{}でした）",
+            value.type_name()
+        ),
+    )
+}
+
+/// マップのキーとして使える値（文字列）か確かめる（design.md 5.4）
+fn to_key(value: &Value, span: Span) -> RResult<Rc<str>> {
+    match value {
+        Value::Str(s) => Ok(Rc::clone(s)),
+        other => Err(RuntimeError::new(
+            span,
+            format!(
+                "マップのキーは文字列である必要があります（{}でした）",
+                other.type_name()
+            ),
+        )),
+    }
 }
 
 /// 添字として使える値（0 以上 len 未満の整数）か確かめる

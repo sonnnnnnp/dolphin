@@ -10,6 +10,9 @@ pub struct Diagnostic {
     pub span: Span,
     /// 補足（呼び出し履歴など）。1 要素が 1 行
     pub notes: Vec<String>,
+    /// 入力が途中で終わったせいのエラーか（閉じていない `(` や `"` など）。
+    /// REPL はこれが true なら、エラーにせず次の行を読む
+    pub unexpected_eof: bool,
 }
 
 impl Diagnostic {
@@ -18,7 +21,13 @@ impl Diagnostic {
             message: message.into(),
             span,
             notes: Vec::new(),
+            unexpected_eof: false,
         }
+    }
+
+    pub fn at_eof(mut self) -> Self {
+        self.unexpected_eof = true;
+        self
     }
 
     /// 該当行を引用し、列の位置に `^` を付けて表示する

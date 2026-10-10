@@ -35,6 +35,10 @@ pub enum StmtKind {
     },
     /// `# expr`
     Return(Option<Expr>),
+    /// `while` を抜ける
+    Break,
+    /// `while` の次の繰り返しへ進む
+    Continue,
     /// `@x = expr` / `@x[i] = expr`
     Assign {
         target: Var,
@@ -77,6 +81,8 @@ pub enum ExprKind {
     },
     /// `{a, b, c}`
     Array(Vec<Expr>),
+    /// `{"k": v, ...}`。空は `{:}`
+    Map(Vec<(Expr, Expr)>),
     /// `target[index]`
     Index {
         target: Box<Expr>,
@@ -154,6 +160,8 @@ impl fmt::Display for Stmt {
             StmtKind::While { cond, body } => write!(f, "(while {cond} {})", BlockDisplay(body)),
             StmtKind::Return(Some(value)) => write!(f, "(# {value})"),
             StmtKind::Return(None) => write!(f, "(#)"),
+            StmtKind::Break => write!(f, "(break)"),
+            StmtKind::Continue => write!(f, "(continue)"),
             StmtKind::Assign {
                 target,
                 index: Some(index),
@@ -212,6 +220,12 @@ impl fmt::Display for Expr {
             ExprKind::Array(items) => {
                 write!(f, "{{")?;
                 write_seq(f, items)?;
+                write!(f, "}}")
+            }
+            ExprKind::Map(entries) if entries.is_empty() => write!(f, "{{:}}"),
+            ExprKind::Map(entries) => {
+                write!(f, "{{")?;
+                write_seq(f, entries.iter().map(|(k, v)| format!("{k}: {v}")))?;
                 write!(f, "}}")
             }
             ExprKind::Index { target, index } => write!(f, "([] {target} {index})"),

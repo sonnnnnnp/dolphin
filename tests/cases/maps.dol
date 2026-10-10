@@ -1,0 +1,22 @@
+// マップの作成・読み書き・組み込み関数
+@user = {"name": "Dolphin", "age": 3}
+log[@user["name"], @user["age"]]
+@user["age"] = @user["age"] + 1
+@user["lang"] = "Rust"
+log[@user]
+log[map_len[@user], map_has[@user, "age"], map_has[@user, "email"]]
+log[map_keys[@user]]
+log[map_remove[@user, "lang"], @user]
+
+@key = "dyn"
+@empty = {:}
+log[@empty, map_len[@empty], {}, {@key: 1}]
+log[{"a": 1, "b": 2} == {"b": 2, "a": 1}, {"a": 1} == {"a": 2}]
+
+// 入れ子と複数行
+@config = {
+    "list": {1, "two"},
+    "inner": {"k": "v"}
+}
+log[@config]
+log[@config["inner"]["k"]]

@@ -1,0 +1,15 @@
+@name = "Dolphin"
+log["Hello, @name!"]
+
+add[$a, $b] (
+    # $a + $b
+)
+
+@i = 1
+while @i <= 3 (
+    log["count: @i"]
+    @i = add[@i, 1]
+)
+
+@user = {"name": @name, "langs": {"Rust", "C++"}}
+log[@user]

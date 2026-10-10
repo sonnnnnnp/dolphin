@@ -1,0 +1,8 @@
+// 自分自身を含む配列・マップも表示できる
+@a = {1}
+arr_push[@a, @a]
+log[@a]
+@m = {"name": "loop"}
+@m["self"] = @m
+log[@m]
+log[@a == @a]

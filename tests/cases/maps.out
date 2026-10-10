@@ -1,0 +1,9 @@
+Dolphin 3
+{"name": "Dolphin", "age": 4, "lang": "Rust"}
+3 true false
+{"name", "age", "lang"}
+Rust {"name": "Dolphin", "age": 4}
+{:} 0 {} {"dyn": 1}
+true false
+{"list": {1, "two"}, "inner": {"k": "v"}}
+v

@@ -3,6 +3,7 @@
 //! - 関数はトップレベルにだけ定義でき、名前は重複せず、組み込み関数とも重ならない
 //! - 呼び出す関数が定義されていて、引数の数が合っている（組み込み関数は個数を実行時に検査）
 //! - `$x` と `#` は関数の中でだけ使える
+//! - `break` と `continue` は `while` の中でだけ使える
 //! - 読む `$x` は、引数か、関数内のどこかで代入されている
 //!
 //! `@x` の未定義は、関数の中から代入されることもあるので実行時に検査する
@@ -16,12 +17,22 @@ use crate::syntax::span::Span;
 
 type RResult = Result<(), Diagnostic>;
 
-/// `is_native` は組み込み関数の名前かどうかを返す
-pub fn resolve(program: &Program, is_native: impl Fn(&str) -> bool) -> RResult {
+/// プログラムの外ですでに定義されている関数
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Callee {
+    /// 組み込み関数。引数の数は実行時に検査する
+    Native,
+    /// 以前の入力で定義した関数（REPL）
+    User { arity: usize },
+}
+
+/// `lookup` は、プログラムの外で定義済みの関数を名前から引く。
+/// プログラム内で同じ名前を定義した場合はそちらが優先（REPL での再定義）
+pub fn resolve(program: &Program, lookup: impl Fn(&str) -> Option<Callee>) -> RResult {
     let mut functions = HashMap::new();
     for stmt in &program.stmts {
         if let StmtKind::FuncDef(def) = &stmt.kind {
-            if is_native(&def.name) {
+            if lookup(&def.name) == Some(Callee::Native) {
                 return Err(Diagnostic::new(
                     def.span,
                     format!(
@@ -44,12 +55,12 @@ pub fn resolve(program: &Program, is_native: impl Fn(&str) -> bool) -> RResult {
 
     let resolver = Resolver {
         functions,
-        is_native: &is_native,
+        lookup: &lookup,
     };
     for stmt in &program.stmts {
         match &stmt.kind {
             StmtKind::FuncDef(def) => resolver.func_def(def)?,
-            _ => resolver.stmt(stmt, None)?,
+            _ => resolver.stmt(stmt, None, false)?,
         }
     }
     Ok(())
@@ -61,7 +72,7 @@ type Locals<'a, 'b> = Option<&'b HashSet<&'a str>>;
 struct Resolver<'a> {
     /// 関数名 → 引数の数
     functions: HashMap<&'a str, usize>,
-    is_native: &'a dyn Fn(&str) -> bool,
+    lookup: &'a dyn Fn(&str) -> Option<Callee>,
 }
 
 impl<'a> Resolver<'a> {
@@ -76,14 +87,17 @@ impl<'a> Resolver<'a> {
             }
         }
         collect_locals(&def.body, &mut locals);
-        self.block(&def.body, Some(&locals))
+        self.block(&def.body, Some(&locals), false)
     }
 
-    fn block(&self, block: &'a [Stmt], locals: Locals<'a, '_>) -> RResult {
-        block.iter().try_for_each(|stmt| self.stmt(stmt, locals))
+    /// `in_loop` は `while` の中か（`break` / `continue` を使えるか）
+    fn block(&self, block: &'a [Stmt], locals: Locals<'a, '_>, in_loop: bool) -> RResult {
+        block
+            .iter()
+            .try_for_each(|stmt| self.stmt(stmt, locals, in_loop))
     }
 
-    fn stmt(&self, stmt: &'a Stmt, locals: Locals<'a, '_>) -> RResult {
+    fn stmt(&self, stmt: &'a Stmt, locals: Locals<'a, '_>, in_loop: bool) -> RResult {
         match &stmt.kind {
             StmtKind::FuncDef(def) => Err(Diagnostic::new(
                 def.span,
@@ -95,16 +109,28 @@ impl<'a> Resolver<'a> {
                 else_block,
             } => {
                 self.expr(cond, locals)?;
-                self.block(then_block, locals)?;
+                self.block(then_block, locals, in_loop)?;
                 match else_block {
-                    Some(block) => self.block(block, locals),
+                    Some(block) => self.block(block, locals, in_loop),
                     None => Ok(()),
                 }
             }
             StmtKind::While { cond, body } => {
                 self.expr(cond, locals)?;
-                self.block(body, locals)
+                self.block(body, locals, true)
             }
+            StmtKind::Break | StmtKind::Continue if !in_loop => {
+                let keyword = if let StmtKind::Break = stmt.kind {
+                    "break"
+                } else {
+                    "continue"
+                };
+                Err(Diagnostic::new(
+                    stmt.span,
+                    format!("`{keyword}` は while の中でのみ使えます"),
+                ))
+            }
+            StmtKind::Break | StmtKind::Continue => Ok(()),
             StmtKind::Return(value) => {
                 if locals.is_none() {
                     return Err(Diagnostic::new(stmt.span, "`#` は関数の中でのみ使えます"));
@@ -146,22 +172,38 @@ impl<'a> Resolver<'a> {
             }),
             ExprKind::Var(var) => self.var(var, expr.span, locals),
             ExprKind::Call { name, args } => {
-                if let Some(&n) = self.functions.get(name.as_str()) {
-                    if args.len() != n {
-                        return Err(Diagnostic::new(
-                            expr.span,
-                            format!(
-                                "`{name}` の引数は {n} 個です（{} 個渡されました）",
-                                args.len()
-                            ),
-                        ));
-                    }
-                } else if !(self.is_native)(name) {
-                    return Err(Diagnostic::new(expr.span, format!("未定義の関数 `{name}`")));
+                let arity = match self.functions.get(name.as_str()) {
+                    Some(&n) => Some(n),
+                    None => match (self.lookup)(name) {
+                        Some(Callee::User { arity }) => Some(arity),
+                        Some(Callee::Native) => None,
+                        None => {
+                            return Err(Diagnostic::new(
+                                expr.span,
+                                format!("未定義の関数 `{name}`"),
+                            ));
+                        }
+                    },
+                };
+                // 組み込み関数（arity が None）の引数の数は実行時に検査する
+                if let Some(n) = arity
+                    && args.len() != n
+                {
+                    return Err(Diagnostic::new(
+                        expr.span,
+                        format!(
+                            "`{name}` の引数は {n} 個です（{} 個渡されました）",
+                            args.len()
+                        ),
+                    ));
                 }
                 args.iter().try_for_each(|arg| self.expr(arg, locals))
             }
             ExprKind::Array(items) => items.iter().try_for_each(|item| self.expr(item, locals)),
+            ExprKind::Map(entries) => entries.iter().try_for_each(|(key, value)| {
+                self.expr(key, locals)?;
+                self.expr(value, locals)
+            }),
             ExprKind::Index { target, index } => {
                 self.expr(target, locals)?;
                 self.expr(index, locals)
@@ -230,7 +272,7 @@ mod tests {
 
     fn check(src: &str) -> Result<(), String> {
         let program = parse(&tokenize(src).unwrap()).unwrap();
-        resolve(&program, |name| name == "log").map_err(|e| e.message)
+        resolve(&program, |name| (name == "log").then_some(Callee::Native)).map_err(|e| e.message)
     }
 
     #[test]
@@ -309,6 +351,27 @@ add[$a, $b] (
         assert_eq!(
             check("f[$a] (\n    log[\"$a $b\"]\n)"),
             Err("未定義の変数 `$b`".into())
+        );
+    }
+
+    #[test]
+    fn break_outside_loop() {
+        assert_eq!(
+            check("break"),
+            Err("`break` は while の中でのみ使えます".into())
+        );
+        assert_eq!(
+            check("if true (\n    continue\n)"),
+            Err("`continue` は while の中でのみ使えます".into())
+        );
+        // 関数は while の外にあるので、関数の中の break は外側のループを抜けられない
+        assert_eq!(
+            check("f[] (\n    break\n)"),
+            Err("`break` は while の中でのみ使えます".into())
+        );
+        assert_eq!(
+            check("while true (\n    if true (\n        break\n    )\n)"),
+            Ok(())
         );
     }
 

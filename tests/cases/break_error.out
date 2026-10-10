@@ -1,0 +1,4 @@
+break_error.dol:3:5: エラー: `break` は while の中でのみ使えます
+  |
+3 |     break
+  |     ^

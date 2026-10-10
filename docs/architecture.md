@@ -63,8 +63,9 @@ Resolver を独立させる理由:
 dolphin/
 ├─ Cargo.toml
 ├─ src/
-│  ├─ main.rs            CLI の入口（引数の解析、実行、--tokens でトークン表示）
-│  ├─ lib.rs             公開 API（run_source）。CLI・テスト・将来の wasm 版から使う
+│  ├─ main.rs            CLI の入口（引数の解析、実行、--tokens / --ast）
+│  ├─ repl.rs            対話モード（feature = "repl"、rustyline を使う）
+│  ├─ lib.rs             公開 API（run_source、Session）。CLI・テスト・将来の wasm 版から使う
 │  ├─ diag.rs            Diagnostic（エラー表示）
 │  ├─ syntax/
 │  │  ├─ span.rs         位置情報（行・列）
@@ -75,15 +76,17 @@ dolphin/
 │  │  └─ resolver.rs     実行前の検査
 │  ├─ runtime/
 │  │  ├─ value.rs        値の型
+│  │  ├─ map.rs          順序つきマップ
 │  │  ├─ env.rs          Scope（変数表）と Frame（呼び出し 1 回分）
 │  │  ├─ error.rs        RuntimeError（呼び出し履歴つき）
 │  │  └─ interp.rs       評価器
 │  └─ stdlib/
 │     ├─ mod.rs          全モジュールの登録、引数検査の共通処理
 │     ├─ io.rs           log, input
-│     ├─ string.rs       str_len, str_concat
-│     ├─ array.rs        arr_len, arr_push
-│     ├─ math.rs         ⬜
+│     ├─ string.rs       str_*、to_str、to_num
+│     ├─ array.rs        arr_len, arr_push, arr_pop
+│     ├─ map.rs          map_len, map_keys, map_has, map_remove
+│     ├─ math.rs         abs, floor, …, random（乱数は xorshift64* を自前で実装）
 │     ├─ fs.rs  json.rs  ⬜ 段階 3
 │     ├─ http.rs         ⬜ 段階 4（feature = "http"）
 │     └─ gfx.rs          ⬜ 段階 5（feature = "gfx"）
@@ -134,14 +137,13 @@ enum Value {
     Bool(bool),
     Num(f64),
     Str(Rc<str>),
-    Array(Rc<RefCell<Vec<Value>>>),  // design.md 7.1 の決定次第で変わる
+    Array(Rc<RefCell<Vec<Value>>>),
+    Map(Rc<RefCell<Map>>),           // runtime/map.rs
 }
 ```
 
-| 7.1 配列の渡し方 | Rust での実装 | 似ている言語 |
-|---|---|---|
-| 参照渡し | `Rc<RefCell<Vec>>`（いまの実装） | Python、JavaScript |
-| 値渡し | `Rc<Vec>` + `Rc::make_mut`（書き換えるときだけコピーする） | Swift、PHP |
+- 配列とマップは**参照渡し**（design.md 7.1）。`Value` を clone しても `Rc` が増えるだけで、同じものを指す。書き換えは `RefCell::borrow_mut` で行う
+- `Map` は自作の順序つきマップ。`Vec<(キー, 値)>` に追加順で持ち、`HashMap<キー, 位置>` を索引にする。コア言語は外部クレートを使わない方針なので、`indexmap` は使わない
 
 ### 4.3 組み込み関数（`runtime/interp.rs`）
 
@@ -150,10 +152,22 @@ type NativeFn = fn(&mut Interpreter<'_>, &[Value]) -> Result<Value, String>;
 ```
 
 - エラーはメッセージだけ返し、呼び出し位置は Interpreter が付ける
-- Resolver は「その名前が組み込み関数か」だけを Interpreter に問い合わせる。そのため `run_source` は、標準ライブラリを登録してから Resolver を呼ぶ
+- Resolver は、プログラムの外で定義済みの関数（組み込み関数と、REPL の前の入力で定義した関数）を `Interpreter::callee` で問い合わせる。そのため `Session` は、標準ライブラリを登録してから Resolver を呼ぶ
 - `&mut Interpreter` を受け取るので、`log` は `interp.out` に書ける。テストでは `out` に `Vec<u8>` を渡して出力を取り出す
 
-### 4.4 エラー
+### 4.4 Session と REPL（`lib.rs`、`repl.rs`）
+
+```rust
+let mut session = Session::new(&mut stdout);
+session.eval("@x = 1")?;          // 変数と関数は次の eval でも残る
+session.eval("@x + 1")?;          // 最後の文が式なら Some(値) を返す
+```
+
+- `run_source` は `Session` を 1 回だけ使うもの。ファイル実行と REPL で処理は同じ
+- REPL は、`(` や `"` が閉じていないエラー（`Diagnostic::unexpected_eof`）なら、エラーを出さずに続きの行を読む
+- 行編集（矢印キー・履歴）の rustyline は、CLI だけが使う optional な依存。lib は外部クレートに依存しない
+
+### 4.5 エラー
 
 | 型 | 発生する層 | 中身 |
 |---|---|---|
@@ -176,7 +190,7 @@ main.dol:2:6: エラー: 文字列が閉じられていません
 | 段階 | 構文・意味 | ランタイム・標準ライブラリ | ツール・品質 |
 |---|---|---|---|
 | 1 コア | Parser、AST、Resolver | Value、Interpreter、io / string / array | ゴールデンテスト、CI |
-| 2 実用化 | マップ、文字列操作 | string の拡充、map、math | エラー表示の改善、REPL（rustyline） |
+| 2 実用化 | マップ ✅、文字列操作 ✅ | string の拡充 ✅、map ✅、math ✅ | REPL ✅ |
 | 3 複数ファイル | `import` | モジュールの読み込み、fs、json（serde_json） | `dolphin check` |
 | 4 バックエンド | — | http（axum + tokio） | サンプルの API |
 | 5 デスクトップ | `gameloop` | gfx（macroquad） | サンプルのゲーム |
@@ -191,7 +205,7 @@ main.dol:2:6: エラー: 文字列が閉じられていません
 |---|---|---|
 | 段階 4 HTTP | tokio は複数スレッドで動くが、インタプリタは `Rc` を使っていて別スレッドに渡せない（`Send` でない） | サーバーは別スレッドで動かし、リクエストはチャネルでインタプリタのスレッドに送る。インタプリタは 1 スレッドで順番に処理する（JavaScript のイベントループと同じ型） |
 | 段階 5 GUI | macroquad がメインループを握る | `gameloop` を「毎フレーム呼ばれる関数」として登録し、macroquad の側から呼ぶ（design.md 7.2） |
-| メモリ | `Rc` は循環参照を解放できない（配列が自分自身を含む場合など） | 当面は許容する。問題になったら GC を自作する |
+| メモリ | `Rc` は循環参照を解放できない（配列が自分自身を含む場合など） | 当面は許容する。問題になったら GC を自作する。表示と `==` は循環しても止まるようにしてある |
 | スタック | 木たどりは Dolphin の呼び出し 1 段で Rust の再帰が何段も深くなり、Windows の既定スタック（1 MB）ではすぐあふれる | 呼び出しの深さを 1000 段に制限し、CLI は 256 MB のスタックを持つスレッドで動かす |
 | 性能 | 木たどりは遅い | 段階 6 でバイトコード VM にする。Resolver の層があるので差し替えやすい |
 

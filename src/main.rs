@@ -2,6 +2,9 @@ use std::{env, fs, io, process, thread};
 
 use dolphin::syntax::{lexer, parser};
 
+#[cfg(feature = "repl")]
+mod repl;
+
 enum Mode {
     Run,
     /// トークン列を表示する
@@ -26,12 +29,16 @@ fn main() {
 /// 終了コードを返す
 fn run_cli() -> i32 {
     let args: Vec<String> = env::args().skip(1).collect();
+    if args.is_empty() {
+        return start_repl();
+    }
     let (mode, path) = match args.as_slice() {
         [flag, path] if flag == "--tokens" => (Mode::Tokens, path),
         [flag, path] if flag == "--ast" => (Mode::Ast, path),
         [path] => (Mode::Run, path),
         _ => {
             eprintln!("使い方: dolphin [--tokens | --ast] <file.dol>");
+            eprintln!("        dolphin              （引数なしで対話モード）");
             return 2;
         }
     };
@@ -61,4 +68,15 @@ fn run_cli() -> i32 {
             1
         }
     }
+}
+
+#[cfg(feature = "repl")]
+fn start_repl() -> i32 {
+    repl::run()
+}
+
+#[cfg(not(feature = "repl"))]
+fn start_repl() -> i32 {
+    eprintln!("対話モードを使うには repl 機能を有効にしてビルドしてください");
+    2
 }

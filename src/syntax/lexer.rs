@@ -26,6 +26,8 @@ pub enum TokenKind {
     If,
     Else,
     While,
+    Break,
+    Continue,
     True,
     False,
 
@@ -37,6 +39,7 @@ pub enum TokenKind {
     LBrace,
     RBrace,
     Comma,
+    Colon,
     Assign,
     Hash,
 
@@ -73,6 +76,8 @@ impl fmt::Display for TokenKind {
             If => "`if`",
             Else => "`else`",
             While => "`while`",
+            Break => "`break`",
+            Continue => "`continue`",
             True => "`true`",
             False => "`false`",
             LBracket => "`[`",
@@ -82,6 +87,7 @@ impl fmt::Display for TokenKind {
             LBrace => "`{`",
             RBrace => "`}`",
             Comma => "`,`",
+            Colon => "`:`",
             Assign => "`=`",
             Hash => "`#`",
             Plus => "`+`",
@@ -183,6 +189,8 @@ impl Lexer {
                         "if" => TokenKind::If,
                         "else" => TokenKind::Else,
                         "while" => TokenKind::While,
+                        "break" => TokenKind::Break,
+                        "continue" => TokenKind::Continue,
                         "true" => TokenKind::True,
                         "false" => TokenKind::False,
                         _ => TokenKind::Ident(word),
@@ -290,7 +298,7 @@ impl Lexer {
         loop {
             let esc_span = self.span();
             let Some(c) = self.bump() else {
-                return self.error(start, "文字列が閉じられていません");
+                return Err(Diagnostic::new(start, "文字列が閉じられていません").at_eof());
             };
             match c {
                 '"' => break,
@@ -300,7 +308,9 @@ impl Lexer {
                     Some(other) => {
                         return self.error(esc_span, format!("不明なエスケープ `\\{other}`"));
                     }
-                    None => return self.error(start, "文字列が閉じられていません"),
+                    None => {
+                        return Err(Diagnostic::new(start, "文字列が閉じられていません").at_eof());
+                    }
                 },
                 '@' | '$' => {
                     let name = self.ident();
@@ -350,6 +360,7 @@ impl Lexer {
                 }
             }
             ',' => Comma,
+            ':' => Colon,
             '#' => Hash,
             '+' => Plus,
             '-' => Minus,
