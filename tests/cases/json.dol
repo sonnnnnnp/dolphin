@@ -1,0 +1,33 @@
+// std:json（design.md 5.9, 5.10）
+@j := import["std:json"]
+log[@j]
+log[@j.parse]
+log[import["std:json"] == @j]
+
+// 読む: null は nil、オブジェクトはマップ
+@doc := @j.parse["{\"name\": \"Dolphin\", \"age\": 3, \"langs\": [\"Rust\", \"C++\"], \"nick\": null, \"ok\": true}"]
+log[@doc]
+log[@doc{"name"}, @doc{"langs"}{1}, @doc{"nick"} == nil]
+log[@j.parse["[1, 2.5, -3e2, \"\\u3042\\n\"]"]]
+
+// 書く: 1 行と整形
+@out := {"id": 12345678901, "tags": {"a", "b"}, "empty": {:}, "none": nil, "text": "say \"hi\"\n"}
+log[@j.stringify[@out]]
+log[@j.pretty[@out]]
+log[@j.stringify[{}], @j.stringify["日本語"], @j.pretty[{1}]]
+
+// 往復
+@again := @j.parse[@j.stringify[@out]]
+log[@again == @out]
+
+// 失敗はエラー値。? で伝える
+@bad := @j.parse["{\"a\": }"]
+log[is_error[@bad], err_kind[@bad]]
+log[err_message[@bad]]
+log[err_message[@j.parse["[1, 2"]]]
+log[err_message[@j.parse["{\n  \"a\": 1,\n  \"b\": oops\n}"]]]
+load[@text] (
+    @v := @j.parse[@text]?
+    # @v{"n"} + 1
+)
+log[load["{\"n\": 41}"], is_error[load["not json"]]]

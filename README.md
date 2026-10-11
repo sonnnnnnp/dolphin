@@ -84,7 +84,9 @@ count: 3
 - [ ] **段階 3**: 複数ファイル、ファイル入出力
   - [x] `import`（名前空間つき。`@u := import["util.dol"]`、`@u.add[1, 2]`）
   - [x] ファイル入出力（`file_read` `file_write` `file_append` `file_exists`）
-- [ ] **段階 4**: HTTP サーバー、JSON → バックエンド API
+- [ ] **段階 4**: HTTP、JSON → バックエンド API
+  - [x] 組み込みモジュール（`import["std:..."]`）と JSON（`std:json`）
+  - [ ] HTTP クライアント・サーバー
 - [ ] **段階 5**: ウィンドウ・描画・入力 → デスクトップアプリ（旧 C++ 実装では SFML で対応済み）
 
 ## コードを段階ごとに読む
@@ -101,6 +103,7 @@ count: 3
 | [v0.6.0](https://github.com/sonnnnnnp/dolphin/tree/v0.6.0) | 関数値とクロージャ | [v0.5.0...v0.6.0](https://github.com/sonnnnnnp/dolphin/compare/v0.5.0...v0.6.0) |
 | [v0.7.0](https://github.com/sonnnnnnp/dolphin/tree/v0.7.0) | `nil`、`for`、`range` | [v0.6.0...v0.7.0](https://github.com/sonnnnnnp/dolphin/compare/v0.6.0...v0.7.0) |
 | [v0.8.0](https://github.com/sonnnnnnp/dolphin/tree/v0.8.0) | エラー値と `?` | [v0.7.0...v0.8.0](https://github.com/sonnnnnnp/dolphin/compare/v0.7.0...v0.8.0) |
+| [v0.9.0](https://github.com/sonnnnnnp/dolphin/tree/v0.9.0) | 組み込みモジュールと `std:json` | [v0.8.0...v0.9.0](https://github.com/sonnnnnnp/dolphin/compare/v0.8.0...v0.9.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

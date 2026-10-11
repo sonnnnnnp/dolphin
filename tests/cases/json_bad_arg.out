@@ -1,0 +1,4 @@
+json_bad_arg.dol:2:5: エラー: json.parse の 1 番目の引数は文字列です（数値が渡されました）
+  |
+2 | log[@j.parse[1]]
+  |     ^

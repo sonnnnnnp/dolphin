@@ -89,7 +89,8 @@ dolphin/
 │     ├─ array.rs        arr_len, arr_push, arr_pop
 │     ├─ map.rs          map_len, map_keys, map_has, map_remove
 │     ├─ math.rs         abs, floor, …, random（乱数は xorshift64* を自前で実装）
-│     ├─ json.rs         ⬜ 段階 4
+│     ├─ error.rs        is_error, err_kind, err_message, err_new
+│     ├─ json.rs         std:json（parse / stringify / pretty。自前の実装、外部クレートなし）
 │     ├─ http.rs         ⬜ 段階 4（feature = "http"）
 │     └─ gfx.rs          ⬜ 段階 5（feature = "gfx"）
 ├─ tests/
@@ -197,7 +198,7 @@ main.dol:2:6: エラー: 文字列が閉じられていません
 |---|---|---|---|
 | 1 コア | Parser、AST、Resolver | Value、Interpreter、io / string / array | ゴールデンテスト、CI |
 | 2 実用化 | マップ ✅、文字列操作 ✅ | string の拡充 ✅、map ✅、math ✅ | REPL ✅ |
-| 3 複数ファイル | `import` ✅（`.` による名前空間） | モジュールの読み込み ✅、fs、json（serde_json） | `dolphin check` |
+| 3 複数ファイル | `import` ✅（`.` による名前空間） | モジュールの読み込み ✅、fs ✅、json ✅（自前） | `dolphin check` |
 | 4 バックエンド | — | http（axum + tokio） | サンプルの API |
 | 5 デスクトップ | `gameloop` | gfx（macroquad） | サンプルのゲーム |
 | 6 任意 | — | バイトコード VM | ベンチマーク（fib など） |

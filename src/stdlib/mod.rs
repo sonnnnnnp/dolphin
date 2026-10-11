@@ -6,6 +6,7 @@ pub mod array;
 pub mod error;
 pub mod fs;
 pub mod io;
+pub mod json;
 pub mod map;
 pub mod math;
 pub mod string;
@@ -20,6 +21,7 @@ use crate::runtime::value::Value;
 pub fn register(interp: &mut Interpreter<'_>) {
     io::register(interp);
     error::register(interp);
+    json::register(interp);
     fs::register(interp);
     string::register(interp);
     array::register(interp);

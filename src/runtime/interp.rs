@@ -74,6 +74,9 @@ pub struct Interpreter<'a> {
     /// 関数の中を実行しているか。`?` がエラーを返せる場所かどうか（import したファイルの
     /// トップレベルは、呼び出し元が関数の中でも「関数の外」）
     in_func: bool,
+    /// 組み込みモジュールの登録（`std:json` → 関数の表）と、import 済みのもの
+    std_registry: HashMap<&'static str, Vec<(&'static str, NativeFn)>>,
+    std_loaded: HashMap<&'static str, Rc<Module>>,
     /// `?` が関数から返そうとしているエラー値（`RuntimeError::early_return` と組）
     returning: Option<Value>,
 }
@@ -94,12 +97,20 @@ impl<'a> Interpreter<'a> {
             native_span: Span { line: 1, col: 1 },
             native_error: None,
             in_func: false,
+            std_registry: HashMap::new(),
+            std_loaded: HashMap::new(),
             returning: None,
         }
     }
 
     pub fn register(&mut self, name: &'static str, f: NativeFn) {
         self.natives.insert(name, f);
+    }
+
+    /// 組み込みモジュールを登録する。`name` は `std:json`、関数の名前は `json.parse` のように
+    /// モジュール名をつけて書き、`.` より後ろが `@j.parse[...]` で呼ぶときの名前になる
+    pub fn register_module(&mut self, name: &'static str, functions: &[(&'static str, NativeFn)]) {
+        self.std_registry.insert(name, functions.to_vec());
     }
 
     pub fn native(&self, name: &str) -> Option<NativeFn> {
@@ -351,6 +362,9 @@ impl<'a> Interpreter<'a> {
                 let module = self.eval_module(target)?;
                 // 変数がなければ、同じ名前の関数を関数値として返す（design.md 5.8）
                 let value = module.globals.get_own(name).or_else(|| {
+                    if let Some(native) = module.natives.get(name.as_str()) {
+                        return Some(Value::Native(native.clone()));
+                    }
                     let def = module.functions.borrow().get(name).cloned()?;
                     Some(Value::Func(Rc::new(Closure {
                         def,
@@ -398,9 +412,10 @@ impl<'a> Interpreter<'a> {
                     .map(|arg| self.eval(arg))
                     .collect::<RResult<Vec<_>>>()?;
                 let def = module.functions.borrow().get(name).cloned();
-                match def {
-                    Some(def) => self.call_user(&module, &def, args, span)?,
-                    None => {
+                match (def, module.natives.get(name.as_str())) {
+                    (Some(def), _) => self.call_user(&module, &def, args, span)?,
+                    (None, Some(native)) => self.call_native(native.f, &args, span)?,
+                    (None, None) => {
                         return Err(RuntimeError::new(
                             span,
                             format!("{} に関数 `{name}` がありません", module_label(&module)),
@@ -701,6 +716,9 @@ impl<'a> Interpreter<'a> {
             }
         };
 
+        if rel.starts_with("std:") {
+            return self.import_std(rel, span);
+        }
         let full = self.current.dir.join(&**rel);
         let shown = self.display_path(&full);
         let key = fs::canonicalize(&full).map_err(|e| {
@@ -784,6 +802,32 @@ impl<'a> Interpreter<'a> {
                 Err(e)
             }
         }
+    }
+
+    /// 組み込みモジュール（`std:json` など）。同じものは同じモジュールを返す
+    fn import_std(&mut self, name: &str, span: Span) -> RResult<Value> {
+        let Some((&key, functions)) = self.std_registry.get_key_value(name) else {
+            let mut names: Vec<&str> = self.std_registry.keys().copied().collect();
+            names.sort_unstable();
+            return Err(RuntimeError::new(
+                span,
+                format!(
+                    "組み込みモジュール `{name}` はありません（あるのは {}）",
+                    names.join("、")
+                ),
+            ));
+        };
+        if let Some(module) = self.std_loaded.get(key) {
+            return Ok(Value::Module(Rc::clone(module)));
+        }
+        let mut module = Module::new(key.into(), PathBuf::new(), None);
+        for &(full, f) in functions {
+            let short = full.rsplit('.').next().unwrap_or(full);
+            module.natives.insert(short, NativeRef { name: full, f });
+        }
+        let module = Rc::new(module);
+        self.std_loaded.insert(key, Rc::clone(&module));
+        Ok(Value::Module(module))
     }
 
     /// モジュールの表示名。本体のあるディレクトリからの相対パスにする

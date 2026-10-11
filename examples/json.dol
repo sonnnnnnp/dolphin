@@ -1,0 +1,13 @@
+// JSON を読んで、書き換えて、書き出す
+@json := import["std:json"]
+
+@text := "{\"name\": \"Dolphin\", \"langs\": [\"Rust\"]}"
+@doc := @json.parse[@text]
+if is_error[@doc] (
+    log["読めません:", err_message[@doc]]
+)
+else (
+    arr_push[@doc{"langs"}, "C++"]
+    @doc{"version"} = 0.9
+    log[@json.pretty[@doc]]
+)

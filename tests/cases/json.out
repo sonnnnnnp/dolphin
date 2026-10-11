@@ -1,0 +1,26 @@
+<module "std:json">
+<組み込み関数 json.parse>
+true
+{"name": "Dolphin", "age": 3, "langs": {"Rust", "C++"}, "nick": nil, "ok": true}
+Dolphin C++ true
+{1, 2.5, -300, "あ\n"}
+{"id":12345678901,"tags":["a","b"],"empty":{},"none":null,"text":"say \"hi\"\n"}
+{
+  "id": 12345678901,
+  "tags": [
+    "a",
+    "b"
+  ],
+  "empty": {},
+  "none": null,
+  "text": "say \"hi\"\n"
+}
+[] "日本語" [
+  1
+]
+true
+true parse
+JSON が正しくありません（1 行 7 列）: 値が必要です
+JSON が正しくありません（1 行 6 列）: `,` か `]` が必要です
+JSON が正しくありません（3 行 8 列）: 値が必要です
+42 true

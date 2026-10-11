@@ -1,0 +1,4 @@
+@j := import["std:json"]
+@a := {1}
+arr_push[@a, @a]
+log[@j.stringify[@a]]

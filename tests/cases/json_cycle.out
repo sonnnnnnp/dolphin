@@ -1,0 +1,4 @@
+json_cycle.dol:4:5: エラー: json.stringify: 循環した配列やマップは JSON にできません
+  |
+4 | log[@j.stringify[@a]]
+  |     ^

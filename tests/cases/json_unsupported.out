@@ -1,0 +1,4 @@
+json_unsupported.dol:2:5: エラー: json.stringify: 関数は JSON にできません
+  |
+2 | log[@j.stringify[{"f": log}]]
+  |     ^

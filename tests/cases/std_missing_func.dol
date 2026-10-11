@@ -1,0 +1,2 @@
+@j := import["std:json"]
+@j.nope[1]

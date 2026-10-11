@@ -1,0 +1,4 @@
+std_missing_func.dol:2:1: エラー: モジュール "std:json" に関数 `nope` がありません
+  |
+2 | @j.nope[1]
+  | ^

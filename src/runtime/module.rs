@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use super::env::Env;
+use super::value::NativeRef;
 use crate::diag::Origin;
 use crate::syntax::ast::FuncDef;
 
@@ -20,6 +21,8 @@ pub struct Module {
     /// トップレベルのスコープ。ファイル内の関数はここを外側として実行される
     pub globals: Rc<Env>,
     pub functions: RefCell<HashMap<String, Rc<FuncDef>>>,
+    /// 組み込みモジュール（`import["std:json"]`）の関数。名前は `parse` のような短い名前
+    pub natives: HashMap<&'static str, NativeRef>,
 }
 
 impl Module {
@@ -30,6 +33,7 @@ impl Module {
             origin,
             globals: Env::new(None),
             functions: RefCell::default(),
+            natives: HashMap::new(),
         }
     }
 }
