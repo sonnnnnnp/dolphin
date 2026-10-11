@@ -33,6 +33,12 @@ pub enum StmtKind {
         cond: Expr,
         body: Block,
     },
+    /// `for @x in expr ( … )`。配列の要素を順に `var` に入れて本体を実行する
+    For {
+        var: Var,
+        iter: Expr,
+        body: Block,
+    },
     /// `# expr`
     Return(Option<Expr>),
     /// `while` を抜ける
@@ -77,6 +83,8 @@ pub enum ExprKind {
     Number(f64),
     Str(Vec<StrPart>),
     Bool(bool),
+    /// `nil`
+    Nil,
     Var(Var),
     /// `name[args]`
     Call {
@@ -183,6 +191,9 @@ impl fmt::Display for Stmt {
                 write!(f, ")")
             }
             StmtKind::While { cond, body } => write!(f, "(while {cond} {})", BlockDisplay(body)),
+            StmtKind::For { var, iter, body } => {
+                write!(f, "(for {var} {iter} {})", BlockDisplay(body))
+            }
             StmtKind::Return(Some(value)) => write!(f, "(# {value})"),
             StmtKind::Return(None) => write!(f, "(#)"),
             StmtKind::Break => write!(f, "(break)"),
@@ -232,6 +243,7 @@ impl fmt::Display for Expr {
                 write!(f, "\"")
             }
             ExprKind::Bool(b) => write!(f, "{b}"),
+            ExprKind::Nil => write!(f, "nil"),
             ExprKind::Var(var) => write!(f, "{var}"),
             ExprKind::Call { name, args } => {
                 write!(f, "({name}")?;

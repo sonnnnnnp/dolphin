@@ -116,6 +116,19 @@ impl<'t> Parser<'t> {
                 let body = self.block()?;
                 StmtKind::While { cond, body }
             }
+            // for_stmt = "for" variable "in" expression block
+            TokenKind::For => {
+                self.advance();
+                let TokenKind::Var(name) = &self.peek().kind else {
+                    return Err(self.unexpected("変数（`@x`）"));
+                };
+                let var = Var(name.clone());
+                self.advance();
+                self.expect(&TokenKind::In)?;
+                let iter = self.expression()?;
+                let body = self.block()?;
+                StmtKind::For { var, iter, body }
+            }
             TokenKind::Hash => {
                 self.advance();
                 let value = match self.peek().kind {
@@ -377,6 +390,7 @@ impl<'t> Parser<'t> {
             TokenKind::Str(parts) => ExprKind::Str(parts.clone()),
             TokenKind::True => ExprKind::Bool(true),
             TokenKind::False => ExprKind::Bool(false),
+            TokenKind::Nil => ExprKind::Nil,
             TokenKind::Var(name) => ExprKind::Var(Var(name.clone())),
             // call = IDENT "[" [ args ] "]"。`[` が続かなければ、関数名だけ（関数値）
             TokenKind::Ident(name) => {
@@ -770,6 +784,18 @@ log[@f[1], @g[1, 2], make[][3]]"),
         // 引数は変数だけ
         let e = error("@f := [1] ( )");
         assert_eq!(e.message, "変数（`@x`）が必要です（`1`がありました）");
+    }
+
+    #[test]
+    fn for_and_nil() {
+        assert_eq!(
+            ast("for @x in {1, 2} (\n    log[@x]\n)\n@n := nil"),
+            "(for @x {1 2} ((log @x)))\n(:= @n nil)\n"
+        );
+        let e = error("for 1 in @a ( )");
+        assert_eq!(e.message, "変数（`@x`）が必要です（`1`がありました）");
+        let e = error("for @x @a ( )");
+        assert_eq!(e.message, "`in`が必要です（`@a`がありました）");
     }
 
     #[test]

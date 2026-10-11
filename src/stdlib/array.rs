@@ -1,6 +1,6 @@
-//! 配列: arr_len, arr_push, arr_pop, arr_map, arr_filter, arr_each
+//! 配列: arr_len, arr_push, arr_pop, arr_map, arr_filter, arr_each, range
 
-use super::{array_arg, expect_args, func_arg, new_array};
+use super::{array_arg, expect_args, func_arg, int_arg, new_array};
 use crate::runtime::interp::Interpreter;
 use crate::runtime::value::Value;
 
@@ -11,6 +11,20 @@ pub fn register(interp: &mut Interpreter<'_>) {
     interp.register("arr_map", arr_map);
     interp.register("arr_filter", arr_filter);
     interp.register("arr_each", arr_each);
+    interp.register("range", range);
+}
+
+/// `range` が作る配列の要素数の上限
+const RANGE_MAX: i64 = 10_000_000;
+
+/// `a` 以上 `b` 未満の整数の配列
+fn range(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("range", args, 2)?;
+    let (a, b) = (int_arg("range", args, 0)?, int_arg("range", args, 1)?);
+    if b.saturating_sub(a) > RANGE_MAX {
+        return Err(format!("range の要素数が多すぎます（{RANGE_MAX} 個まで）"));
+    }
+    Ok(new_array((a..b).map(|n| Value::Num(n as f64)).collect()))
 }
 
 fn arr_len(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {

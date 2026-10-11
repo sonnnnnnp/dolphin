@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-11
+
+### 追加
+- `nil` リテラル。「値なし」を書けるようになった。JSON の `null` に当たる（[design.md 5.3](docs/design.md)）
+- `for @x in 配列 ( … )`。要素を順に回す。本体は繰り返しごとに新しいスコープで、`break` と `continue` も使える（[design.md 5.6](docs/design.md)）
+  - マップは `for @k in map_keys[@m]`、回数指定は `for @i in range[0, 10]`
+- 組み込み関数 `range[a, b]`（`a` 以上 `b` 未満の整数の配列）
+
+### 変更
+- `break` / `continue` のエラーメッセージを「while か for の中でのみ使えます」にした
+
 ## [0.6.0] - 2026-10-11
 
 ### 追加

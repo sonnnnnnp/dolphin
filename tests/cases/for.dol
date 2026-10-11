@@ -1,0 +1,59 @@
+// for: 配列の要素を順に回す
+for @x in {10, 20, 30} (
+    log[@x]
+)
+
+// ループ変数は繰り返しごとに別の変数。作った関数は別々の値を捕まえる
+@fs := {}
+for @n in {1, 2, 3} (
+    arr_push[@fs, [] ( # @n * 100 )]
+)
+log[@fs{0}[], @fs{1}[], @fs{2}[]]
+
+// マップはキーの配列にして回す。回数指定は range
+@m := {"a": 1, "b": 2}
+for @k in map_keys[@m] (
+    log[@k, @m{@k}]
+)
+@sum := 0
+for @i in range[0, 5] (
+    @sum = @sum + @i
+)
+log[@sum, range[3, 3], range[-2, 2]]
+
+// break / continue は for にも効く。入れ子では内側だけ
+for @i in range[0, 10] (
+    if @i % 2 == 1 (
+        continue
+    )
+    if @i > 6 (
+        break
+    )
+    log["even", @i]
+)
+for @row in range[0, 3] (
+    for @col in range[0, 3] (
+        if @col > @row (
+            break
+        )
+        log[@row, @col]
+    )
+)
+
+// 関数の中の for から # で返す
+find[@arr, @target] (
+    for @i in range[0, arr_len[@arr]] (
+        if @arr{@i} == @target (
+            # @i
+        )
+    )
+    # -1
+)
+log[find[{5, 7, 9}, 9], find[{5, 7, 9}, 1]]
+
+// 回し始めた時点の要素を使う。途中で配列に足しても、回す対象は変わらない
+@list := {1, 2, 3}
+for @v in @list (
+    arr_push[@list, @v * 10]
+)
+log[@list]

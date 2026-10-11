@@ -1,4 +1,4 @@
-closure_break.dol:3:16: エラー: `break` は while の中でのみ使えます
+closure_break.dol:3:16: エラー: `break` は while か for の中でのみ使えます
   |
 3 |     @f := [] ( break )
   |                ^

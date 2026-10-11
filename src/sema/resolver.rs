@@ -181,6 +181,15 @@ impl<'a> Resolver<'a> {
                 self.expr(cond, ctx)?;
                 self.block(body, ctx, true)
             }
+            StmtKind::For { var, iter, body } => {
+                // 回す式は、ループ変数の外側で評価される
+                self.expr(iter, ctx)?;
+                // ループ変数と本体は同じスコープ（`@x` を本体で `:=` し直すとエラー）
+                ctx.scopes.push(HashSet::from([var.0.as_str()]));
+                let result = self.stmts(body, ctx, true);
+                ctx.scopes.pop();
+                result
+            }
             StmtKind::Break | StmtKind::Continue if !in_loop => {
                 let keyword = if let StmtKind::Break = stmt.kind {
                     "break"
@@ -189,7 +198,7 @@ impl<'a> Resolver<'a> {
                 };
                 Err(Diagnostic::new(
                     stmt.span,
-                    format!("`{keyword}` は while の中でのみ使えます"),
+                    format!("`{keyword}` は while か for の中でのみ使えます"),
                 ))
             }
             StmtKind::Break | StmtKind::Continue => Ok(()),
@@ -240,7 +249,7 @@ impl<'a> Resolver<'a> {
 
     fn expr(&self, expr: &'a Expr, ctx: &Ctx<'a>) -> RResult {
         match &expr.kind {
-            ExprKind::Number(_) | ExprKind::Bool(_) => Ok(()),
+            ExprKind::Number(_) | ExprKind::Bool(_) | ExprKind::Nil => Ok(()),
             ExprKind::Str(parts) => parts.iter().try_for_each(|part| match part {
                 StrPart::Var(var) => self.var(var, expr.span, ctx),
                 StrPart::Text(_) => Ok(()),
@@ -469,16 +478,16 @@ add[@a, @b] (
     fn break_outside_loop() {
         assert_eq!(
             check("break"),
-            Err("`break` は while の中でのみ使えます".into())
+            Err("`break` は while か for の中でのみ使えます".into())
         );
         assert_eq!(
             check("if true (\n    continue\n)"),
-            Err("`continue` は while の中でのみ使えます".into())
+            Err("`continue` は while か for の中でのみ使えます".into())
         );
         // 関数は while の外にあるので、関数の中の break は外側のループを抜けられない
         assert_eq!(
             check("f[] (\n    break\n)"),
-            Err("`break` は while の中でのみ使えます".into())
+            Err("`break` は while か for の中でのみ使えます".into())
         );
         assert_eq!(
             check("while true (\n    if true (\n        break\n    )\n)"),
@@ -542,7 +551,7 @@ log[@c]"
     @f := [] ( break )
 )"
             ),
-            Err("`break` は while の中でのみ使えます".into())
+            Err("`break` は while か for の中でのみ使えます".into())
         );
         // 無名関数の中から、あとで宣言されるトップレベルの変数も見える
         assert_eq!(
@@ -552,6 +561,24 @@ log[@c]"
             ),
             Ok(())
         );
+    }
+
+    #[test]
+    fn for_scope() {
+        assert_eq!(check("for @x in {1, 2} (\n    log[@x]\n)"), Ok(()));
+        // ループ変数は、ループの外では使えない
+        assert_eq!(
+            check("for @x in {1} (\n)\nlog[@x]"),
+            Err("未定義の変数 `@x`".into())
+        );
+        // 回す式は、ループ変数より外側（自分自身は見えない）
+        assert_eq!(check("for @x in @x (\n)"), Err("未定義の変数 `@x`".into()));
+        // 本体で同じ名前を宣言し直せない。break / continue は使える
+        assert_eq!(
+            check("for @x in {1} (\n    @x := 2\n)"),
+            Err("変数 `@x` はすでに宣言されています".into())
+        );
+        assert_eq!(check("for @x in {1} (\n    break\n)"), Ok(()));
     }
 
     #[test]

@@ -199,6 +199,34 @@ impl<'a> Interpreter<'a> {
                     }
                 }
             }
+            StmtKind::For { var, iter, body } => {
+                let items = match self.eval(iter)? {
+                    // 回し始めた時点の要素を使う
+                    Value::Array(items) => items.borrow().clone(),
+                    other => {
+                        return Err(RuntimeError::new(
+                            iter.span,
+                            format!(
+                                "for で回せるのは配列だけです（{}でした）。マップは `map_keys` でキーの配列にします",
+                                other.type_name()
+                            ),
+                        ));
+                    }
+                };
+                for item in items {
+                    // ループ変数と本体は、繰り返しごとに新しい同じスコープ
+                    let inner = Env::new(Some(Rc::clone(&self.env)));
+                    inner.declare(&var.0, item);
+                    let outer = mem::replace(&mut self.env, inner);
+                    let flow = self.exec_block(body);
+                    self.env = outer;
+                    match flow? {
+                        Flow::Normal | Flow::Continue => {}
+                        Flow::Break => break,
+                        Flow::Return(value) => return Ok(Flow::Return(value)),
+                    }
+                }
+            }
             StmtKind::Return(value) => {
                 let value = match value {
                     Some(expr) => self.eval(expr)?,
@@ -266,6 +294,7 @@ impl<'a> Interpreter<'a> {
         let value = match &expr.kind {
             ExprKind::Number(n) => Value::Num(*n),
             ExprKind::Bool(b) => Value::Bool(*b),
+            ExprKind::Nil => Value::Nil,
             ExprKind::Str(parts) => {
                 let mut s = String::new();
                 for part in parts {

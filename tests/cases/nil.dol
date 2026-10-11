@@ -1,0 +1,9 @@
+// nil は「値なし」。戻り値のない関数の結果と同じ
+@n := nil
+log[@n, @n == nil, nil == nil, nil == 0, nil == false]
+
+nothing[] ( )
+log[nothing[] == nil]
+
+@data := {"user": nil, "tags": {nil, 1}}
+log[@data, @data{"user"} == nil]

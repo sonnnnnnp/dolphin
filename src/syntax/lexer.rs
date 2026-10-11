@@ -24,10 +24,13 @@ pub enum TokenKind {
     If,
     Else,
     While,
+    For,
+    In,
     Break,
     Continue,
     True,
     False,
+    Nil,
 
     // 記号
     LBracket,
@@ -76,10 +79,13 @@ impl fmt::Display for TokenKind {
             If => "`if`",
             Else => "`else`",
             While => "`while`",
+            For => "`for`",
+            In => "`in`",
             Break => "`break`",
             Continue => "`continue`",
             True => "`true`",
             False => "`false`",
+            Nil => "`nil`",
             LBracket => "`[`",
             RBracket => "`]`",
             LParen => "`(`",
@@ -189,6 +195,9 @@ impl Lexer {
                         "if" => TokenKind::If,
                         "else" => TokenKind::Else,
                         "while" => TokenKind::While,
+                        "for" => TokenKind::For,
+                        "in" => TokenKind::In,
+                        "nil" => TokenKind::Nil,
                         "break" => TokenKind::Break,
                         "continue" => TokenKind::Continue,
                         "true" => TokenKind::True,
@@ -407,6 +416,25 @@ mod tests {
         assert_eq!(
             kinds("@x := 1"),
             vec![Var("x".into()), Declare, Number(1.0), Eof]
+        );
+    }
+
+    #[test]
+    fn for_in_nil() {
+        assert_eq!(
+            kinds("for @x in nil ("),
+            vec![For, Var("x".into()), In, Nil, LParen, Eof]
+        );
+        // 識別子の一部なら、ただの名前
+        assert_eq!(
+            kinds("nilly[] input"),
+            vec![
+                Ident("nilly".into()),
+                LBracket,
+                RBracket,
+                Ident("input".into()),
+                Eof
+            ]
         );
     }
 
