@@ -199,6 +199,7 @@ while @i < 3 (
 | 配列 | `{1, 2, 3}` | 案 |
 | マップ | `{"name": "Dolphin", "age": 3}`。5.4 | 確定（2026-10-06） |
 | モジュール | `import["util.dol"]` の結果。5.7 | 確定（2026-10-11） |
+| バイト列 | `str_to_bytes["hi"]` など。変更できない。5.14 | 確定（2026-10-12） |
 | 関数 | `[@n] ( # @n + 1 )` や、`add` のような関数名。5.8 | 確定（2026-10-11） |
 | 真偽値 | `true` / `false`。比較演算の結果も真偽値 | 確定 |
 | 値なし | 戻り値のない関数の結果。`nil` と書ける（確定 2026-10-11）。JSON の `null` に当たる | 確定 |
@@ -344,7 +345,7 @@ log[@j.parse["{\"a\": [1, 2]}"]]
 | `.名前`（`[` なし） | 関数値（`<組み込み関数 json.parse>`）。ファイルのモジュールと同じ | 案 |
 | 存在しない名前 | `import["std:nope"]` は実行時エラー。ある名前を案内する | 案 |
 | 表示 | `<module "std:json">` | 案 |
-| 一覧 | `std:json`（5.10）、`std:http`（5.11。`http` feature）、`std:math`（5.12）、`std:path` `std:os` `std:time`（5.13） | |
+| 一覧 | `std:json`（5.10）、`std:http`（5.11。`http` feature）、`std:math`（5.12）、`std:path` `std:os` `std:time`（5.13）、`std:encoding` `std:crypto`（5.14。`crypto` は feature） | |
 
 ### 5.10 JSON（`std:json`）
 
@@ -555,6 +556,54 @@ log[@r{"status"}, @r{"ok"}, @r{"headers"}{"content-type"}]
 | システムの時差 | 今回は扱わない（`offset` を自分で渡す）。システムの時差を引く関数は、OS の API が要るので後で足す | 確定 |
 | 名前の衝突 | `file_*` は基本の関数なので、接頭辞を持つ（`file_list` など） | 確定 |
 
+### 5.14 バイト列と暗号（v0.13.0、確定 2026-10-12）
+
+#### バイト列の型
+
+| 項目 | 内容 |
+|---|---|
+| 型 | `bytes`（`type_of` は `"bytes"`）。0〜255 の並び。**変更できない**（文字列と同じ。ハッシュや比較の安全のため）。リテラルはなく、関数で作る |
+| 作る | `str_to_bytes[s]`（UTF-8）、`bytes_from_arr[a]`（0〜255 の整数の配列）、`bytes_new[n]`（0 で埋めた `n` バイト）、`bytes_concat[a, b]` |
+| 読む | `bytes_len[b]`、`@b{i}`（`i` 番目の値。範囲外は実行時エラー）、`bytes_slice[b, start, end]`（`str_sub` と同じ範囲の規則）、`bytes_to_arr[b]`、`bytes_find[b, sub]`（位置。なければ `-1`） |
+| 文字列にする | `bytes_to_str[b]`。UTF-8 でなければ `parse` のエラー値 |
+| 比較 | `==` は中身が同じなら true |
+| 表示 | `<bytes 68656c6c6f>`（16 進数。33 バイト以上は先頭 32 バイトの後に `…（N バイト）`） |
+| 書き込み | `@b{i} = v` は実行時エラー。`for` で回せるのは配列だけなので、`bytes_to_arr` を使う |
+| JSON | バイト列は JSON にできない（実行時エラー）。`std:encoding` で base64 などにして渡す |
+
+#### ほかの関数での使い方
+
+| 場所 | 内容 |
+|---|---|
+| ファイル | `file_read_bytes[path]`、`file_write_bytes[path, b]`、`file_append_bytes[path, b]`。失敗はエラー値（`file_read` と同じ） |
+| `std:http` | `options` の `body` はバイト列も渡せる。`options` に `"as": "bytes"` を足すと、レスポンスの `body` がバイト列になる（省略は `"text"`。UTF-8 でない本文でもエラーにならない） |
+| `std:os` の `run` | `stdin` にバイト列を渡せる。`options` に `"as": "bytes"` を足すと、`stdout` と `stderr` がバイト列になる |
+
+#### `std:encoding`
+
+引数にバイト列と文字列（UTF-8 として扱う）の両方を受け付ける。
+
+| 関数 | 内容 |
+|---|---|
+| `base64_encode[data]` / `base64_decode[s]` | 標準の base64（`+` `/`、`=` の詰め物あり）。`decode` は空白と改行を無視する。正しくなければ `parse` のエラー値。`decode` の結果はバイト列 |
+| `base64url_encode[data]` / `base64url_decode[s]` | URL 向け（`-` `_`）。`encode` は詰め物なし。`decode` は詰め物の有無どちらも受け付ける |
+| `hex_encode[data]` / `hex_decode[s]` | 16 進数（小文字）。`decode` は大文字小文字を区別せず、奇数桁や正しくない文字は `parse` のエラー値 |
+| `url_encode[s]` / `url_decode[s]` | URL の部品のパーセントエンコード（英数字と `-` `.` `_` `~` 以外を `%XX` に）。`decode` は `+` を空白にしない。UTF-8 にならなければ `parse` のエラー値 |
+
+#### `std:crypto`
+
+`crypto` feature（既定で有効）。ハッシュ・HMAC・乱数は `ring`、md5 は `md-5` を使う（暗号は自前で書かない）。
+
+| 関数 | 内容 |
+|---|---|
+| `hash[algorithm, data]` | ダイジェスト（バイト列）。`algorithm` は `"sha1"` `"sha256"` `"sha384"` `"sha512"` `"md5"`。`sha1` と `md5` は壊れた方式なので、互換のためだけに使う（署名やパスワードには使わない） |
+| `hmac[algorithm, key, data]` | HMAC（バイト列）。`algorithm` は `"sha1"` `"sha256"` `"sha384"` `"sha512"`（`md5` は不可） |
+| `random_bytes[n]` | OS の乱数で作った `n` バイト（0〜65536） |
+| `uuid[]` | UUID v4（`"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"` の文字列） |
+| `equals[a, b]` | 2 つのバイト列（か文字列）が同じか。時間が中身によらない（HMAC の検証用） |
+
+16 進数にしたいときは `@enc.hex_encode[@crypto.hash["sha256", "abc"]]` のように組み合わせる。
+
 ---
 
 ## 6. 旧実装からの主な変更（案）
@@ -611,14 +660,17 @@ log[@a]        // {1, 2, 3}
 | 完了 | 文法の見直し（`$` 廃止、`:=`、添字 `{ }`）、関数値とクロージャ、`nil`・`for`・`range`、エラー値と `?`、組み込みモジュールと JSON、HTTP クライアント（v0.5.0〜v0.10.0） | 確定 |
 | A | **基本型の関数の穴**: `type_of`、配列（`sort` `slice` `reduce` など）、マップ（`values` `items` `merge` など）、文字列（`starts_with` `pad_left` など）、数値の書式、`std:math`（5.12） | 完了（v0.11.0） |
 | B | **システムまわり**: `std:time`、`std:os`（引数・環境変数・終了コード・外部コマンド）、`std:path`、ファイルの残り（一覧・作成・削除・名前変更・情報） | 完了（v0.12.0） |
-| C | **バイナリとハッシュ**: バイト列の型、バイナリのファイル入出力、`std:encoding`（base64・hex・URL）、`std:crypto`（sha256・hmac・md5・uuid・乱数） | v0.13.0 |
-| D | **開発の道具**: `assert`、`dolphin test`、`dolphin check`、`dolphin fmt`、デバッグ表示 | v0.14.0〜 |
-| E | **言語の書き心地**（1 項目ずつ案を出して決める）: 可変長引数、引数の既定値、式の文字列展開 `"@{a + b}"`、`@m.key`、条件式、複数行・生の文字列、数値リテラル（`0xff` `1_000`）、整数型とビット演算、分割代入 | v0.15.0〜 |
-| F | **大きな基盤**: 実行モデルの実装（8.3）、非同期の関数、HTTP サーバー、TCP、WebSocket、正規表現（`std:regex`）、SQLite（`std:sqlite`）、メモリ回収器 | 案 |
+| C | **バイナリとハッシュ**: バイト列の型（5.14）、バイナリのファイル入出力、`std:encoding`（base64・hex・URL）、`std:crypto`（sha1・sha256・sha512・md5・hmac・uuid・乱数） | v0.13.0 |
+| F1 | **実行モデルとメモリ回収器**（8.3）、HTTP サーバー | C の次（目標: バックエンドが書ける） |
+| D | **開発の道具**: `assert`、`dolphin test`、`dolphin check`、`dolphin fmt`、デバッグ表示 | F1 の後 |
+| E | **言語の書き心地**（1 項目ずつ案を出して決める）: 可変長引数、引数の既定値、式の文字列展開 `"@{a + b}"`、`@m.key`、条件式、複数行・生の文字列、数値リテラル（`0xff` `1_000` `1e9`）、整数型とビット演算、分割代入、組み込み関数を隠す定義 | D の後 |
+| F2 | **残りの基盤**: 非同期の関数、TCP、WebSocket、正規表現（`std:regex`）、SQLite（`std:sqlite`） | 案 |
 | G | **表示とアプリ**: `ui`（8.4）、`canvas`、画像、音 | 案 |
 | H | **処理系の作り**: バイトコード VM と `await`、LSP、実行ファイルへの同梱（`dolphin build`） | 案 |
 
-A〜D を先にする理由: 依存が少なく確実なこと、F の実行モデルを決める前に「スクリプトとして普通に使える言語」の厚みを作れること、E の書き心地は A〜D でコードをたくさん書いた後のほうが、何が不便か分かって決めやすいこと。
+最終目標は「一般的な言語と遜色なく、9 割のことができる」こと。バックエンド（F1）とデスクトップ（G）を、できるだけ早く書ける状態にする。
+
+順序の理由: A〜C は依存が少なく確実で、バイト列の型はサーバーの本文・画像・暗号のすべての土台になる。F1 でバックエンドを書けるようにしてから、D（テスト）と E（書き心地）で言語を磨く。E は、実際にコードをたくさん書いた後のほうが、何が不便か分かって決めやすい。
 
 ### 8.2 関数値とクロージャ
 
