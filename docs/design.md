@@ -531,6 +531,7 @@ log[@r{"status"}, @r{"ok"}, @r{"headers"}{"content-type"}]
 | `exit[code]` | その場でスクリプトを終了する（終了コード。省略は `0`）。出力は書き出してから終わる |
 | `platform[]` | `"windows"` `"macos"` `"linux"` など |
 | `temp_dir[]` | 一時ファイルを置くディレクトリ |
+| `exe[]` | 実行中の `dolphin` の実行ファイルのパス（自分自身を `run` で動かすときに使う）。調べられなければエラー値 |
 | `run[command, args]` `run[command, args, options]` | 外部コマンドを実行して終わるまで待つ（シェルは通さない）。`args` は文字列の配列。`options`: `cwd`、`env`（足す環境変数のマップ）、`stdin`（文字列）、`timeout`（秒。超えたら殺す）。戻り値は `{"status": 0, "ok": true, "stdout": "...", "stderr": "..."}`（`ok` は終了コードが 0）。出力は UTF-8 の文字列。起動できなければエラー値（`not_found` `permission` `io`）、時間切れは `timeout`、出力が UTF-8 でなければ `parse` |
 
 #### `std:time`

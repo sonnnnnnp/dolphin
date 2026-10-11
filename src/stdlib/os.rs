@@ -24,6 +24,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
             ("os.exit", exit),
             ("os.platform", platform),
             ("os.temp_dir", temp_dir),
+            ("os.exe", exe),
             ("os.run", run),
         ],
     );
@@ -110,6 +111,15 @@ fn exit(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
 fn platform(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
     expect_args("os.platform", args, 0)?;
     Ok(string(std::env::consts::OS))
+}
+
+/// 実行中の `dolphin` の実行ファイルのパス（自分自身を子プロセスで動かすときに使う）
+fn exe(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("os.exe", args, 0)?;
+    Ok(match std::env::current_exe() {
+        Ok(path) => string(to_slash(&path)),
+        Err(e) => io_failure("実行ファイルの場所を調べられません", None, &e),
+    })
 }
 
 fn temp_dir(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {

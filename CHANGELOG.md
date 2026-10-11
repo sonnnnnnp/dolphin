@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-12
+
+ここまでの機能を使って、大きめのプログラムを書いてみた。
+
+### 追加
+- `examples/dolvc.dol`: Dolphin で書いた小さなバージョン管理ツール（`init` `commit` `status` `diff` `log` `checkout`）。ファイルの中身を sha256 で名前づけして保存し、コミットは JSON。行ごとの差分は最長共通部分列で計算する。ファイル・ハッシュ・JSON・時刻・パス・バイト列・エラー値と `?`・クロージャを使っている
+- `examples/dolvc_demo.dol`: `dolvc` を一時ディレクトリで通して動かすデモ（自分自身を `os.run` で子プロセスにして動かす）
+- `examples/life.dol`: ライフゲーム（グライダー銃）のアニメーション
+- `examples/mandelbrot.dol`: マンデルブロ集合を文字で描く
+- `os.exe[]`: 実行中の `dolphin` の実行ファイルのパス
+- `tests/examples.rs`: すべての例が構文として正しいことと、`dolvc_demo` `life` `mandelbrot` の動きを確かめる
+
 ## [0.13.0] - 2026-10-12
 
 バイト列と暗号（[design.md 5.14](docs/design.md)）。

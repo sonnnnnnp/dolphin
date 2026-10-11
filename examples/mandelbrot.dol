@@ -1,0 +1,39 @@
+// マンデルブロ集合を、文字で描く
+//   dolphin mandelbrot.dol
+
+@width := 78
+@height := 30
+@max_iter := 80
+@palette := " .:-=+*#%@"
+
+// 複素数 c = (cx, cy) が、発散するまでの繰り返し回数（発散しなければ @max_iter）
+escape_time[@cx, @cy] (
+    @x := 0
+    @y := 0
+    for @i in range[0, @max_iter] (
+        @x2 := @x * @x
+        @y2 := @y * @y
+        if @x2 + @y2 > 4 (
+            # @i
+        )
+        @y = 2 * @x * @y + @cy
+        @x = @x2 - @y2 + @cx
+    )
+    # @max_iter
+)
+
+for @row in range[0, @height] (
+    @cy := (@row / @height - 0.5) * 2.4
+    @line := ""
+    for @col in range[0, @width] (
+        @cx := (@col / @width - 0.72) * 3.2
+        @n := escape_time[@cx, @cy]
+        if @n == @max_iter (
+            @line = @line + "@"
+        )
+        else (
+            @line = @line + str_sub[@palette, floor[@n * 9 / @max_iter], floor[@n * 9 / @max_iter] + 1]
+        )
+    )
+    log[@line]
+)

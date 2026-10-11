@@ -1,0 +1,72 @@
+// dolvc の動きを、一時ディレクトリの中で通して見せるデモ
+// リポジトリのルートで実行する:  cargo run -- examples/dolvc_demo.dol
+
+@os := import["std:os"]
+@path := import["std:path"]
+
+@exe := @os.exe[]
+@script := @path.absolute["examples/dolvc.dol"]
+@sandbox := @path.join[@os.temp_dir[], "dolvc-demo"]
+
+must[@value] (
+    if is_error[@value] (
+        log["デモが失敗しました: " + err_message[@value]]
+        @os.exit[1]
+    )
+    # @value
+)
+
+// 一時ディレクトリの中で dolvc を動かし、実行したコマンドと出力を表示する
+dolvc[@args] (
+    @result := must[@os.run[@exe, arr_concat[{@script}, @args], {"cwd": @sandbox}]]
+    log["$ dolvc " + str_join[@args, " "]]
+    @text := str_trim_end[@result{"stdout"}]
+    if @text != "" (
+        log[@text]
+    )
+    log[""]
+    # @result{"stdout"}
+)
+
+// "[abcdef123456] メッセージ" から id を取り出す
+commit_id[@output] (
+    # str_sub[@output, 1, 13]
+)
+
+// ---- 準備 ----
+if file_exists[@sandbox] (
+    must[file_remove_all[@sandbox]]
+)
+must[file_mkdir[@path.join[@sandbox, "src"]]]
+must[file_write[@path.join[@sandbox, "hello.txt"], "こんにちは\nイルカです\n"]]
+must[file_write[@path.join[@sandbox, "src/main.dol"], "log[\"hello\"]\n"]]
+must[file_write_bytes[@path.join[@sandbox, "logo.bin"], bytes_from_arr[{137, 80, 78, 71, 0, 255}]]]
+log["作業ディレクトリ: " + @sandbox]
+log[""]
+
+// ---- 1 つ目のコミット ----
+dolvc[{"init"}]
+@first := commit_id[dolvc[{"commit", "最初のコミット"}]]
+
+// ---- 変更してみる ----
+must[file_write[@path.join[@sandbox, "hello.txt"], "こんにちは\nイルカです\nよろしくね\n"]]
+must[file_write[@path.join[@sandbox, "src/lib.dol"], "add[\@a, \@b] ( # \@a + \@b )\n"]]
+must[file_remove[@path.join[@sandbox, "logo.bin"]]]
+dolvc[{"status"}]
+dolvc[{"diff"}]
+@second := commit_id[dolvc[{"commit", "あいさつを増やして、lib を足す"}]]
+
+// ---- 履歴と、過去に戻る ----
+dolvc[{"log"}]
+dolvc[{"checkout", str_sub[@second, 0, 4]}]
+log["（2 つ目のコミットに戻した直後: 変更なし のはず）"]
+dolvc[{"status"}]
+
+// 最初のコミットに戻す（id は先頭の 4 文字でよい）
+dolvc[{"checkout", str_sub[@first, 0, 4]}]
+log["（最初のコミットに戻した後のファイル）"]
+log[str_join[file_list[@sandbox], ", "]]
+log[file_read[@path.join[@sandbox, "hello.txt"]]]
+log["logo.bin の中身: " + to_str[file_read_bytes[@path.join[@sandbox, "logo.bin"]]]]
+
+must[file_remove_all[@sandbox]]

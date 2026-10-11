@@ -1,0 +1,103 @@
+// ライフゲーム（グライダー銃）。ターミナルで動くアニメーション
+//   dolphin life.dol          60 世代
+//   dolphin life.dol 300      300 世代
+// 流れを止めずに見たいときは、ターミナルを大きめにしてください（幅 60、高さ 26）。
+
+@os := import["std:os"]
+@time := import["std:time"]
+
+@width := 60
+@height := 24
+@esc := str_from_code[27]
+
+new_grid[] (
+    # arr_map[range[0, @height], [@y] ( # arr_map[range[0, @width], [@x] ( # false )] )]
+)
+
+// 端は反対側につながっている（トーラス）
+alive[@grid, @x, @y] (
+    # @grid{(@y + @height) % @height}{(@x + @width) % @width}
+)
+
+neighbors[@grid, @x, @y] (
+    @count := 0
+    for @dy in {-1, 0, 1} (
+        for @dx in {-1, 0, 1} (
+            if (@dx != 0 || @dy != 0) && alive[@grid, @x + @dx, @y + @dy] (
+                @count = @count + 1
+            )
+        )
+    )
+    # @count
+)
+
+step[@grid] (
+    @next := new_grid[]
+    for @y in range[0, @height] (
+        for @x in range[0, @width] (
+            @n := neighbors[@grid, @x, @y]
+            @next{@y}{@x} = @n == 3 || (@n == 2 && @grid{@y}{@x})
+        )
+    )
+    # @next
+)
+
+draw[@grid, @generation] (
+    @rows := arr_map[@grid, [@row] (
+        # str_join[arr_map[@row, [@cell] ( # if_cell[@cell] )], ""]
+    )]
+    log[@esc + "[H" + str_join[@rows, "\n"]]
+    log["世代 " + to_str[@generation] + "   生きているセル " + to_str[population[@grid]]]
+)
+
+if_cell[@cell] (
+    if @cell (
+        # "#"
+    )
+    # " "
+)
+
+population[@grid] (
+    @total := 0
+    for @row in @grid (
+        for @cell in @row (
+            if @cell (
+                @total = @total + 1
+            )
+        )
+    )
+    # @total
+)
+
+// Gosper のグライダー銃（x, y の組）
+@gun := {
+    {1, 5}, {1, 6}, {2, 5}, {2, 6},
+    {11, 5}, {11, 6}, {11, 7}, {12, 4}, {12, 8}, {13, 3}, {13, 9}, {14, 3}, {14, 9},
+    {15, 6}, {16, 4}, {16, 8}, {17, 5}, {17, 6}, {17, 7}, {18, 6},
+    {21, 3}, {21, 4}, {21, 5}, {22, 3}, {22, 4}, {22, 5}, {23, 2}, {23, 6},
+    {25, 1}, {25, 2}, {25, 6}, {25, 7},
+    {35, 3}, {35, 4}, {36, 3}, {36, 4}
+}
+
+@grid := new_grid[]
+for @cell in @gun (
+    @grid{@cell{1} + 1}{@cell{0} + 1} = true
+)
+
+@generations := 60
+@args := @os.args[]
+if arr_len[@args] > 0 (
+    @parsed := to_num[@args{0}]
+    if is_error[@parsed] (
+        log["世代数は数字で指定してください"]
+        @os.exit[2]
+    )
+    @generations = @parsed
+)
+
+log[@esc + "[2J"]
+for @g in range[0, @generations] (
+    draw[@grid, @g]
+    @grid = step[@grid]
+    @time.sleep[0.05]
+)

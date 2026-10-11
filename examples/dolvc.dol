@@ -1,0 +1,352 @@
+// dolvc — Dolphin で書いた、小さなバージョン管理ツール（git のミニ版）
+//
+// 使い方（作業したいディレクトリの中で実行する）:
+//   dolphin dolvc.dol init                 リポジトリ（.dolvc）を作る
+//   dolphin dolvc.dol commit "メッセージ"   いまのファイルをすべて記録する
+//   dolphin dolvc.dol status               最後のコミットからの変更を見る
+//   dolphin dolvc.dol diff                 変更を行ごとに見る
+//   dolphin dolvc.dol log                  コミットの履歴を見る
+//   dolphin dolvc.dol checkout <id>        そのコミットの状態に戻す（id は先頭だけでよい）
+//
+// しくみ: ファイルの中身を sha256 で名前づけして .dolvc/objects に置き、
+//         コミットは「パス → 中身の sha256」の表を JSON で .dolvc/commits に置く。
+//         コミットの id は、その JSON の sha256 の先頭 12 文字。
+
+@os := import["std:os"]
+@path := import["std:path"]
+@json := import["std:json"]
+@time := import["std:time"]
+@crypto := import["std:crypto"]
+@enc := import["std:encoding"]
+
+@store := ".dolvc"
+
+die[@message] (
+    log["dolvc: " + @message]
+    @os.exit[1]
+)
+
+// エラー値なら、メッセージを出して終わる。そうでなければ、その値
+must[@value] (
+    if is_error[@value] (
+        die[err_message[@value]]
+    )
+    # @value
+)
+
+sha256[@data] (
+    # @enc.hex_encode[@crypto.hash["sha256", @data]]
+)
+
+ensure_repo[] (
+    if !file_exists[@store] (
+        die["リポジトリがありません（init してください）"]
+    )
+)
+
+// ---- 作業ツリー ----
+
+// .dolvc を除くすべてのファイルを、相対パスにして @out に足す
+walk[@dir, @prefix, @out] (
+    for @name in arr_sort[must[file_list[@dir]]] (
+        if @name == @store (
+            continue
+        )
+        @full := @path.join[@dir, @name]
+        @rel := @path.join[@prefix, @name]
+        if must[file_info[@full]]{"is_dir"} (
+            walk[@full, @rel, @out]
+        )
+        else (
+            arr_push[@out, @rel]
+        )
+    )
+)
+
+// いまのファイルの「パス → sha256」の表。@save なら、中身も objects に保存する
+snapshot[@save] (
+    @paths := {}
+    walk[".", "", @paths]
+    @files := {:}
+    for @rel in @paths (
+        @data := must[file_read_bytes[@rel]]
+        @id := sha256[@data]
+        if @save (
+            @blob := @path.join[@store, "objects", @id]
+            if !file_exists[@blob] (
+                must[file_write_bytes[@blob, @data]]
+            )
+        )
+        @files{@rel} = @id
+    )
+    # @files
+)
+
+// ---- コミット ----
+
+head[] (
+    @file := @path.join[@store, "HEAD"]
+    if !file_exists[@file] (
+        # nil
+    )
+    # str_trim[must[file_read[@file]]]
+)
+
+load_commit[@id] (
+    @text := must[file_read[@path.join[@store, "commits", @id + ".json"]]]
+    # must[@json.parse[@text]]
+)
+
+// 先頭だけの id から、完全な id を探す
+resolve[@prefix] (
+    @found := {}
+    for @name in must[file_list[@path.join[@store, "commits"]]] (
+        @id := str_sub[@name, 0, str_len[@name] - 5]
+        if str_starts_with[@id, @prefix] (
+            arr_push[@found, @id]
+        )
+    )
+    if arr_len[@found] == 0 (
+        die["そんなコミットはありません: " + @prefix]
+    )
+    if arr_len[@found] > 1 (
+        die["id が曖昧です: " + @prefix]
+    )
+    # @found{0}
+)
+
+// 最後のコミットのファイルの表（コミットがなければ空）
+head_files[] (
+    @id := head[]
+    if @id == nil (
+        # {:}
+    )
+    # load_commit[@id]{"files"}
+)
+
+// ---- 行ごとの差分（最長共通部分列） ----
+
+// @a と @b（行の配列）の差を、"  同じ" "- 消えた" "+ 増えた" の行の配列にする
+diff_lines[@a, @b] (
+    @n := arr_len[@a]
+    @m := arr_len[@b]
+    // @lcs{i}{j} は、@a の i 行目以降と @b の j 行目以降の最長共通部分列の長さ
+    @lcs := {}
+    for @row in range[0, @n + 1] (
+        arr_push[@lcs, arr_map[range[0, @m + 1], [@j] ( # 0 )]]
+    )
+    for @k in range[0, @n] (
+        @i := @n - 1 - @k
+        for @l in range[0, @m] (
+            @j := @m - 1 - @l
+            if @a{@i} == @b{@j} (
+                @lcs{@i}{@j} = @lcs{@i + 1}{@j + 1} + 1
+            )
+            else (
+                @lcs{@i}{@j} = max[@lcs{@i + 1}{@j}, @lcs{@i}{@j + 1}]
+            )
+        )
+    )
+    @out := {}
+    @i := 0
+    @j := 0
+    while @i < @n && @j < @m (
+        if @a{@i} == @b{@j} (
+            arr_push[@out, "  " + @a{@i}]
+            @i = @i + 1
+            @j = @j + 1
+        )
+        else if @lcs{@i + 1}{@j} >= @lcs{@i}{@j + 1} (
+            arr_push[@out, "- " + @a{@i}]
+            @i = @i + 1
+        )
+        else (
+            arr_push[@out, "+ " + @b{@j}]
+            @j = @j + 1
+        )
+    )
+    while @i < @n (
+        arr_push[@out, "- " + @a{@i}]
+        @i = @i + 1
+    )
+    while @j < @m (
+        arr_push[@out, "+ " + @b{@j}]
+        @j = @j + 1
+    )
+    # @out
+)
+
+// コミットに記録された、そのファイルの行（バイナリなら nil）
+committed_lines[@hash] (
+    @text := bytes_to_str[must[file_read_bytes[@path.join[@store, "objects", @hash]]]]
+    if is_error[@text] (
+        # nil
+    )
+    # str_lines[@text]
+)
+
+working_lines[@rel] (
+    @text := bytes_to_str[must[file_read_bytes[@rel]]]
+    if is_error[@text] (
+        # nil
+    )
+    # str_lines[@text]
+)
+
+// ---- コマンド ----
+
+cmd_init[] (
+    if file_exists[@store] (
+        die["すでに初期化されています"]
+    )
+    must[file_mkdir[@path.join[@store, "objects"]]]
+    must[file_mkdir[@path.join[@store, "commits"]]]
+    log["空のリポジトリを作りました（" + @store + "）"]
+)
+
+cmd_commit[@message] (
+    ensure_repo[]
+    @files := snapshot[true]
+    @parent := head[]
+    if @parent != nil (
+        if head_files[] == @files (
+            die["変更がありません"]
+        )
+    )
+    @record := {"parent": @parent, "message": @message, "time": @time.iso[@time.now[]], "files": @files}
+    @id := str_sub[sha256[@json.stringify[@record]], 0, 12]
+    must[file_write[@path.join[@store, "commits", @id + ".json"], @json.pretty[@record]]]
+    must[file_write[@path.join[@store, "HEAD"], @id + "\n"]]
+    log["[" + @id + "] " + @message + "（" + to_str[map_len[@files]] + " ファイル）"]
+)
+
+cmd_status[] (
+    ensure_repo[]
+    @now := snapshot[false]
+    @base := head_files[]
+    @changes := 0
+    for @rel in arr_sort[map_keys[@now]] (
+        if !map_has[@base, @rel] (
+            log["  追加  " + @rel]
+            @changes = @changes + 1
+        )
+        else if @base{@rel} != @now{@rel} (
+            log["  変更  " + @rel]
+            @changes = @changes + 1
+        )
+    )
+    for @rel in arr_sort[map_keys[@base]] (
+        if !map_has[@now, @rel] (
+            log["  削除  " + @rel]
+            @changes = @changes + 1
+        )
+    )
+    if @changes == 0 (
+        log["変更はありません"]
+    )
+)
+
+cmd_diff[] (
+    ensure_repo[]
+    @now := snapshot[false]
+    @base := head_files[]
+    @names := arr_sort[map_keys[map_merge[@now, @base]]]
+    for @rel in @names (
+        @before := map_get[@base, @rel, nil]
+        @after := map_get[@now, @rel, nil]
+        if @before == @after (
+            continue
+        )
+        log["--- " + @rel]
+        @old := {}
+        @new := {}
+        if @before != nil (
+            @old = committed_lines[@before]
+        )
+        if @after != nil (
+            @new = working_lines[@rel]
+        )
+        if @old == nil || @new == nil (
+            log["  （バイナリファイル）"]
+            continue
+        )
+        for @line in diff_lines[@old, @new] (
+            if !str_starts_with[@line, "  "] (
+                log[@line]
+            )
+        )
+    )
+)
+
+cmd_log[] (
+    ensure_repo[]
+    @id := head[]
+    if @id == nil (
+        die["まだコミットがありません"]
+    )
+    while @id != nil (
+        @c := load_commit[@id]
+        log["commit " + @id + "  " + @c{"time"}]
+        log["    " + @c{"message"}]
+        log[""]
+        @id = @c{"parent"}
+    )
+)
+
+cmd_checkout[@prefix] (
+    ensure_repo[]
+    @id := resolve[@prefix]
+    @target := load_commit[@id]{"files"}
+    // いまのコミットにあって、移動先にないファイルは消す
+    for @rel in map_keys[head_files[]] (
+        if !map_has[@target, @rel] && file_exists[@rel] (
+            must[file_remove[@rel]]
+        )
+    )
+    for @rel in arr_sort[map_keys[@target]] (
+        @data := must[file_read_bytes[@path.join[@store, "objects", @target{@rel}]]]
+        // 保存した中身が壊れていないか、sha256 で確かめる
+        if !@crypto.equals[sha256[@data], @target{@rel}] (
+            die["壊れています: " + @rel]
+        )
+        @dir := @path.dirname[@rel]
+        if @dir != "" (
+            must[file_mkdir[@dir]]
+        )
+        must[file_write_bytes[@rel, @data]]
+    )
+    must[file_write[@path.join[@store, "HEAD"], @id + "\n"]]
+    log[@id + " に戻しました（" + to_str[map_len[@target]] + " ファイル）"]
+)
+
+usage[] (
+    log["使い方: dolphin dolvc.dol <init | commit メッセージ | status | diff | log | checkout id>"]
+    @os.exit[2]
+)
+
+@args := @os.args[]
+if arr_len[@args] == 0 (
+    usage[]
+)
+@command := @args{0}
+if @command == "init" (
+    cmd_init[]
+)
+else if @command == "commit" && arr_len[@args] == 2 (
+    cmd_commit[@args{1}]
+)
+else if @command == "status" (
+    cmd_status[]
+)
+else if @command == "diff" (
+    cmd_diff[]
+)
+else if @command == "log" (
+    cmd_log[]
+)
+else if @command == "checkout" && arr_len[@args] == 2 (
+    cmd_checkout[@args{1}]
+)
+else (
+    usage[]
+)

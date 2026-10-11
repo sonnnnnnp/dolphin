@@ -90,6 +90,19 @@ count: 3
   - [ ] HTTP サーバー
 - [ ] **段階 5**: ウィンドウ・描画・入力 → デスクトップアプリ（旧 C++ 実装では SFML で対応済み）
 
+## 作ってみたもの
+
+`examples/` に、Dolphin で書いたプログラムがあります。
+
+| ファイル | 内容 |
+|---|---|
+| [dolvc.dol](examples/dolvc.dol) | 小さなバージョン管理ツール（git のミニ版）。`commit` `status` `diff` `log` `checkout`。ファイルの中身は sha256 で名前づけして保存する |
+| [dolvc_demo.dol](examples/dolvc_demo.dol) | `dolvc` を一時ディレクトリで通して動かすデモ（`cargo run -- examples/dolvc_demo.dol`） |
+| [life.dol](examples/life.dol) | ライフゲームのアニメーション（グライダー銃） |
+| [mandelbrot.dol](examples/mandelbrot.dol) | マンデルブロ集合を文字で描く |
+| [json.dol](examples/json.dol) / [http.dol](examples/http.dol) | JSON の読み書き / HTTP で JSON を取ってくる（ネットワークが必要） |
+| [closure.dol](examples/closure.dol) | クロージャと `arr_map` |
+
 ## コードを段階ごとに読む
 
 機能ごとにタグを付けています。何が増えたかは [CHANGELOG.md](CHANGELOG.md) にまとめてあり、タグの間の差分を見ると、そのコードを読めます。
@@ -109,6 +122,7 @@ count: 3
 | [v0.11.0](https://github.com/sonnnnnnp/dolphin/tree/v0.11.0) | 基本型の関数（配列・マップ・文字列・数値）、`type_of`、`std:math` | [v0.10.0...v0.11.0](https://github.com/sonnnnnnp/dolphin/compare/v0.10.0...v0.11.0) |
 | [v0.12.0](https://github.com/sonnnnnnp/dolphin/tree/v0.12.0) | `std:time`、`std:os`、`std:path`、ファイルの残り | [v0.11.0...v0.12.0](https://github.com/sonnnnnnp/dolphin/compare/v0.11.0...v0.12.0) |
 | [v0.13.0](https://github.com/sonnnnnnp/dolphin/tree/v0.13.0) | バイト列、`std:encoding`、`std:crypto` | [v0.12.0...v0.13.0](https://github.com/sonnnnnnp/dolphin/compare/v0.12.0...v0.13.0) |
+| [v0.14.0](https://github.com/sonnnnnnp/dolphin/tree/v0.14.0) | 例（`dolvc`、ライフゲーム、マンデルブロ）、`os.exe` | [v0.13.0...v0.14.0](https://github.com/sonnnnnnp/dolphin/compare/v0.13.0...v0.14.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 
