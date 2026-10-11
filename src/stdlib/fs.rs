@@ -9,7 +9,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::time::UNIX_EPOCH;
 
-use super::{error_value, expect_args, new_array, new_map, str_arg};
+use super::{bytes_arg, error_value, expect_args, new_array, new_map, str_arg};
 use crate::runtime::interp::Interpreter;
 use crate::runtime::map::Map;
 use crate::runtime::value::Value;
@@ -19,6 +19,9 @@ pub fn register(interp: &mut Interpreter<'_>) {
     interp.register("file_write", file_write);
     interp.register("file_append", file_append);
     interp.register("file_exists", file_exists);
+    interp.register("file_read_bytes", file_read_bytes);
+    interp.register("file_write_bytes", file_write_bytes);
+    interp.register("file_append_bytes", file_append_bytes);
     interp.register("file_list", file_list);
     interp.register("file_info", file_info);
     interp.register("file_mkdir", file_mkdir);
@@ -102,6 +105,43 @@ pub(super) fn classify(e: &io::Error) -> (&'static str, String) {
         io::ErrorKind::IsADirectory => ("io", "ディレクトリです".to_string()),
         _ => ("io", e.to_string()),
     }
+}
+
+/// ファイル全体をバイト列で返す
+fn file_read_bytes(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("file_read_bytes", args, 1)?;
+    let path = str_arg("file_read_bytes", args, 0)?;
+    Ok(match fs::read(path) {
+        Ok(bytes) => Value::bytes(bytes),
+        Err(e) => io_error("読み込めません", path, &e),
+    })
+}
+
+/// バイト列を書き込む。ファイルがなければ作り、あれば中身を置き換える
+fn file_write_bytes(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("file_write_bytes", args, 2)?;
+    let path = str_arg("file_write_bytes", args, 0)?;
+    let bytes = bytes_arg("file_write_bytes", args, 1)?;
+    Ok(match fs::write(path, &bytes[..]) {
+        Ok(()) => Value::Nil,
+        Err(e) => io_error("書き込めません", path, &e),
+    })
+}
+
+/// バイト列をファイルの末尾に足す。ファイルがなければ作る
+fn file_append_bytes(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("file_append_bytes", args, 2)?;
+    let path = str_arg("file_append_bytes", args, 0)?;
+    let bytes = bytes_arg("file_append_bytes", args, 1)?;
+    let result = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(path)
+        .and_then(|mut file| file.write_all(bytes));
+    Ok(match result {
+        Ok(()) => Value::Nil,
+        Err(e) => io_error("書き込めません", path, &e),
+    })
 }
 
 /// ディレクトリの中の名前を、文字コード順に並べた配列

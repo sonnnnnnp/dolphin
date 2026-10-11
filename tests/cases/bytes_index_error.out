@@ -1,0 +1,4 @@
+bytes_index_error.dol:1:24: エラー: 添字 2 は範囲外です（要素は 2 個）
+  |
+1 | log[str_to_bytes["ab"]{2}]
+  |                        ^

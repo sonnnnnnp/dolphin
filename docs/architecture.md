@@ -90,6 +90,9 @@ dolphin/
 │     ├─ map.rs          map_len, map_keys, map_has, map_remove
 │     ├─ math.rs         abs, floor, …, random（乱数は xorshift64* を自前で実装）
 │     ├─ types.rs        type_of
+│     ├─ bytes.rs        バイト列（str_to_bytes / bytes_* ）
+│     ├─ encoding.rs     std:encoding（base64 / hex / URL。自前）
+│     ├─ crypto.rs       std:crypto（feature = "crypto"。ring + md-5）
 │     ├─ path.rs         std:path
 │     ├─ os.rs           std:os（args / env / exit / run など）
 │     ├─ time.rs         std:time（暦の計算は自前）
@@ -150,6 +153,7 @@ enum Value {
     Func(Rc<Closure>),               // 関数値。定義と、作られた場所の Env の組
     Native(NativeRef),               // 関数値になった組み込み関数
     Error(Rc<ErrorValue>),           // 外の世界の失敗（種類とメッセージ）。`?` で伝える
+    Bytes(Rc<[u8]>),                 // バイト列。変更できない
 }
 ```
 

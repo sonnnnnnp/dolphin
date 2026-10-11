@@ -1,0 +1,26 @@
+// std:crypto（design.md 5.14）。既知のテストベクトルで確かめる
+@c := import["std:crypto"]
+@e := import["std:encoding"]
+hex[@algorithm, @data] ( # @e.hex_encode[@c.hash[@algorithm, @data]] )
+log[hex["md5", ""], hex["md5", "abc"]]
+log[hex["sha1", "abc"]]
+log[hex["sha256", "abc"]]
+log[hex["sha256", ""]]
+log[str_sub[hex["sha384", "abc"], 0, 32], str_sub[hex["sha512", "abc"], 0, 32]]
+log[@c.hash["sha256", str_to_bytes["abc"]] == @c.hash["sha256", "abc"], bytes_len[@c.hash["sha512", ""]]]
+
+// HMAC（RFC 4231 のテストケース 1・2）
+@key1 := bytes_from_arr[arr_map[range[0, 20], [@i] ( # 11 )]]
+log[@e.hex_encode[@c.hmac["sha256", @key1, "Hi There"]]]
+log[@e.hex_encode[@c.hmac["sha256", "Jefe", "what do ya want for nothing?"]]]
+log[@e.hex_encode[@c.hmac["sha1", "key", "The quick brown fox jumps over the lazy dog"]]]
+
+// 乱数と UUID
+@r := @c.random_bytes[16]
+log[type_of[@r], bytes_len[@r], bytes_len[@c.random_bytes[0]], @c.random_bytes[16] == @r]
+@u := @c.uuid[]
+log[str_len[@u], str_sub[@u, 14, 15], arr_contains[{"8", "9", "a", "b"}, str_sub[@u, 19, 20]], @u == @c.uuid[]]
+log[arr_map[str_split[@u, "-"], str_len]]
+
+// 時間が中身によらない比較
+log[@c.equals["abc", "abc"], @c.equals["abc", "abd"], @c.equals["abc", "ab"], @c.equals[str_to_bytes["a"], "a"]]

@@ -1,0 +1,4 @@
+crypto_random_error.dol:2:5: エラー: crypto.random_bytes の大きさは 0〜65536 です（70000）
+  |
+2 | log[@c.random_bytes[70000]]
+  |     ^

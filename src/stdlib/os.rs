@@ -128,7 +128,9 @@ fn io_failure(action: &str, path: Option<&str>, e: &io::Error) -> Value {
 struct RunOptions {
     cwd: Option<String>,
     env: Vec<(String, String)>,
-    stdin: Option<String>,
+    stdin: Option<Vec<u8>>,
+    /// `stdout` と `stderr` をバイト列で返すか（`"as": "bytes"`）
+    as_bytes: bool,
     timeout: Option<Duration>,
 }
 
@@ -137,7 +139,7 @@ fn run_options(value: &Value) -> Result<RunOptions, String> {
         return Err(type_error("os.run", 2, "マップ", value));
     };
     let options = options.borrow();
-    const KNOWN: [&str; 4] = ["cwd", "env", "stdin", "timeout"];
+    const KNOWN: [&str; 5] = ["cwd", "env", "stdin", "timeout", "as"];
     for (key, _) in options.iter() {
         if !KNOWN.contains(&&**key) {
             return Err(format!(
@@ -195,10 +197,32 @@ fn run_options(value: &Value) -> Result<RunOptions, String> {
             ));
         }
     };
+    let stdin = match options.get("stdin") {
+        None => None,
+        Some(Value::Str(s)) => Some(s.as_bytes().to_vec()),
+        Some(Value::Bytes(b)) => Some(b.to_vec()),
+        Some(other) => {
+            return Err(format!(
+                "os.run の `stdin` は文字列かバイト列です（{}が渡されました）",
+                other.type_name()
+            ));
+        }
+    };
+    let as_bytes = match options.get("as") {
+        None => false,
+        Some(Value::Str(kind)) if &**kind == "text" => false,
+        Some(Value::Str(kind)) if &**kind == "bytes" => true,
+        Some(other) => {
+            return Err(format!(
+                "os.run の `as` は \"text\" か \"bytes\" です（{other}）"
+            ));
+        }
+    };
     Ok(RunOptions {
         cwd: text("cwd")?,
         env,
-        stdin: text("stdin")?,
+        stdin,
+        as_bytes,
         timeout,
     })
 }
@@ -234,6 +258,7 @@ fn run(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
             cwd: None,
             env: Vec::new(),
             stdin: None,
+            as_bytes: false,
             timeout: None,
         },
     };
@@ -291,7 +316,7 @@ fn spawn_and_wait(command: &str, arguments: &[String], options: RunOptions) -> V
         let mut pipe = child.stdin.take().expect("stdin は piped にしてある");
         thread::spawn(move || {
             // 子プロセスが先に終わると書き込みに失敗するが、それは問題にしない
-            let _ = pipe.write_all(input.as_bytes());
+            let _ = pipe.write_all(&input);
         })
     });
     let out_thread = reader(child.stdout.take().expect("stdout は piped にしてある"));
@@ -327,10 +352,15 @@ fn spawn_and_wait(command: &str, arguments: &[String], options: RunOptions) -> V
     };
 
     let text = |bytes: Vec<u8>, name: &str| {
-        String::from_utf8(bytes).map_err(|_| {
+        if options.as_bytes {
+            return Ok(Value::bytes(bytes));
+        }
+        String::from_utf8(bytes).map(string).map_err(|_| {
             error_value(
                 "parse",
-                format!("`{command}` の{name}が UTF-8 ではありません"),
+                format!(
+                    "`{command}` の{name}が UTF-8 ではありません（`\"as\": \"bytes\"` を指定するとバイト列で受け取れます）"
+                ),
             )
         })
     };
@@ -344,8 +374,8 @@ fn spawn_and_wait(command: &str, arguments: &[String], options: RunOptions) -> V
     let mut result = Map::default();
     result.insert("status".into(), Value::Num(f64::from(code)));
     result.insert("ok".into(), Value::Bool(code == 0));
-    result.insert("stdout".into(), string(stdout));
-    result.insert("stderr".into(), string(stderr));
+    result.insert("stdout".into(), stdout);
+    result.insert("stderr".into(), stderr);
     new_map(result)
 }
 

@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-12
+
+バイト列と暗号（[design.md 5.14](docs/design.md)）。
+
+### 追加
+- バイト列の型 `bytes`（変更できない。`type_of` は `"bytes"`、表示は `<bytes 68690a>`）
+  - 作る: `str_to_bytes` `bytes_from_arr` `bytes_new` `bytes_concat`。読む: `bytes_len` `@b{i}` `bytes_slice` `bytes_to_arr` `bytes_find` `bytes_to_str`（UTF-8 でなければ `parse` のエラー値）
+  - `==` で中身を比べられる。書き換え（`@b{0} = 1`）は実行時エラー。JSON にはできない
+- バイナリのファイル入出力 `file_read_bytes` `file_write_bytes` `file_append_bytes`
+- `std:http` の `body` にバイト列を渡せる。`"as": "bytes"` でレスポンスの本文をバイト列で受け取れる（UTF-8 でない本文もエラーにならない）
+- `std:os` の `run` の `stdin` にバイト列を渡せる。`"as": "bytes"` で `stdout` と `stderr` をバイト列で受け取れる
+- `std:encoding`（自前の実装）: `base64_encode` `base64_decode` `base64url_encode` `base64url_decode` `hex_encode` `hex_decode` `url_encode` `url_decode`。引数はバイト列か文字列。正しくない入力は `parse` のエラー値
+- `std:crypto`（`crypto` feature、既定で有効。暗号は自前で書かず `ring` と `md-5` を使う）: `hash`（`sha1` `sha256` `sha384` `sha512` `md5`）`hmac` `random_bytes` `uuid`（v4）`equals`（時間が中身によらない比較）
+
 ## [0.12.0] - 2026-10-12
 
 システムまわり（[design.md 5.13](docs/design.md)）。

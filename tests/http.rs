@@ -23,6 +23,8 @@ struct Request {
     method: String,
     target: String,
     headers: Vec<(String, String)>,
+    /// 受け取ったままのバイト
+    raw_body: Vec<u8>,
     body: String,
 }
 
@@ -75,6 +77,7 @@ fn read_request(stream: &mut TcpStream) -> Option<Request> {
         target,
         headers,
         body: String::from_utf8_lossy(&body).into_owned(),
+        raw_body: body,
     })
 }
 
@@ -127,6 +130,11 @@ fn handle(mut stream: TcpStream) {
             respond(&mut stream, "200 OK", &[], b"late");
         }
         "/binary" => respond(&mut stream, "200 OK", &[], &[0xff, 0xfe, 0xfd]),
+        // 受け取った本文を、16 進数の文字列にして返す
+        "/bodyhex" => {
+            let hex: String = req.raw_body.iter().map(|b| format!("{b:02x}")).collect();
+            respond(&mut stream, "200 OK", &[], hex.as_bytes());
+        }
         _ => respond(&mut stream, "500 Internal Server Error", &[], b"?"),
     }
 }
@@ -337,6 +345,60 @@ fn option_mistakes_are_runtime_errors() {
         assert!(
             message.contains(expected),
             "{script}\n期待: {expected}\n実際: {message}"
+        );
+    }
+}
+
+#[test]
+fn binary_bodies() {
+    let port = start_server();
+    let out = run(
+        port,
+        r#"
+@r := @http.get[@base + "/binary", {"as": "bytes"}]?
+log[@r{"status"}, type_of[@r{"body"}], @r{"body"}, bytes_len[@r{"body"}]]
+@t := @http.get[@base + "/hello", {"as": "text"}]?
+log[type_of[@t{"body"}]]
+// バイト列を送る。送った中身がそのまま届く
+@sent := @http.post[@base + "/bodyhex", {"body": bytes_from_arr[{0, 255, 10, 128}]}]?
+log[@sent{"body"}]
+@str := @http.post[@base + "/bodyhex", {"body": "日本"}]?
+log[@str{"body"}]
+@echoed := @http.post[@base + "/bodyhex", {"body": @http.get[@base + "/binary", {"as": "bytes"}]?{"body"}}]?
+log[@echoed{"body"}]
+"#,
+    );
+    assert_eq!(
+        out,
+        "200 bytes <bytes fffefd> 3
+string
+00ff0a80
+e697a5e69cac
+fffefd
+"
+    );
+}
+
+#[test]
+fn binary_option_mistakes() {
+    let port = start_server();
+    let cases = [
+        (
+            r#"@http.get[@base, {"as": "json"}]"#,
+            "`as` は \"text\" か \"bytes\" です",
+        ),
+        (
+            r#"@http.post[@base, {"body": 1}]"#,
+            "`body` は文字列かバイト列です",
+        ),
+    ];
+    for (script, expected) in cases {
+        let message = run_err(port, script);
+        assert!(
+            message.contains(expected),
+            "{script}
+期待: {expected}
+実際: {message}"
         );
     }
 }

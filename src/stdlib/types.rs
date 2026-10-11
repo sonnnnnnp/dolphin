@@ -21,6 +21,7 @@ fn type_of(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         Value::Func(_) | Value::Native(_) => "function",
         Value::Module(_) => "module",
         Value::Error(_) => "error",
+        Value::Bytes(_) => "bytes",
     };
     Ok(Value::Str(name.into()))
 }

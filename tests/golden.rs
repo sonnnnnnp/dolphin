@@ -1,6 +1,7 @@
 //! tests/cases/*.dol を実行し、出力を同名の *.out と比較する
 //! エラーになるケースは、エラー表示も含めて *.out に書く。
-//! `http` feature を外したときだけ出力が変わるケースは、`名前.nohttp.out` に書く
+//! `http` feature を外したときだけ出力が変わるケースは、`名前.nohttp.out` に書く。
+//! 名前が `crypto` で始まるケースは、`crypto` feature を外した版では動かさない
 
 use std::fs;
 use std::path::Path;
@@ -16,6 +17,10 @@ fn golden() {
             continue;
         }
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        // `crypto` feature を外した版では、std:crypto を使うケースは動かさない
+        if name.starts_with("crypto") && !cfg!(feature = "crypto") {
+            continue;
+        }
         let src = fs::read_to_string(&path).unwrap();
         let variant = path.with_extension("nohttp.out");
         let expected_path = if !cfg!(feature = "http") && variant.exists() {

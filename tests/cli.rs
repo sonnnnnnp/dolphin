@@ -189,3 +189,23 @@ log[err_kind[@badcwd]]
         "true not_found\ntrue timeout true\nnot_found\n"
     );
 }
+
+#[test]
+fn run_with_binary_stdin_and_output() {
+    let output = run_in_child(
+        "binary",
+        "log[\"got \" + input[]]
+",
+        r#"
+@r := @os.run[@exe, {@child}, {"stdin": bytes_from_arr[{104, 105, 10}], "as": "bytes"}]?
+log[type_of[@r{"stdout"}], bytes_to_str[@r{"stdout"}], type_of[@r{"stderr"}], bytes_len[@r{"stderr"}]]
+"#,
+    );
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(
+        stdout(&output),
+        "bytes got hi
+ bytes 0
+"
+    );
+}

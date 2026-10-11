@@ -1,0 +1,4 @@
+crypto_algorithm_error.dol:2:5: エラー: crypto.hash の方式 "crc32" は使えません（使えるのは sha1、sha256、sha384、sha512、md5）
+  |
+2 | log[@c.hash["crc32", "x"]]
+  |     ^

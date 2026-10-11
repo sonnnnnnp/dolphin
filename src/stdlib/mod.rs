@@ -3,6 +3,10 @@
 //! 関数の一覧と仕様は design.md 5.5
 
 pub mod array;
+pub mod bytes;
+#[cfg(feature = "crypto")]
+pub mod crypto;
+pub mod encoding;
 pub mod error;
 pub mod fs;
 #[cfg(feature = "http")]
@@ -36,6 +40,10 @@ pub fn register(interp: &mut Interpreter<'_>) {
     map::register(interp);
     math::register(interp);
     types::register(interp);
+    bytes::register(interp);
+    encoding::register(interp);
+    #[cfg(feature = "crypto")]
+    crypto::register(interp);
     path::register(interp);
     os::register(interp);
     time::register(interp);
@@ -86,6 +94,26 @@ fn str_arg<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v str, Strin
     match &args[i] {
         Value::Str(s) => Ok(s),
         other => Err(type_error(name, i, "文字列", other)),
+    }
+}
+
+fn bytes_arg<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v Rc<[u8]>, String> {
+    match &args[i] {
+        Value::Bytes(bytes) => Ok(bytes),
+        other => Err(type_error(name, i, "バイト列", other)),
+    }
+}
+
+/// バイト列か文字列（UTF-8 として扱う）を、バイトの並びとして受け取る
+fn data_arg<'v>(
+    name: &str,
+    args: &'v [Value],
+    i: usize,
+) -> Result<std::borrow::Cow<'v, [u8]>, String> {
+    match &args[i] {
+        Value::Bytes(bytes) => Ok(std::borrow::Cow::Borrowed(&bytes[..])),
+        Value::Str(s) => Ok(std::borrow::Cow::Borrowed(s.as_bytes())),
+        other => Err(type_error(name, i, "バイト列か文字列", other)),
     }
 }
 

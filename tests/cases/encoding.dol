@@ -1,0 +1,20 @@
+// std:encoding（design.md 5.14）
+@e := import["std:encoding"]
+
+// base64（RFC 4648 のテストベクトル）
+log[@e.base64_encode[""], @e.base64_encode["f"], @e.base64_encode["fo"], @e.base64_encode["foo"], @e.base64_encode["foobar"]]
+log[@e.base64_decode["Zm9vYmE="], bytes_to_str[@e.base64_decode["Zm9vYmFy"]], @e.base64_decode[""]]
+log[@e.base64_encode[bytes_from_arr[{251, 255, 254}]], @e.base64url_encode[bytes_from_arr[{251, 255, 254}]], @e.base64url_encode["f"]]
+log[@e.base64url_decode["-__-"], @e.base64url_decode["Zg"], @e.base64_decode["Zg"], @e.base64_decode["Zm9v\nYmFy"]]
+log[@e.base64_encode["日本語"], bytes_to_str[@e.base64_decode[@e.base64_encode["日本語"]]]]
+log[err_kind[@e.base64_decode["Zm9v!"]], err_kind[@e.base64_decode["Z"]], err_kind[@e.base64_decode["-__-"]]]
+log[err_message[@e.base64_decode["Zm9v!"]]]
+
+// 16 進数
+log[@e.hex_encode[bytes_from_arr[{0, 15, 16, 255}]], @e.hex_encode["hi"], @e.hex_decode["000F10ff"], @e.hex_decode[""]]
+log[err_message[@e.hex_decode["abc"]], err_kind[@e.hex_decode["zz"]]]
+
+// URL のパーセントエンコード
+@enc := @e.url_encode["a b/c?d=日本~-._"]
+log[@enc, @e.url_decode[@enc], @e.url_decode["a+b%20c"]]
+log[err_kind[@e.url_decode["%zz"]], err_kind[@e.url_decode["%"]], err_kind[@e.url_decode["%ff"]]]

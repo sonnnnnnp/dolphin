@@ -1,0 +1,2 @@
+@b := str_to_bytes["ab"]
+@b{0} = 1

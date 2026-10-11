@@ -100,7 +100,9 @@ struct Req {
     url: String,
     method: String,
     headers: Vec<(String, String)>,
-    body: Option<String>,
+    body: Option<Vec<u8>>,
+    /// レスポンスの本文をバイト列で返すか（`"as": "bytes"`）
+    as_bytes: bool,
     timeout: Duration,
     redirects: u32,
 }
@@ -114,7 +116,7 @@ impl Req {
         options: &Map,
         skip: &[&str],
     ) -> Result<Req, String> {
-        const KNOWN: [&str; 8] = [
+        const KNOWN: [&str; 9] = [
             "url",
             "method",
             "headers",
@@ -123,6 +125,7 @@ impl Req {
             "json",
             "timeout",
             "redirects",
+            "as",
         ];
         for (key, _) in options.iter() {
             if !KNOWN.contains(&&**key) {
@@ -179,8 +182,11 @@ impl Req {
             (Some(_), Some(_)) => {
                 return Err(format!("{name} の `body` と `json` は同時に指定できません"));
             }
-            (Some(Value::Str(body)), None) => Some(body.to_string()),
-            (Some(other), None) => return Err(option_type(name, "body", "文字列", other)),
+            (Some(Value::Str(body)), None) => Some(body.as_bytes().to_vec()),
+            (Some(Value::Bytes(body)), None) => Some(body.to_vec()),
+            (Some(other), None) => {
+                return Err(option_type(name, "body", "文字列かバイト列", other));
+            }
             (None, Some(value)) => {
                 if !headers
                     .iter()
@@ -188,9 +194,19 @@ impl Req {
                 {
                     headers.push(("Content-Type".into(), "application/json".into()));
                 }
-                Some(to_json_string(name, value, None)?)
+                Some(to_json_string(name, value, None)?.into_bytes())
             }
             (None, None) => None,
+        };
+        let as_bytes = match options.get("as") {
+            None => false,
+            Some(Value::Str(kind)) if &**kind == "text" => false,
+            Some(Value::Str(kind)) if &**kind == "bytes" => true,
+            Some(other) => {
+                return Err(format!(
+                    "{name} の `as` は \"text\" か \"bytes\" です（{other}）"
+                ));
+            }
         };
 
         let timeout = match options.get("timeout") {
@@ -219,6 +235,7 @@ impl Req {
             method,
             headers,
             body,
+            as_bytes,
             timeout,
             redirects,
         })
@@ -276,7 +293,7 @@ fn send(req: Req) -> Value {
             Err(e) => return request_error(&e),
         },
     };
-    match result.and_then(read_response) {
+    match result.and_then(|response| read_response(response, req.as_bytes)) {
         Ok(value) => value,
         Err(e) => failure(&e, &req.url),
     }
@@ -286,8 +303,11 @@ fn request_error(e: &http::Error) -> Value {
     error_value("request", format!("リクエストが正しくありません: {e}"))
 }
 
-/// レスポンスをマップにする。本文は UTF-8 の文字列として読む
-fn read_response(mut response: http::Response<ureq::Body>) -> Result<Value, ureq::Error> {
+/// レスポンスをマップにする。本文は、UTF-8 の文字列として読む（`as_bytes` ならバイト列）
+fn read_response(
+    mut response: http::Response<ureq::Body>,
+    as_bytes: bool,
+) -> Result<Value, ureq::Error> {
     let status = response.status().as_u16();
     let mut headers = Map::default();
     for (name, value) in response.headers() {
@@ -298,17 +318,18 @@ fn read_response(mut response: http::Response<ureq::Body>) -> Result<Value, ureq
         };
         headers.insert(name.as_str().into(), Value::Str(merged.into()));
     }
-    let body = response
-        .body_mut()
-        .with_config()
-        .limit(MAX_BODY)
-        .read_to_string()?;
+    let config = response.body_mut().with_config().limit(MAX_BODY);
+    let body = if as_bytes {
+        Value::bytes(config.read_to_vec()?)
+    } else {
+        Value::Str(config.read_to_string()?.into())
+    };
 
     let mut map = Map::default();
     map.insert("status".into(), Value::Num(f64::from(status)));
     map.insert("ok".into(), Value::Bool((200..300).contains(&status)));
     map.insert("headers".into(), Value::Map(Rc::new(RefCell::new(headers))));
-    map.insert("body".into(), Value::Str(body.into()));
+    map.insert("body".into(), body);
     Ok(Value::Map(Rc::new(RefCell::new(map))))
 }
 

@@ -1,0 +1,4 @@
+bytes_from_arr_error.dol:1:5: エラー: bytes_from_arr の 1 番目は 0〜255 の整数です（256）
+  |
+1 | log[bytes_from_arr[{1, 256}]]
+  |     ^

@@ -1,0 +1,17 @@
+// バイナリのファイル入出力（design.md 5.14）
+@path := "target/golden_file_bytes.bin"
+@data := bytes_from_arr[{0, 1, 2, 255, 254, 10, 13, 0}]
+file_write_bytes[@path, @data]
+@back := file_read_bytes[@path]
+log[@back, @back == @data, file_info[@path]{"size"}]
+file_append_bytes[@path, bytes_from_arr[{7, 7}]]
+log[file_read_bytes[@path], bytes_len[file_read_bytes[@path]]]
+
+// 文字列として読むと、UTF-8 ではないのでエラー値
+log[err_kind[file_read[@path]]]
+
+// 文字列のファイルは、バイト列としても読める
+file_write[@path, "日本"]
+log[file_read_bytes[@path], bytes_to_str[file_read_bytes[@path]]]
+file_remove[@path]
+log[err_kind[file_read_bytes[@path]]]

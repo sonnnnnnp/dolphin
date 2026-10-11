@@ -1,0 +1,4 @@
+bytes_arg_error.dol:1:5: エラー: bytes_len の 1 番目の引数はバイト列です（文字列が渡されました）
+  |
+1 | log[bytes_len["abc"]]
+  |     ^

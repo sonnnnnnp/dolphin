@@ -1,0 +1,4 @@
+bytes_from_arr_type_error.dol:1:5: エラー: bytes_from_arr の 1 番目は数値です（文字列が渡されました）
+  |
+1 | log[bytes_from_arr[{1, "a"}]]
+  |     ^

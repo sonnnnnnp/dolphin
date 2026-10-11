@@ -1,0 +1,2 @@
+@e := import["std:encoding"]
+log[@e.hex_encode[1]]

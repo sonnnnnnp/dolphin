@@ -1,0 +1,4 @@
+bytes_json_error.dol:2:5: エラー: json.stringify: バイト列は JSON にできません
+  |
+2 | log[@j.stringify[{"b": str_to_bytes["x"]}]]
+  |     ^

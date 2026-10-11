@@ -840,10 +840,17 @@ impl<'a> Interpreter<'a> {
     /// 組み込みモジュール（`std:json` など）。同じものは同じモジュールを返す
     fn import_std(&mut self, name: &str, span: Span) -> RResult<Value> {
         let Some((&key, functions)) = self.std_registry.get_key_value(name) else {
-            if name == "std:http" {
+            let missing_feature = match name {
+                "std:http" if !cfg!(feature = "http") => Some("http"),
+                "std:crypto" if !cfg!(feature = "crypto") => Some("crypto"),
+                _ => None,
+            };
+            if let Some(feature) = missing_feature {
                 return Err(RuntimeError::new(
                     span,
-                    "この版には `std:http` が含まれていません（`http` feature を付けてビルドしてください）",
+                    format!(
+                        "この版には `{name}` が含まれていません（`{feature}` feature を付けてビルドしてください）"
+                    ),
                 ));
             }
             let mut names: Vec<&str> = self.std_registry.keys().copied().collect();
@@ -929,6 +936,10 @@ fn index_get(container: &Value, key: &Value, target_span: Span, key_span: Span) 
                 .cloned()
                 .ok_or_else(|| RuntimeError::new(key_span, format!("キー {k:?} がありません")))
         }
+        Value::Bytes(bytes) => {
+            let i = to_index(key, bytes.len(), key_span)?;
+            Ok(Value::Num(f64::from(bytes[i])))
+        }
         other => Err(not_container(other, target_span)),
     }
 }
@@ -951,6 +962,12 @@ fn index_set(
             let k = to_key(key, key_span)?;
             map.borrow_mut().insert(k, value);
         }
+        Value::Bytes(_) => {
+            return Err(RuntimeError::new(
+                target_span,
+                "バイト列は書き換えられません（作り直してください）",
+            ));
+        }
         other => return Err(not_container(other, target_span)),
     }
     Ok(())
@@ -960,7 +977,7 @@ fn not_container(value: &Value, span: Span) -> RuntimeError {
     RuntimeError::new(
         span,
         format!(
-            "添字を使えるのは配列とマップだけです（{}でした）",
+            "添字を使えるのは配列・マップ・バイト列だけです（{}でした）",
             value.type_name()
         ),
     )

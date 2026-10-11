@@ -1,0 +1,4 @@
+bytes_slice_error.dol:1:5: エラー: bytes_slice の範囲 1〜4 は使えません（0 ≦ 開始 ≦ 終了 ≦ 3）
+  |
+1 | log[bytes_slice[str_to_bytes["abc"], 1, 4]]
+  |     ^

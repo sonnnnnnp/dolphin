@@ -1,0 +1,11 @@
+ Zg== Zm8= Zm9v Zm9vYmFy
+<bytes 666f6f6261> foobar <bytes >
++//+ -__- Zg
+<bytes fbfffe> <bytes 66> <bytes 66> <bytes 666f6f626172>
+5pel5pys6Kqe 日本語
+parse parse parse
+base64 に使えない文字 '!' があります（5 文字目）
+000f10ff 6869 <bytes 000f10ff> <bytes >
+16 進数の桁数が奇数です parse
+a%20b%2Fc%3Fd%3D%E6%97%A5%E6%9C%AC~-._ a b/c?d=日本~-._ a+b c
+parse parse parse

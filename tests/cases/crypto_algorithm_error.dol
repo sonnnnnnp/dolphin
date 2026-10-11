@@ -1,0 +1,2 @@
+@c := import["std:crypto"]
+log[@c.hash["crc32", "x"]]

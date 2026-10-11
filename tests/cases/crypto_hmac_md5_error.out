@@ -1,0 +1,4 @@
+crypto_hmac_md5_error.dol:2:5: エラー: crypto.hmac の方式 "md5" は使えません（使えるのは sha1、sha256、sha384、sha512）
+  |
+2 | log[@c.hmac["md5", "k", "x"]]
+  |     ^

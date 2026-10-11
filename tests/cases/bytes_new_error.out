@@ -1,0 +1,4 @@
+bytes_new_error.dol:1:5: エラー: bytes_new の大きさは 0〜100000000 です（-1）
+  |
+1 | log[bytes_new[-1]]
+  |     ^

@@ -1,0 +1,1 @@
+log[bytes_slice[str_to_bytes["abc"], 1, 4]]

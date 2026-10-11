@@ -1,0 +1,35 @@
+// バイト列（design.md 5.14）。変更できない値
+@b := str_to_bytes["hi\n"]
+log[@b, type_of[@b], bytes_len[@b], @b{0}, @b{2}]
+log[bytes_to_arr[@b], bytes_from_arr[{104, 105, 10}] == @b, @b == str_to_bytes["hi"], @b == "hi\n"]
+log[bytes_new[3], bytes_len[bytes_new[0]], bytes_from_arr[{}]]
+
+// 日本語は UTF-8 の 3 バイト
+@jp := str_to_bytes["イルカ"]
+log[bytes_len[@jp], @jp, bytes_to_str[@jp]]
+
+// つなげる・切る・探す。文字列も渡せる（UTF-8 として）
+@c := bytes_concat[@b, "abc"]
+log[@c, bytes_concat["a", "b"], bytes_slice[@c, 1, 4], bytes_slice[@c, 2, 2]]
+log[bytes_find[@c, "abc"], bytes_find[@c, str_to_bytes["z"]], bytes_find[@c, ""], bytes_find[@c, bytes_from_arr[{10}]]]
+
+// UTF-8 ではないバイト列は、文字列にできない（エラー値）
+@bad := bytes_from_arr[{104, 255, 105}]
+@s := bytes_to_str[@bad]
+log[is_error[@s], err_kind[@s], err_message[@s]]
+
+// 長いバイト列は、先頭だけ表示する
+log[bytes_new[40]]
+@long := bytes_new[32]
+log[@long]
+
+// for で回せるのは配列だけ。bytes_to_arr を使う
+@sum := 0
+for @x in bytes_to_arr[@jp] (
+    @sum = @sum + @x
+)
+log[@sum]
+
+// map のキーにはできない。コピーは同じ値
+@m := {"b": @b}
+log[@m{"b"} == @b, arr_contains[{@b}, str_to_bytes["hi\n"]], arr_index_of[{@b}, @b]]

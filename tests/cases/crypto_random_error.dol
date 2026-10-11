@@ -1,0 +1,2 @@
+@c := import["std:crypto"]
+log[@c.random_bytes[70000]]

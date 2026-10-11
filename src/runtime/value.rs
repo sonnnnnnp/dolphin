@@ -28,6 +28,8 @@ pub enum Value {
     Native(NativeRef),
     /// 外の世界の失敗（design.md 8.6）。失敗しうる関数が、成功の値の代わりに返す
     Error(Rc<ErrorValue>),
+    /// バイト列（design.md 5.14）。変更できない
+    Bytes(Rc<[u8]>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -38,6 +40,10 @@ pub struct ErrorValue {
 }
 
 impl Value {
+    pub fn bytes(bytes: impl AsRef<[u8]>) -> Value {
+        Value::Bytes(Rc::from(bytes.as_ref()))
+    }
+
     pub fn error(kind: &str, message: impl Into<Rc<str>>) -> Value {
         Value::Error(Rc::new(ErrorValue {
             kind: kind.into(),
@@ -86,6 +92,7 @@ impl Value {
             Value::Module(_) => "モジュール",
             Value::Func(_) | Value::Native(_) => "関数",
             Value::Error(_) => "エラー",
+            Value::Bytes(_) => "バイト列",
         }
     }
 
@@ -106,6 +113,7 @@ impl Value {
             }
             (Value::Native(a), Value::Native(b)) => a.name == b.name,
             (Value::Error(a), Value::Error(b)) => a == b,
+            (Value::Bytes(a), Value::Bytes(b)) => a == b,
             (Value::Array(a), Value::Array(b)) => {
                 let (a, b) = (a.borrow(), b.borrow());
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.equals(y))
@@ -155,6 +163,7 @@ fn write_value(
         Value::Func(c) => return write!(f, "<関数 {}>", c.def.name),
         Value::Native(n) => return write!(f, "<組み込み関数 {}>", n.name),
         Value::Error(e) => return write!(f, "<エラー {}: {}>", e.kind, e.message),
+        Value::Bytes(b) => return write_bytes(f, b),
         Value::Array(items) => Rc::as_ptr(items).cast::<()>(),
         Value::Map(map) => Rc::as_ptr(map).cast::<()>(),
     };
@@ -197,9 +206,38 @@ fn write_value(
     result
 }
 
+/// `<bytes 68656c6c6f>`。33 バイト以上は、先頭 32 バイトだけ出す
+fn write_bytes(f: &mut fmt::Formatter<'_>, bytes: &[u8]) -> fmt::Result {
+    const SHOWN: usize = 32;
+    write!(f, "<bytes ")?;
+    for b in bytes.iter().take(SHOWN) {
+        write!(f, "{b:02x}")?;
+    }
+    if bytes.len() > SHOWN {
+        write!(f, " …（{} バイト）", bytes.len())?;
+    }
+    write!(f, ">")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bytes_display_and_equality() {
+        let b = Value::bytes([0x68, 0x69, 0x00, 0xff]);
+        assert_eq!(b.to_string(), "<bytes 686900ff>");
+        assert!(b.equals(&Value::bytes([0x68, 0x69, 0x00, 0xff])));
+        assert!(!b.equals(&Value::bytes([0x68])));
+        assert!(!b.equals(&Value::Str("hi".into())));
+        assert_eq!(b.type_name(), "バイト列");
+        assert_eq!(Value::bytes([]).to_string(), "<bytes >");
+        let long = Value::bytes(vec![0xab; 40]);
+        assert_eq!(
+            long.to_string(),
+            format!("<bytes {} …（40 バイト）>", "ab".repeat(32))
+        );
+    }
 
     #[test]
     fn self_referencing_array() {

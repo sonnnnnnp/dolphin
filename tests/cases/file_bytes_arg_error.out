@@ -1,0 +1,4 @@
+file_bytes_arg_error.dol:1:1: エラー: file_write_bytes の 2 番目の引数はバイト列です（文字列が渡されました）
+  |
+1 | file_write_bytes["target/x.bin", "text"]
+  | ^

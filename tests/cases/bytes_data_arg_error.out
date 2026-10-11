@@ -1,0 +1,4 @@
+bytes_data_arg_error.dol:2:5: エラー: encoding.hex_encode の 1 番目の引数はバイト列か文字列です（数値が渡されました）
+  |
+2 | log[@e.hex_encode[1]]
+  |     ^
