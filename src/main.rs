@@ -33,15 +33,17 @@ fn run_cli() -> i32 {
     if args.is_empty() {
         return start_repl();
     }
-    let (mode, path) = match args.as_slice() {
-        [flag, path] if flag == "--tokens" => (Mode::Tokens, path),
-        [flag, path] if flag == "--ast" => (Mode::Ast, path),
-        [path] => (Mode::Run, path),
-        _ => {
+    let (mode, path, script_args) = match args.as_slice() {
+        [flag, path] if flag == "--tokens" => (Mode::Tokens, path, &[][..]),
+        [flag, path] if flag == "--ast" => (Mode::Ast, path, &[][..]),
+        [flag, ..] if flag.starts_with("--") => {
             eprintln!("使い方: dolphin [--tokens | --ast] <file.dol>");
+            eprintln!("        dolphin <file.dol> [引数...]");
             eprintln!("        dolphin              （引数なしで対話モード）");
             return 2;
         }
+        [path, rest @ ..] => (Mode::Run, path, rest),
+        [] => unreachable!("引数なしは対話モードで処理済み"),
     };
     let src = match fs::read_to_string(path) {
         Ok(src) => src,
@@ -54,7 +56,13 @@ fn run_cli() -> i32 {
     let result = match mode {
         Mode::Run => {
             let dir = Path::new(path).parent().unwrap_or(Path::new(""));
-            dolphin::run_source_in(&src, dir.to_path_buf(), &mut io::stdout())
+            let args = script_args.to_vec();
+            match dolphin::run_script(&src, dir.to_path_buf(), args, &mut io::stdout()) {
+                Ok(0) => Ok(()),
+                // `os.exit` で終わった
+                Ok(code) => return code,
+                Err(diag) => Err(diag),
+            }
         }
         Mode::Tokens => lexer::tokenize(&src).map(|tokens| {
             for token in tokens {

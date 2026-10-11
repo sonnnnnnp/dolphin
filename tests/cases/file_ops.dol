@@ -1,0 +1,47 @@
+// ファイルの操作（design.md 5.13）。target/golden_fs の下だけを使う
+@dir := "target/golden_fs"
+@left := file_remove_all[@dir]
+log[is_error[file_list[@dir]], err_kind[file_list[@dir]]]
+
+// ディレクトリを作る。途中も作り、すでにあれば何もしない
+log[file_mkdir[@dir + "/a/b"], file_mkdir[@dir + "/a/b"]]
+file_write[@dir + "/a/one.txt", "one"]
+file_write[@dir + "/two.txt", "twotwo"]
+file_write[@dir + "/Zed.txt", "z"]
+log[file_list[@dir], file_list[@dir + "/a"], file_list[@dir + "/a/b"]]
+
+// 情報
+@info := file_info[@dir + "/two.txt"]
+log[@info{"is_file"}, @info{"is_dir"}, @info{"size"}, type_of[@info{"modified"}], @info{"modified"} > 1000000000]
+@dinfo := file_info[@dir + "/a"]
+log[@dinfo{"is_file"}, @dinfo{"is_dir"}]
+log[err_kind[file_info[@dir + "/none"]]]
+
+// コピーと名前の変更。あれば置き換える
+file_copy[@dir + "/two.txt", @dir + "/copy.txt"]
+log[file_read[@dir + "/copy.txt"]]
+file_write[@dir + "/copy.txt", "changed"]
+file_copy[@dir + "/two.txt", @dir + "/copy.txt"]
+log[file_read[@dir + "/copy.txt"]]
+file_rename[@dir + "/copy.txt", @dir + "/a/moved.txt"]
+log[file_exists[@dir + "/copy.txt"], file_read[@dir + "/a/moved.txt"]]
+log[err_kind[file_rename[@dir + "/none", @dir + "/x"]], err_kind[file_copy[@dir + "/none", @dir + "/x"]]]
+log[is_error[file_copy[@dir + "/a", @dir + "/x"]]]
+
+// 消す。ディレクトリは、空でなければ file_remove では消せない
+log[err_kind[file_remove[@dir + "/none"]]]
+log[is_error[file_remove[@dir + "/a"]]]
+file_remove[@dir + "/a/moved.txt"]
+file_remove[@dir + "/a/one.txt"]
+file_remove[@dir + "/a/b"]
+file_remove[@dir + "/a"]
+log[file_list[@dir]]
+file_remove[@dir + "/Zed.txt"]
+
+// ディレクトリを中身ごと消す
+file_mkdir[@dir + "/deep/er/still"]
+file_write[@dir + "/deep/er/still/f.txt", "x"]
+file_remove_all[@dir + "/deep"]
+log[file_exists[@dir + "/deep"], file_list[@dir]]
+file_remove_all[@dir]
+log[file_exists[@dir], err_kind[file_remove_all[@dir]]]

@@ -489,7 +489,7 @@ log[@r{"status"}, @r{"ok"}, @r{"headers"}{"content-type"}]
 
 `std:math` の関数は IEEE 754 に従い、定義できない入力には `nan` や `inf` を返す（`@m.ln[-1]` は `nan`、`@m.ln[0]` は `-inf`）。基本の `sqrt` が負の数でエラーになるのとは別の方針（`sqrt` は今までどおり）。
 
-### 5.13 システムまわり（v0.12.0、案）
+### 5.13 システムまわり（v0.12.0、確定 2026-10-12）
 
 #### ファイルの残り（接頭辞なしの関数。`file_`）
 
@@ -542,7 +542,7 @@ log[@r{"status"}, @r{"ok"}, @r{"headers"}{"content-type"}]
 | `monotonic[]` | 経過時間の計測用。起点は不定で、戻らない（秒） |
 | `sleep[seconds]` | 待つ（インタプリタのスレッドが止まる）。負の数は実行時エラー |
 | `date[ts]` `date[ts, offset]` | マップ `{"year", "month", "day", "hour", "minute", "second", "millisecond", "weekday", "yday"}`。`weekday` は 0（日曜）〜6、`yday` は 1 月 1 日が 1 |
-| `timestamp[fields]` `timestamp[fields, offset]` | `date` の逆。`year` `month` `day` は必須、`hour` `minute` `second` `millisecond` は省略すると 0。範囲外（13 月、2 月 30 日など）はエラー値（`parse`） |
+| `timestamp[fields]` `timestamp[fields, offset]` | `date` の逆。`year` `month` `day` は必須、`hour` `minute` `second` `millisecond` は省略すると 0。範囲外（13 月、2 月 30 日など）はエラー値（`parse`）。`date` の結果をそのまま渡せるよう、`weekday` と `yday` は受け取って無視する。知らない項目は実行時エラー |
 | `format[ts, pattern]` `format[ts, pattern, offset]` | 書式にして文字列。`%Y`（年）`%m` `%d` `%H` `%M` `%S` `%f`（ミリ秒 3 桁）`%y` `%e`（空白埋めの日）`%j`（年内の日）`%a` `%A`（曜日の英語名）`%b` `%B`（月の英語名）`%p`（AM/PM）`%I`（12 時間）`%z`（`+0900`）`%%`。ほかの `%` は実行時エラー |
 | `parse[s, pattern]` | `format` と同じ書式で読む。`%z` があればその時差、なければ UTC として Unix 時刻にする。合わなければエラー値（`parse`）。`%a` `%A` `%b` `%B` は英語の名前（大文字小文字は区別しない） |
 | `iso[ts]` `iso[ts, offset]` | RFC 3339 の文字列（`2026-10-12T10:00:00.500Z`、時差があれば `+09:00`）。ミリ秒が 0 なら小数は省く |
@@ -552,7 +552,7 @@ log[@r{"status"}, @r{"ok"}, @r{"headers"}{"content-type"}]
 |---|---|---|
 | 暦 | グレゴリオ暦（紀元前も含め、プロレプティック）。うるう秒は扱わない | 案 |
 | 範囲 | 年は 1〜9999 | 案 |
-| システムの時差 | 今回は扱わない（`offset` を自分で渡す）。システムの時差を引く関数は、OS の API が要るので後で足す | 案 |
+| システムの時差 | 今回は扱わない（`offset` を自分で渡す）。システムの時差を引く関数は、OS の API が要るので後で足す | 確定 |
 | 名前の衝突 | `file_*` は基本の関数なので、接頭辞を持つ（`file_list` など） | 確定 |
 
 ---
@@ -610,7 +610,7 @@ log[@a]        // {1, 2, 3}
 |---|---|---|
 | 完了 | 文法の見直し（`$` 廃止、`:=`、添字 `{ }`）、関数値とクロージャ、`nil`・`for`・`range`、エラー値と `?`、組み込みモジュールと JSON、HTTP クライアント（v0.5.0〜v0.10.0） | 確定 |
 | A | **基本型の関数の穴**: `type_of`、配列（`sort` `slice` `reduce` など）、マップ（`values` `items` `merge` など）、文字列（`starts_with` `pad_left` など）、数値の書式、`std:math`（5.12） | 完了（v0.11.0） |
-| B | **システムまわり**: `std:time`、`std:os`（引数・環境変数・終了コード・外部コマンド）、`std:path`、ファイルの残り（一覧・作成・削除・名前変更・情報） | v0.12.0 |
+| B | **システムまわり**: `std:time`、`std:os`（引数・環境変数・終了コード・外部コマンド）、`std:path`、ファイルの残り（一覧・作成・削除・名前変更・情報） | 完了（v0.12.0） |
 | C | **バイナリとハッシュ**: バイト列の型、バイナリのファイル入出力、`std:encoding`（base64・hex・URL）、`std:crypto`（sha256・hmac・md5・uuid・乱数） | v0.13.0 |
 | D | **開発の道具**: `assert`、`dolphin test`、`dolphin check`、`dolphin fmt`、デバッグ表示 | v0.14.0〜 |
 | E | **言語の書き心地**（1 項目ずつ案を出して決める）: 可変長引数、引数の既定値、式の文字列展開 `"@{a + b}"`、`@m.key`、条件式、複数行・生の文字列、数値リテラル（`0xff` `1_000`）、整数型とビット演算、分割代入 | v0.15.0〜 |

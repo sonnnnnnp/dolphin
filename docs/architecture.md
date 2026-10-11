@@ -90,6 +90,9 @@ dolphin/
 │     ├─ map.rs          map_len, map_keys, map_has, map_remove
 │     ├─ math.rs         abs, floor, …, random（乱数は xorshift64* を自前で実装）
 │     ├─ types.rs        type_of
+│     ├─ path.rs         std:path
+│     ├─ os.rs           std:os（args / env / exit / run など）
+│     ├─ time.rs         std:time（暦の計算は自前）
 │     ├─ error.rs        is_error, err_kind, err_message, err_new
 │     ├─ json.rs         std:json（parse / stringify / pretty。自前の実装、外部クレートなし）
 │     ├─ http.rs         std:http（feature = "http"。ureq + rustls）

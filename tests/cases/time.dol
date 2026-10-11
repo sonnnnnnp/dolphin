@@ -1,0 +1,40 @@
+// std:time（design.md 5.13）。時刻は Unix 時刻（秒）
+@t := import["std:time"]
+
+// 日付と時刻に分ける（日本時間は 540 分）
+log[@t.date[0]]
+@d := @t.date[1700000000.5]
+log[@d]
+log[@t.date[1700000000, 540]{"day"}, @t.date[1700000000, 540]{"hour"}, @t.date[-0.5]{"year"}, @t.date[951782400]{"yday"}]
+
+// 日付と時刻から作る。逆もできる
+log[@t.timestamp[{"year": 2023, "month": 11, "day": 14, "hour": 22, "minute": 13, "second": 20}]]
+log[@t.timestamp[{"year": 1970, "month": 1, "day": 1}], @t.timestamp[{"year": 2023, "month": 11, "day": 15, "hour": 7, "minute": 13, "second": 20}, 540]]
+log[@t.timestamp[@t.date[1700000000.25]] == 1700000000.25]
+log[err_message[@t.timestamp[{"year": 2023, "month": 2, "day": 29}]]]
+log[err_kind[@t.timestamp[{"year": 2023, "month": 13, "day": 1}]], err_kind[@t.timestamp[{"year": 10000, "month": 1, "day": 1}]]]
+
+// 書式
+@ts := 1700000000.5
+log[@t.format[@ts, "%Y-%m-%d %H:%M:%S.%f"]]
+log[@t.format[@ts, "%A, %B %e, %Y (%a %b) day %j"]]
+log[@t.format[@ts, "%I:%M %p %z", 540], @t.format[@ts, "%y%%"], @t.format[0, "%I %p"]]
+log[@t.iso[0], @t.iso[@ts], @t.iso[@ts, 540], @t.iso[1700000000, -330]]
+
+// 読む
+log[@t.parse["2023-11-14 22:13:20", "%Y-%m-%d %H:%M:%S"], @t.parse["14 Nov 2023", "%d %b %Y"]]
+log[@t.parse["Tue, 14 Nov 2023 22:13:20 +0900", "%a, %d %b %Y %H:%M:%S %z"]]
+log[@t.parse_iso["2023-11-14T22:13:20Z"], @t.parse_iso["2023-11-15T07:13:20+09:00"], @t.parse_iso["2023-11-14T22:13:20.5Z"]]
+log[@t.parse_iso[@t.iso[@ts, 540]] == @ts]
+@bad := @t.parse["2023-02-30", "%Y-%m-%d"]
+log[err_kind[@bad]]
+log[err_message[@bad]]
+log[err_message[@t.parse["2023/11/14", "%Y-%m-%d"]]]
+log[err_kind[@t.parse_iso["2023-11-14T22:13:20"]], err_kind[@t.parse_iso["yesterday"]]]
+
+// 現在時刻と経過時間
+@a := @t.now[]
+@m1 := @t.monotonic[]
+@t.sleep[0.02]
+@m2 := @t.monotonic[]
+log[@a > 1700000000, @m2 - @m1 >= 0.019, @t.now[] >= @a]

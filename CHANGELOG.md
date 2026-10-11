@@ -7,6 +7,22 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-12
+
+システムまわり（[design.md 5.13](docs/design.md)）。
+
+### 追加
+- ファイルの関数 `file_list` `file_info` `file_mkdir` `file_remove` `file_remove_all` `file_rename` `file_copy`。失敗はエラー値（種類に `exists` を追加）
+- `std:path`: `join` `dirname` `basename` `stem` `ext` `normalize` `is_absolute` `absolute`、変数 `sep`。出力は常に `/` 区切りで、システムによらず同じ結果になる
+- `std:os`: `args` `env` `env_all` `cwd` `chdir` `exit` `platform` `temp_dir` `run`
+  - `run[command, args, options]` は外部コマンドを実行して待つ（シェルは通さない）。`cwd` `env` `stdin` `timeout` を指定でき、`{"status", "ok", "stdout", "stderr"}` を返す。起動の失敗・時間切れ・UTF-8 でない出力はエラー値
+  - `exit[code]` はその場でスクリプトを終了し、出力を書き出してから終了コードを返す（関数の中・コールバックの中・import したファイルの中からも終われる）
+- `std:time`（外部クレートなしの自前の暦の計算）: `now` `monotonic` `sleep` `date` `timestamp` `format` `parse` `iso` `parse_iso`
+  - 時刻は Unix 時刻（秒）、時差は UTC からの分。年は 1〜9999、グレゴリオ暦。システムの時差は扱わない
+  - `format` / `parse` の書式は `%Y %m %d %H %M %S %f %y %e %j %a %A %b %B %p %I %z %%`
+- コマンドライン引数。`dolphin script.dol a b` と書くと、`os.args[]` が `{"a", "b"}` になる
+- 組み込みモジュールが文字列の定数を持てるようになった（`std:path` の `sep`）
+
 ## [0.11.0] - 2026-10-12
 
 基本型の関数の穴をふさいだ（[design.md 5.12](docs/design.md)）。配列・マップをその場で書き換えるのは `push` `pop` `insert` `remove` `clear` だけで、ほかは新しい値を返す。

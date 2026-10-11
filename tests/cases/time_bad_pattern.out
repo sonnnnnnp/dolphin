@@ -1,0 +1,4 @@
+time_bad_pattern.dol:2:5: エラー: time.format: 書式の `%Q` は使えません
+  |
+2 | log[@t.format[0, "%Q"]]
+  |     ^

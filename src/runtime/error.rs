@@ -25,6 +25,9 @@ pub struct RuntimeError {
     /// 本物のエラーではなく、`?` が関数から抜けるための合図。返す値は
     /// `Interpreter::returning` にある。関数の呼び出しが受け取って、戻り値にする
     pub early_return: bool,
+    /// `os.exit` による終了の合図。終了コードは `Interpreter::exit_code` にある。
+    /// 実行の最上位（`Session`）が受け取って、エラーとして表示せずに実行を止める
+    pub exit: bool,
 }
 
 impl RuntimeError {
@@ -35,6 +38,7 @@ impl RuntimeError {
             trace: Vec::new(),
             origin: None,
             early_return: false,
+            exit: false,
         }
     }
 }

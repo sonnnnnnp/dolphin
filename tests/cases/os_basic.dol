@@ -1,0 +1,19 @@
+// std:os の基本（design.md 5.13）。環境に依存する値は、型や有無だけを確かめる
+@os := import["std:os"]
+log[@os.args[]]
+log[@os.env["DOLPHIN_SURELY_UNSET_VARIABLE"] == nil, @os.env[""] == nil, @os.env["a=b"] == nil]
+log[type_of[@os.env["PATH"]], map_len[@os.env_all[]] > 0]
+log[arr_contains[{"windows", "macos", "linux"}, @os.platform[]]]
+@cwd := @os.cwd[]
+log[type_of[@cwd], str_len[@cwd] > 0, str_contains[@cwd, "\\"]]
+log[file_exists[@os.temp_dir[]]]
+
+// chdir すると、ファイル関数の相対パスの基準が変わる
+file_mkdir["target/golden_os"]
+file_write["target/golden_os/here.txt", "here"]
+@changed := @os.chdir["target/golden_os"]
+log[@changed, file_read["here.txt"], file_exists["target"]]
+@back := @os.chdir[@cwd]
+log[@back, file_exists["target"]]
+log[err_kind[@os.chdir["no/such/directory"]]]
+file_remove_all["target/golden_os"]

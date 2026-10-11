@@ -1,0 +1,16 @@
+true not_found
+nil nil
+{"Zed.txt", "a", "two.txt"} {"b", "one.txt"} {}
+true false 6 number true
+false true
+not_found
+twotwo
+twotwo
+false twotwo
+not_found not_found
+true
+not_found
+true
+{"Zed.txt", "two.txt"}
+false {"two.txt"}
+false not_found

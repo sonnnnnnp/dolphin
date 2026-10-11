@@ -1,0 +1,4 @@
+time_offset_error.dol:2:5: エラー: time.date の時差 1440 分は使えません（-1439〜1439）
+  |
+2 | log[@t.date[0, 1440]]
+  |     ^

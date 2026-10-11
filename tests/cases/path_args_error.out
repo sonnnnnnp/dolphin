@@ -1,0 +1,4 @@
+path_args_error.dol:2:5: エラー: path.join の引数は 1 個以上です（0 個渡されました）
+  |
+2 | log[@p.join[]]
+  |     ^

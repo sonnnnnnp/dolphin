@@ -1,0 +1,8 @@
+/ a/b/c.txt a/b only /abs/c
+a/b  / /  a
+c.txt b ..  
+c .txt x.tar .gz  .bashrc 
+a/b/c a/c . . ../a /
+true false false
+true y.txt true
+true

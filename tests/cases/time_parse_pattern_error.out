@@ -1,0 +1,4 @@
+time_parse_pattern_error.dol:2:5: エラー: time.parse: 書式の `%j` は parse では使えません
+  |
+2 | log[@t.parse["2023", "%j"]]
+  |     ^

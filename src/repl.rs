@@ -46,7 +46,11 @@ pub fn run() -> i32 {
         buffer.push_str(&line);
         buffer.push('\n');
 
-        match session.eval(&buffer) {
+        let result = session.eval(&buffer);
+        if let Some(code) = session.exit_code() {
+            return code;
+        }
+        match result {
             Ok(Some(value)) if !matches!(value, Value::Nil) => println!("{}", Repr(&value)),
             Ok(_) => {}
             // 入力の途中なので、続きを読む

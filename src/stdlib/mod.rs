@@ -11,7 +11,10 @@ pub mod io;
 pub mod json;
 pub mod map;
 pub mod math;
+pub mod os;
+pub mod path;
 pub mod string;
+pub mod time;
 pub mod types;
 
 use std::cell::RefCell;
@@ -33,6 +36,9 @@ pub fn register(interp: &mut Interpreter<'_>) {
     map::register(interp);
     math::register(interp);
     types::register(interp);
+    path::register(interp);
+    os::register(interp);
+    time::register(interp);
 }
 
 // ---- 引数の検査（エラーはメッセージだけ返し、位置は Interpreter が付ける） ----

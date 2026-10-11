@@ -23,6 +23,13 @@ use crate::syntax::lexer::StrPart;
 use crate::syntax::span::Span;
 use crate::syntax::{lexer, parser};
 
+/// 組み込みモジュールの定数の値
+#[derive(Debug, Clone, Copy)]
+pub enum Const {
+    Num(f64),
+    Str(&'static str),
+}
+
 /// 組み込み関数。エラー位置は呼び出し側で付けるので、メッセージだけ返す
 pub type NativeFn = fn(&mut Interpreter<'_>, &[Value]) -> Result<Value, String>;
 
@@ -52,6 +59,10 @@ enum ModuleState {
 pub struct Interpreter<'a> {
     /// `log` の出力先。テストでは Vec<u8> を渡して出力を取り出す
     pub out: &'a mut dyn Write,
+    /// スクリプトに渡されたコマンドライン引数（`std:os` の `args`）
+    pub args: Vec<String>,
+    /// `os.exit` が呼ばれたときの終了コード。Some なら実行を止める
+    pub exit_code: Option<i32>,
     /// 今実行しているコードが属するモジュール。関数名はここから引く。
     /// 最初は実行中の本体で、import したファイルや、そのファイルの関数を実行している間は切り替わる
     current: Rc<Module>,
@@ -78,7 +89,7 @@ pub struct Interpreter<'a> {
     std_registry: HashMap<&'static str, Vec<(&'static str, NativeFn)>>,
     std_loaded: HashMap<&'static str, Rc<Module>>,
     /// 組み込みモジュールの定数（`std:math` の `pi` など）
-    std_consts: HashMap<&'static str, Vec<(&'static str, f64)>>,
+    std_consts: HashMap<&'static str, Vec<(&'static str, Const)>>,
     /// `?` が関数から返そうとしているエラー値（`RuntimeError::early_return` と組）
     returning: Option<Value>,
 }
@@ -89,6 +100,8 @@ impl<'a> Interpreter<'a> {
         let current = Rc::new(Module::new("".into(), base_dir.clone(), None));
         Self {
             out,
+            args: Vec::new(),
+            exit_code: None,
             env: Rc::clone(&current.globals),
             current,
             root_dir: base_dir,
@@ -120,7 +133,7 @@ impl<'a> Interpreter<'a> {
     pub fn register_module_constants(
         &mut self,
         name: &'static str,
-        constants: &[(&'static str, f64)],
+        constants: &[(&'static str, Const)],
     ) {
         self.std_consts.insert(name, constants.to_vec());
     }
@@ -543,10 +556,17 @@ impl<'a> Interpreter<'a> {
                 self.native_error = None;
                 Ok(value)
             }
-            Err(message) => Err(self
-                .native_error
-                .take()
-                .unwrap_or_else(|| RuntimeError::new(span, message))),
+            Err(message) => {
+                if self.exit_code.is_some() {
+                    let mut signal = RuntimeError::new(span, "os.exit による終了");
+                    signal.exit = true;
+                    return Err(signal);
+                }
+                Err(self
+                    .native_error
+                    .take()
+                    .unwrap_or_else(|| RuntimeError::new(span, message)))
+            }
         }
     }
 
@@ -785,6 +805,7 @@ impl<'a> Interpreter<'a> {
                 trace: vec![entry.clone()],
                 origin: Some(Rc::clone(&origin)),
                 early_return: false,
+                exit: false,
             })?;
 
         self.modules.insert(key.clone(), ModuleState::Loading);
@@ -844,7 +865,11 @@ impl<'a> Interpreter<'a> {
             module.natives.insert(short, NativeRef { name: full, f });
         }
         for &(name, value) in self.std_consts.get(key).into_iter().flatten() {
-            module.globals.declare(name, Value::Num(value));
+            let value = match value {
+                Const::Num(n) => Value::Num(n),
+                Const::Str(s) => Value::Str(s.into()),
+            };
+            module.globals.declare(name, value);
         }
         let module = Rc::new(module);
         self.std_loaded.insert(key, Rc::clone(&module));

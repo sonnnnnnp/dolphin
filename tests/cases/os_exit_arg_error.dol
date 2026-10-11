@@ -1,0 +1,2 @@
+@os := import["std:os"]
+@os.exit["a"]

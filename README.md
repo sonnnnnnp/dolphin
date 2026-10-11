@@ -107,6 +107,7 @@ count: 3
 | [v0.9.0](https://github.com/sonnnnnnp/dolphin/tree/v0.9.0) | 組み込みモジュールと `std:json` | [v0.8.0...v0.9.0](https://github.com/sonnnnnnp/dolphin/compare/v0.8.0...v0.9.0) |
 | [v0.10.0](https://github.com/sonnnnnnp/dolphin/tree/v0.10.0) | HTTP クライアント `std:http` | [v0.9.0...v0.10.0](https://github.com/sonnnnnnp/dolphin/compare/v0.9.0...v0.10.0) |
 | [v0.11.0](https://github.com/sonnnnnnp/dolphin/tree/v0.11.0) | 基本型の関数（配列・マップ・文字列・数値）、`type_of`、`std:math` | [v0.10.0...v0.11.0](https://github.com/sonnnnnnp/dolphin/compare/v0.10.0...v0.11.0) |
+| [v0.12.0](https://github.com/sonnnnnnp/dolphin/tree/v0.12.0) | `std:time`、`std:os`、`std:path`、ファイルの残り | [v0.11.0...v0.12.0](https://github.com/sonnnnnnp/dolphin/compare/v0.11.0...v0.12.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 
@@ -143,6 +144,9 @@ runtime_error.dol:5:12: エラー: 添字 5 は範囲外です（要素は 2 個
 ```sh
 # スクリプトを実行
 cargo run -- examples/hello.dol
+
+# 引数をつけて実行（スクリプトの中で os.args[] で読める）
+cargo run -- examples/hello.dol a b
 
 # 引数なしで対話モード（exit で終了）
 cargo run

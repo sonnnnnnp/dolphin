@@ -5,7 +5,7 @@ use std::cell::Cell;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{expect_args, int_arg, num_arg};
-use crate::runtime::interp::Interpreter;
+use crate::runtime::interp::{Const, Interpreter};
 use crate::runtime::value::Value;
 
 pub fn register(interp: &mut Interpreter<'_>) {
@@ -33,10 +33,10 @@ fn register_std_math(interp: &mut Interpreter<'_>) {
     interp.register_module_constants(
         "std:math",
         &[
-            ("pi", consts::PI),
-            ("e", consts::E),
-            ("inf", f64::INFINITY),
-            ("nan", f64::NAN),
+            ("pi", Const::Num(consts::PI)),
+            ("e", Const::Num(consts::E)),
+            ("inf", Const::Num(f64::INFINITY)),
+            ("nan", Const::Num(f64::NAN)),
         ],
     );
     interp.register_module(

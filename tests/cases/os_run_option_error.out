@@ -1,0 +1,4 @@
+os_run_option_error.dol:2:5: エラー: os.run に知らないオプション `nope` があります（使えるのは cwd、env、stdin、timeout）
+  |
+2 | log[@os.run["x", {}, {"nope": 1}]]
+  |     ^

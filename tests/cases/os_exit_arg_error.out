@@ -1,0 +1,4 @@
+os_exit_arg_error.dol:2:1: エラー: os.exit の 1 番目の引数は数値です（文字列が渡されました）
+  |
+2 | @os.exit["a"]
+  | ^

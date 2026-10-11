@@ -26,6 +26,20 @@ pub fn run_source_in(src: &str, base_dir: PathBuf, out: &mut dyn Write) -> Resul
     Session::with_base_dir(out, base_dir).run(src)
 }
 
+/// コマンドライン引数つきでスクリプトを実行し、終了コードを返す。`os.exit` で終われば
+/// その終了コード、最後まで実行できれば 0
+pub fn run_script(
+    src: &str,
+    base_dir: PathBuf,
+    args: Vec<String>,
+    out: &mut dyn Write,
+) -> Result<i32, Diagnostic> {
+    let mut session = Session::with_base_dir(out, base_dir);
+    session.interp.args = args;
+    session.run(src)?;
+    Ok(session.exit_code().unwrap_or(0))
+}
+
 /// 変数と関数を保ったまま、ソースを何回かに分けて実行する（REPL で使う）
 pub struct Session<'a> {
     interp: Interpreter<'a>,
@@ -41,6 +55,11 @@ impl<'a> Session<'a> {
         let mut interp = Interpreter::new(out, base_dir);
         stdlib::register(&mut interp);
         Self { interp }
+    }
+
+    /// `os.exit` が呼ばれていたら、その終了コード
+    pub fn exit_code(&self) -> Option<i32> {
+        self.interp.exit_code
     }
 
     /// `src` を実行する。最後の文が式なら、その値を返す（REPL で表示するため）
@@ -61,7 +80,11 @@ impl<'a> Session<'a> {
             |name| self.interp.callee(name),
             |name| self.interp.has_global(name),
         )?;
-        Ok(self.interp.run(&program, keep_last)?)
+        match self.interp.run(&program, keep_last) {
+            // `os.exit` はエラーではなく、静かに実行を止める
+            Err(e) if e.exit => Ok(None),
+            result => Ok(result?),
+        }
     }
 }
 

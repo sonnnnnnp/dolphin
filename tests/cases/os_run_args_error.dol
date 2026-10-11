@@ -1,0 +1,2 @@
+@os := import["std:os"]
+log[@os.run["x", {1}]]

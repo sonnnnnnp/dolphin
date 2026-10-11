@@ -1,0 +1,4 @@
+time_sleep_error.dol:2:1: エラー: time.sleep の秒数は 0 以上の数です（-1）
+  |
+2 | @t.sleep[-1]
+  | ^

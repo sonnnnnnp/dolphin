@@ -1,0 +1,13 @@
+// std:path（design.md 5.13）。出力は常に / 区切り
+@p := import["std:path"]
+log[@p.sep, @p.join["a", "b", "c.txt"], @p.join["a/", "b"], @p.join["only"], @p.join["a", "/abs", "c"]]
+log[@p.dirname["a/b/c.txt"], @p.dirname["a"], @p.dirname["/a"], @p.dirname["/"], @p.dirname[""], @p.dirname["a/b/"]]
+log[@p.basename["a/b/c.txt"], @p.basename["a/b/"], @p.basename["a/.."], @p.basename["/"], @p.basename[""]]
+log[@p.stem["a/b/c.txt"], @p.ext["a/b/c.txt"], @p.stem["x.tar.gz"], @p.ext["x.tar.gz"], @p.ext["noext"], @p.stem[".bashrc"], @p.ext[".bashrc"]]
+log[@p.normalize["a/./b//c"], @p.normalize["a/b/../c"], @p.normalize["a/.."], @p.normalize[""], @p.normalize["../a"], @p.normalize["/a/../.."]]
+log[@p.is_absolute["/a"], @p.is_absolute["a/b"], @p.is_absolute[""]]
+
+// absolute は、カレントディレクトリを基準にする
+@abs := @p.absolute["x/../y.txt"]
+log[@p.is_absolute[@abs], @p.basename[@abs], @p.basename[@p.dirname[@abs]] == @p.basename[@p.absolute["."]]]
+log[@p.join[@p.absolute["."], "y.txt"] == @abs]

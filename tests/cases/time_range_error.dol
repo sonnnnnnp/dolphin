@@ -1,0 +1,2 @@
+@t := import["std:time"]
+log[@t.date[253402300800]]

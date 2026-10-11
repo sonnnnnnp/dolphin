@@ -1,0 +1,2 @@
+@p := import["std:path"]
+log[@p.join[]]
