@@ -105,6 +105,16 @@ struct Resolver<'a> {
 
 impl<'a> Resolver<'a> {
     fn func_def(&self, def: &'a FuncDef) -> RResult {
+        let mut ctx = Ctx {
+            scopes: Vec::new(),
+            in_func: true,
+        };
+        self.func_body(def, &mut ctx)
+    }
+
+    /// 関数の本体を検査する。`ctx` は関数を囲むスコープ（無名関数が捕まえる範囲）。
+    /// 本体は引数と同じスコープ（引数と同じ名前を `:=` で宣言し直すとエラー）
+    fn func_body(&self, def: &'a FuncDef, ctx: &mut Ctx<'a>) -> RResult {
         let mut params = HashSet::new();
         for param in &def.params {
             if !params.insert(param.as_str()) {
@@ -114,12 +124,24 @@ impl<'a> Resolver<'a> {
                 ));
             }
         }
-        // 本体は引数と同じスコープ（引数と同じ名前を `:=` で宣言し直すとエラー）
-        let mut ctx = Ctx {
-            scopes: vec![params],
-            in_func: true,
-        };
-        self.stmts(&def.body, &mut ctx, false)
+        ctx.scopes.push(params);
+        // `break` / `continue` は関数の外側の `while` には効かない
+        let result = self.stmts(&def.body, ctx, false);
+        ctx.scopes.pop();
+        result
+    }
+
+    /// 呼び出せる関数か。組み込み関数と以前の入力で定義した関数を含む。
+    /// 戻り値は引数の数（組み込み関数は実行時に検査するので None）
+    fn callee_arity(&self, name: &str, span: Span) -> Result<Option<usize>, Diagnostic> {
+        match self.functions.get(name) {
+            Some(&n) => Ok(Some(n)),
+            None => match (self.lookup)(name) {
+                Some(Callee::User { arity }) => Ok(Some(arity)),
+                Some(Callee::Native) => Ok(None),
+                None => Err(Diagnostic::new(span, format!("未定義の関数 `{name}`"))),
+            },
+        }
     }
 
     fn stmts(&self, block: &'a [Stmt], ctx: &mut Ctx<'a>, in_loop: bool) -> RResult {
@@ -224,20 +246,21 @@ impl<'a> Resolver<'a> {
                 StrPart::Text(_) => Ok(()),
             }),
             ExprKind::Var(var) => self.var(var, expr.span, ctx),
-            ExprKind::Call { name, args } => {
-                let arity = match self.functions.get(name.as_str()) {
-                    Some(&n) => Some(n),
-                    None => match (self.lookup)(name) {
-                        Some(Callee::User { arity }) => Some(arity),
-                        Some(Callee::Native) => None,
-                        None => {
-                            return Err(Diagnostic::new(
-                                expr.span,
-                                format!("未定義の関数 `{name}`"),
-                            ));
-                        }
-                    },
+            ExprKind::FuncRef(name) => self.callee_arity(name, expr.span).map(|_| ()),
+            ExprKind::Lambda(def) => {
+                // 外側のスコープを捕まえるので、いまのスコープの上に引数のスコープを重ねる
+                let mut inner = Ctx {
+                    scopes: ctx.scopes.clone(),
+                    in_func: true,
                 };
+                self.func_body(def, &mut inner)
+            }
+            ExprKind::CallValue { callee, args } => {
+                self.expr(callee, ctx)?;
+                args.iter().try_for_each(|arg| self.expr(arg, ctx))
+            }
+            ExprKind::Call { name, args } => {
+                let arity = self.callee_arity(name, expr.span)?;
                 // 組み込み関数（arity が None）の引数の数は実行時に検査する
                 if let Some(n) = arity
                     && args.len() != n
@@ -466,6 +489,69 @@ add[@a, @b] (
     #[test]
     fn return_outside_function() {
         assert_eq!(check("# 1"), Err("`#` は関数の中でのみ使えます".into()));
+    }
+
+    #[test]
+    fn function_values() {
+        assert_eq!(
+            check(
+                "f[] (
+)
+@g := f
+log[@g[]]"
+            ),
+            Ok(())
+        );
+        assert_eq!(check("@g := log"), Ok(()));
+        assert_eq!(check("@g := nothing"), Err("未定義の関数 `nothing`".into()));
+    }
+
+    #[test]
+    fn lambda_captures_enclosing_scopes() {
+        // 外側の関数の変数が見える
+        assert_eq!(
+            check(
+                "f[@a] (
+    # [@b] ( # @a + @b )
+)"
+            ),
+            Ok(())
+        );
+        // 無名関数の変数は外から見えない
+        assert_eq!(
+            check(
+                "@f := [@b] ( @c := 1 )
+log[@c]"
+            ),
+            Err("未定義の変数 `@c`".into())
+        );
+        // 引数と同じスコープ
+        assert_eq!(
+            check("@f := [@b] ( @b := 1 )"),
+            Err("変数 `@b` はすでに宣言されています".into())
+        );
+        assert_eq!(
+            check("@f := [@b, @b] ( )"),
+            Err("引数 `@b` が重複しています".into())
+        );
+        // 無名関数の中の # は使える。break は外側の while に効かない
+        assert_eq!(check("@f := [] ( # 1 )"), Ok(()));
+        assert_eq!(
+            check(
+                "while true (
+    @f := [] ( break )
+)"
+            ),
+            Err("`break` は while の中でのみ使えます".into())
+        );
+        // 無名関数の中から、あとで宣言されるトップレベルの変数も見える
+        assert_eq!(
+            check(
+                "@f := [] ( # @later )
+@later := 1"
+            ),
+            Ok(())
+        );
     }
 
     #[test]

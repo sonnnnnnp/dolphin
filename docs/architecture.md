@@ -125,7 +125,7 @@ struct Stmt { kind: StmtKind, span: Span }
 enum StmtKind { FuncDef(Rc<FuncDef>), If { .. }, While { .. }, Return(..), Assign { .. }, Expr(..) }
 
 struct Expr { kind: ExprKind, span: Span }
-enum ExprKind { Number, Str, Bool, Var, Call, Array, Index, Unary, Binary }
+enum ExprKind { Number, Str, Bool, Var, Call, FuncRef, Lambda, CallValue, Array, Map, Member, MemberCall, Index, Unary, Binary }
 ```
 
 - すべての文と式が `Span` を持つ。実行時エラーにも行・列を出すため
@@ -142,6 +142,8 @@ enum Value {
     Array(Rc<RefCell<Vec<Value>>>),
     Map(Rc<RefCell<Map>>),           // runtime/map.rs
     Module(Rc<Module>),              // runtime/module.rs。import の結果
+    Func(Rc<Closure>),               // 関数値。定義と、作られた場所の Env の組
+    Native(NativeRef),               // 関数値になった組み込み関数
 }
 ```
 
@@ -208,7 +210,7 @@ main.dol:2:6: エラー: 文字列が閉じられていません
 |---|---|---|
 | 段階 4 HTTP | tokio は複数スレッドで動くが、インタプリタは `Rc` を使っていて別スレッドに渡せない（`Send` でない） | サーバーは別スレッドで動かし、リクエストはチャネルでインタプリタのスレッドに送る。インタプリタは 1 スレッドで順番に処理する（JavaScript のイベントループと同じ型） |
 | 段階 5 GUI | macroquad がメインループを握る | `gameloop` を「毎フレーム呼ばれる関数」として登録し、macroquad の側から呼ぶ（design.md 7.2） |
-| メモリ | `Rc` は循環参照を解放できない（配列が自分自身を含む場合など） | 当面は許容する。問題になったら GC を自作する。表示と `==` は循環しても止まるようにしてある |
+| メモリ | `Rc` は循環参照を解放できない（配列が自分自身を含む場合や、関数値が自分を作ったスコープの変数に入る場合など） | 当面は許容する。問題になったら GC を自作する。表示と `==` は循環しても止まるようにしてある |
 | スタック | tree-walking は Dolphin の呼び出し 1 段で Rust の再帰が何段も深くなり、Windows の既定スタック（1 MB）ではすぐあふれる | 呼び出しの深さを 1000 段に制限し、CLI は 256 MB のスタックを持つスレッドで動かす |
 | 性能 | tree-walking は遅い | 段階 6 でバイトコード VM にする。Resolver の層があるので差し替えやすい |
 

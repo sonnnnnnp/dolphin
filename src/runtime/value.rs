@@ -4,8 +4,11 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
+use super::env::Env;
+use super::interp::NativeFn;
 use super::map::Map;
 use super::module::Module;
+use crate::syntax::ast::FuncDef;
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -19,6 +22,37 @@ pub enum Value {
     Map(Rc<RefCell<Map>>),
     /// `import` の結果。同じものを指す（design.md 5.7）
     Module(Rc<Module>),
+    /// 関数値（design.md 5.8）。定義と、作られた場所のスコープの組
+    Func(Rc<Closure>),
+    /// 関数値になった組み込み関数
+    Native(NativeRef),
+}
+
+/// 関数値の実体。`env` は関数が作られた場所のスコープで、呼び出すたびにその内側に
+/// 新しいスコープを作る。名前つきの関数は、そのファイルのトップレベルのスコープを持つ
+pub struct Closure {
+    pub def: Rc<FuncDef>,
+    pub env: Rc<Env>,
+    pub module: Rc<Module>,
+}
+
+/// `env` が自分自身を指しうるので、名前だけ出す
+impl fmt::Debug for Closure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Closure({:?})", self.def.name)
+    }
+}
+
+#[derive(Clone)]
+pub struct NativeRef {
+    pub name: &'static str,
+    pub f: NativeFn,
+}
+
+impl fmt::Debug for NativeRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Native({:?})", self.name)
+    }
 }
 
 impl Value {
@@ -32,6 +66,7 @@ impl Value {
             Value::Array(_) => "配列",
             Value::Map(_) => "マップ",
             Value::Module(_) => "モジュール",
+            Value::Func(_) | Value::Native(_) => "関数",
         }
     }
 
@@ -46,6 +81,11 @@ impl Value {
             (Value::Array(a), Value::Array(b)) if Rc::ptr_eq(a, b) => true,
             (Value::Map(a), Value::Map(b)) if Rc::ptr_eq(a, b) => true,
             (Value::Module(a), Value::Module(b)) => Rc::ptr_eq(a, b),
+            // 同じ定義を同じスコープから取り出したものは等しい（`add == add`）
+            (Value::Func(a), Value::Func(b)) => {
+                Rc::ptr_eq(a, b) || (Rc::ptr_eq(&a.def, &b.def) && Rc::ptr_eq(&a.env, &b.env))
+            }
+            (Value::Native(a), Value::Native(b)) => a.name == b.name,
             (Value::Array(a), Value::Array(b)) => {
                 let (a, b) = (a.borrow(), b.borrow());
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.equals(y))
@@ -91,6 +131,9 @@ fn write_value(
         Value::Str(s) if quote_str => return write!(f, "{s:?}"),
         Value::Str(s) => return write!(f, "{s}"),
         Value::Module(m) => return write!(f, "<module {:?}>", &*m.name),
+        Value::Func(c) if c.def.name.is_empty() => return write!(f, "<関数>"),
+        Value::Func(c) => return write!(f, "<関数 {}>", c.def.name),
+        Value::Native(n) => return write!(f, "<組み込み関数 {}>", n.name),
         Value::Array(items) => Rc::as_ptr(items).cast::<()>(),
         Value::Map(map) => Rc::as_ptr(map).cast::<()>(),
     };
@@ -151,6 +194,36 @@ mod tests {
         let inner = Value::Array(Rc::new(RefCell::new(vec![Value::Num(1.0)])));
         let outer = Value::Array(Rc::new(RefCell::new(vec![inner.clone(), inner])));
         assert_eq!(outer.to_string(), "{{1}, {1}}");
+    }
+
+    #[test]
+    fn function_display_and_equality() {
+        use crate::syntax::ast::FuncDef;
+        use crate::syntax::span::Span;
+
+        let module = Rc::new(Module::new("".into(), Default::default(), None));
+        let def = |name: &str| {
+            Rc::new(FuncDef {
+                name: name.into(),
+                params: Vec::new(),
+                body: Vec::new(),
+                span: Span { line: 1, col: 1 },
+            })
+        };
+        let make = |def: &Rc<FuncDef>| {
+            Value::Func(Rc::new(Closure {
+                def: Rc::clone(def),
+                env: Rc::clone(&module.globals),
+                module: Rc::clone(&module),
+            }))
+        };
+        let (add, anon) = (def("add"), def(""));
+        assert_eq!(make(&add).to_string(), "<関数 add>");
+        assert_eq!(make(&anon).to_string(), "<関数>");
+        // 同じ定義を同じスコープから取り出せば等しい。定義が違えば別
+        assert!(make(&add).equals(&make(&add)));
+        assert!(!make(&add).equals(&make(&anon)));
+        assert_eq!(make(&add).type_name(), "関数");
     }
 
     #[test]

@@ -55,6 +55,7 @@ pub enum StmtKind {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncDef {
+    /// 無名関数は空文字列
     pub name: String,
     pub params: Vec<String>,
     pub body: Block,
@@ -80,6 +81,15 @@ pub enum ExprKind {
     /// `name[args]`
     Call {
         name: String,
+        args: Vec<Expr>,
+    },
+    /// `name`（`[` なし）。関数を値として取り出す
+    FuncRef(String),
+    /// `[@a, @b] ( … )`。作られた場所のスコープを捕まえる
+    Lambda(Rc<FuncDef>),
+    /// `callee[args]`。関数値を呼ぶ（`@f[1]`）
+    CallValue {
+        callee: Box<Expr>,
         args: Vec<Expr>,
     },
     /// `{a, b, c}`
@@ -225,6 +235,19 @@ impl fmt::Display for Expr {
             ExprKind::Var(var) => write!(f, "{var}"),
             ExprKind::Call { name, args } => {
                 write!(f, "({name}")?;
+                for arg in args {
+                    write!(f, " {arg}")?;
+                }
+                write!(f, ")")
+            }
+            ExprKind::FuncRef(name) => write!(f, "(ref {name})"),
+            ExprKind::Lambda(def) => {
+                write!(f, "(fn (")?;
+                write_seq(f, def.params.iter().map(|p| format!("@{p}")))?;
+                write!(f, ") {})", BlockDisplay(&def.body))
+            }
+            ExprKind::CallValue { callee, args } => {
+                write!(f, "(call {callee}")?;
                 for arg in args {
                     write!(f, " {arg}")?;
                 }

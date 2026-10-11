@@ -1,0 +1,4 @@
+funcref_undefined.dol:1:7: エラー: 未定義の関数 `nothing`
+  |
+1 | @f := nothing
+  |       ^

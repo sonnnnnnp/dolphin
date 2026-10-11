@@ -13,7 +13,7 @@ use super::env::{Env, Frame};
 use super::error::{RuntimeError, TraceEntry};
 use super::map::Map;
 use super::module::Module;
-use super::value::Value;
+use super::value::{Closure, NativeRef, Value};
 use crate::diag::Origin;
 use crate::sema::resolver::{self, Callee};
 use crate::syntax::ast::{
@@ -66,6 +66,11 @@ pub struct Interpreter<'a> {
     loading: Vec<Rc<str>>,
     frames: Vec<Frame>,
     natives: HashMap<&'static str, NativeFn>,
+    /// いま実行している組み込み関数の呼び出し位置。組み込み関数が関数値を呼ぶときの位置になる
+    native_span: Span,
+    /// 組み込み関数が呼んだ関数値の中で起きたエラー。`call_value` が預け、
+    /// 組み込み関数がエラーを返したときに `call_native` が取り出す（呼び出し履歴を保つため）
+    native_error: Option<RuntimeError>,
 }
 
 impl<'a> Interpreter<'a> {
@@ -81,6 +86,8 @@ impl<'a> Interpreter<'a> {
             loading: Vec::new(),
             frames: Vec::new(),
             natives: HashMap::new(),
+            native_span: Span { line: 1, col: 1 },
+            native_error: None,
         }
     }
 
@@ -294,13 +301,35 @@ impl<'a> Interpreter<'a> {
             }
             ExprKind::Member { target, name } => {
                 let module = self.eval_module(target)?;
-                let value = module.globals.get_own(name);
+                // 変数がなければ、同じ名前の関数を関数値として返す（design.md 5.8）
+                let value = module.globals.get_own(name).or_else(|| {
+                    let def = module.functions.borrow().get(name).cloned()?;
+                    Some(Value::Func(Rc::new(Closure {
+                        def,
+                        env: Rc::clone(&module.globals),
+                        module: Rc::clone(&module),
+                    })))
+                });
                 value.ok_or_else(|| {
                     RuntimeError::new(
                         span,
                         format!("{} に変数 `@{name}` がありません", module_label(&module)),
                     )
                 })?
+            }
+            ExprKind::FuncRef(name) => self.func_value(name, span)?,
+            ExprKind::Lambda(def) => Value::Func(Rc::new(Closure {
+                def: Rc::clone(def),
+                env: Rc::clone(&self.env),
+                module: Rc::clone(&self.current),
+            })),
+            ExprKind::CallValue { callee, args } => {
+                let f = self.eval(callee)?;
+                let args = args
+                    .iter()
+                    .map(|arg| self.eval(arg))
+                    .collect::<RResult<Vec<_>>>()?;
+                self.call_function(&f, args, span, callee.span)?
             }
             ExprKind::MemberCall { target, name, args } => {
                 let module = self.eval_module(target)?;
@@ -412,12 +441,90 @@ impl<'a> Interpreter<'a> {
             return self.import(&args, span);
         }
         match self.native(name) {
-            Some(f) => f(self, &args).map_err(|message| RuntimeError::new(span, message)),
+            Some(f) => self.call_native(f, &args, span),
             None => Err(RuntimeError::new(span, format!("未定義の関数 `{name}`"))),
         }
     }
 
-    /// `module` の関数 `def` を呼ぶ。実行している間は、`@x` と関数名を `module` から引く
+    /// 組み込み関数を呼ぶ。中で呼んだ関数値がエラーになっていたら、そのエラーをそのまま返す
+    fn call_native(&mut self, f: NativeFn, args: &[Value], span: Span) -> RResult<Value> {
+        let saved = mem::replace(&mut self.native_span, span);
+        let result = f(self, args);
+        self.native_span = saved;
+        match result {
+            Ok(value) => {
+                self.native_error = None;
+                Ok(value)
+            }
+            Err(message) => Err(self
+                .native_error
+                .take()
+                .unwrap_or_else(|| RuntimeError::new(span, message))),
+        }
+    }
+
+    /// 関数値を呼ぶ。`span` は呼び出し位置、`callee_span` は呼ぶ式の位置
+    fn call_function(
+        &mut self,
+        f: &Value,
+        args: Vec<Value>,
+        span: Span,
+        callee_span: Span,
+    ) -> RResult<Value> {
+        match f {
+            Value::Func(closure) => {
+                self.call_def(&closure.module, &closure.def, &closure.env, args, span)
+            }
+            Value::Native(native) => self.call_native(native.f, &args, span),
+            other => {
+                let hint = match other {
+                    Value::Array(_) | Value::Map(_) => {
+                        "。配列やマップの要素は `@a{0}` のように `{ }` で読みます"
+                    }
+                    _ => "",
+                };
+                Err(RuntimeError::new(
+                    callee_span,
+                    format!(
+                        "`[ ]` で呼び出せるのは関数だけです（{}でした）{hint}",
+                        other.type_name()
+                    ),
+                ))
+            }
+        }
+    }
+
+    /// 組み込み関数から関数値を呼ぶ（`arr_map` など）。呼ぶ関数の中で起きたエラーは、
+    /// 呼び出し履歴つきで `native_error` に預け、メッセージだけを返す
+    pub fn call_value(&mut self, f: &Value, args: Vec<Value>) -> Result<Value, String> {
+        let span = self.native_span;
+        self.call_function(f, args, span, span).map_err(|e| {
+            let message = e.message.clone();
+            self.native_error = Some(e);
+            message
+        })
+    }
+
+    /// 関数名だけを書いたときの関数値（`@f := add`）。ファイルの関数、組み込み関数の順に探す
+    fn func_value(&self, name: &str, span: Span) -> RResult<Value> {
+        let def = self.current.functions.borrow().get(name).cloned();
+        if let Some(def) = def {
+            return Ok(Value::Func(Rc::new(Closure {
+                def,
+                env: Rc::clone(&self.current.globals),
+                module: Rc::clone(&self.current),
+            })));
+        }
+        if name == "import" {
+            return Err(RuntimeError::new(span, "`import` は関数値にできません"));
+        }
+        match self.natives.get_key_value(name) {
+            Some((name, f)) => Ok(Value::Native(NativeRef { name, f: *f })),
+            None => Err(RuntimeError::new(span, format!("未定義の関数 `{name}`"))),
+        }
+    }
+
+    /// `module` の名前つきの関数 `def` を呼ぶ
     fn call_user(
         &mut self,
         module: &Rc<Module>,
@@ -425,12 +532,27 @@ impl<'a> Interpreter<'a> {
         args: Vec<Value>,
         span: Span,
     ) -> RResult<Value> {
+        let env = Rc::clone(&module.globals);
+        self.call_def(module, def, &env, args, span)
+    }
+
+    /// 関数 `def` を呼ぶ。`parent` は関数が作られた場所のスコープで、その内側に引数のスコープを作る。
+    /// 実行している間は、関数名を `module` から引く
+    fn call_def(
+        &mut self,
+        module: &Rc<Module>,
+        def: &FuncDef,
+        parent: &Rc<Env>,
+        args: Vec<Value>,
+        span: Span,
+    ) -> RResult<Value> {
+        let name = func_label(def);
         if args.len() != def.params.len() {
             return Err(RuntimeError::new(
                 span,
                 format!(
-                    "`{}` の引数は {} 個です（{} 個渡されました）",
-                    def.name,
+                    "{} の引数は {} 個です（{} 個渡されました）",
+                    quoted_label(def),
                     def.params.len(),
                     args.len()
                 ),
@@ -446,12 +568,12 @@ impl<'a> Interpreter<'a> {
         }
 
         // 関数のスコープは、そのファイルのトップレベルのスコープの内側に作る
-        let env = Env::new(Some(Rc::clone(&module.globals)));
+        let env = Env::new(Some(Rc::clone(parent)));
         for (param, value) in def.params.iter().zip(args) {
             env.declare(param, value);
         }
         self.frames.push(Frame {
-            func_name: def.name.clone(),
+            func_name: name.to_string(),
         });
         let caller = mem::replace(&mut self.current, Rc::clone(module));
         let caller_env = mem::replace(&mut self.env, env);
@@ -470,7 +592,7 @@ impl<'a> Interpreter<'a> {
                     e.origin = module.origin.clone();
                 }
                 e.trace.push(TraceEntry {
-                    what: format!("{} の中", def.name),
+                    what: format!("{name} の中"),
                     span,
                     file: file_of(&self.current),
                 });
@@ -601,6 +723,24 @@ impl<'a> Interpreter<'a> {
     fn display_path(&self, full: &Path) -> Rc<str> {
         let path = full.strip_prefix(&self.root_dir).unwrap_or(full);
         path.to_string_lossy().replace('\\', "/").into()
+    }
+}
+
+/// エラー表示用の関数名。無名関数は「無名関数」
+fn func_label(def: &FuncDef) -> &str {
+    if def.name.is_empty() {
+        "無名関数"
+    } else {
+        &def.name
+    }
+}
+
+/// エラーメッセージの文中で使う関数名。名前つきなら `` `add` ``、無名関数は「無名関数」
+fn quoted_label(def: &FuncDef) -> String {
+    if def.name.is_empty() {
+        "無名関数".to_string()
+    } else {
+        format!("`{}`", def.name)
     }
 }
 

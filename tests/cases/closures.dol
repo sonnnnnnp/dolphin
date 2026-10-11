@@ -1,0 +1,63 @@
+// 関数値とクロージャ（design.md 5.8）
+add[@a, @b] ( # @a + @b )
+
+// 関数名だけを書くと関数値。変数に入れて呼べる
+@f := add
+log[@f[1, 2], @f == add, @f]
+@inc := [@n] ( # @n + 1 )
+log[@inc[1], @inc]
+log[log]
+
+// 外側の変数を捕まえて、呼び出しをまたいで共有する
+make_counter[] (
+    @n := 0
+    # [] (
+        @n = @n + 1
+        # @n
+    )
+)
+@c1 := make_counter[]
+@c2 := make_counter[]
+log[@c1[], @c1[], @c2[], @c1[]]
+
+// 関数を返す関数・関数を受け取る関数
+adder[@x] ( # [@y] ( # @x + @y ) )
+@add5 := adder[5]
+log[@add5[10], adder[1][2]]
+apply[@g, @v] ( # @g[@v] )
+log[apply[@inc, 41], apply[[@s] ( # @s + "!" ), "hi"]]
+
+// ループの本体は繰り返しごとに新しいスコープ。作った関数は別々の変数を捕まえる
+@fs := {}
+@i := 0
+while @i < 3 (
+    @j := @i * 10
+    arr_push[@fs, [] ( # @j )]
+    @i = @i + 1
+)
+log[@fs{0}[], @fs{1}[], @fs{2}[]]
+
+// 捕まえた変数は、後から書き換えても関数から見える（コピーではない）
+@total := 0
+@bump := [@by] ( @total = @total + @by )
+@bump[3]
+@bump[4]
+log[@total]
+
+// 組み込み関数に渡す
+@nums := {1, 2, 3, 4}
+log[arr_map[@nums, [@x] ( # @x * @x )]]
+log[arr_filter[@nums, [@x] ( # @x % 2 == 0 )]]
+@sum := 0
+arr_each[@nums, [@x] ( @sum = @sum + @x )]
+log[@sum]
+log[arr_map[{"a", " b "}, str_upper], arr_map[{"a", " b "}, str_trim]]
+
+// 再帰（関数値の中から、名前つきの関数を呼ぶ）
+fact[@n] (
+    if @n <= 1 (
+        # 1
+    )
+    # @n * fact[@n - 1]
+)
+log[arr_map[{1, 2, 3, 4, 5}, fact]]

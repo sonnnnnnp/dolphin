@@ -325,7 +325,7 @@ impl<'t> Parser<'t> {
         })
     }
 
-    /// postfix = primary { "{" expression "}" | "." member }
+    /// postfix = primary { "{" expression "}" | "[" [ args ] "]" | "." member }
     /// member  = IDENT [ "[" [ args ] "]" ]
     fn postfix(&mut self) -> PResult<Expr> {
         let mut expr = self.primary()?;
@@ -338,6 +338,15 @@ impl<'t> Parser<'t> {
                     kind: ExprKind::Index {
                         target: Box::new(expr),
                         index: Box::new(index),
+                    },
+                    span,
+                };
+            } else if self.eat(&TokenKind::LBracket) {
+                let args = self.args(&TokenKind::RBracket)?;
+                expr = Expr {
+                    kind: ExprKind::CallValue {
+                        callee: Box::new(expr),
+                        args,
                     },
                     span,
                 };
@@ -369,16 +378,35 @@ impl<'t> Parser<'t> {
             TokenKind::True => ExprKind::Bool(true),
             TokenKind::False => ExprKind::Bool(false),
             TokenKind::Var(name) => ExprKind::Var(Var(name.clone())),
-            // call = IDENT "[" [ args ] "]"
+            // call = IDENT "[" [ args ] "]"。`[` が続かなければ、関数名だけ（関数値）
             TokenKind::Ident(name) => {
                 self.advance();
-                self.expect(&TokenKind::LBracket)?;
-                let args = self.args(&TokenKind::RBracket)?;
-                return Ok(Expr {
-                    kind: ExprKind::Call {
+                let kind = if self.eat(&TokenKind::LBracket) {
+                    ExprKind::Call {
                         name: name.clone(),
-                        args,
-                    },
+                        args: self.args(&TokenKind::RBracket)?,
+                    }
+                } else {
+                    ExprKind::FuncRef(name.clone())
+                };
+                return Ok(Expr {
+                    kind,
+                    span: token.span,
+                });
+            }
+            // lambda = "[" [ params ] "]" block
+            TokenKind::LBracket => {
+                self.advance();
+                let params = self.params()?;
+                let body = self.block()?;
+                let def = FuncDef {
+                    name: String::new(),
+                    params,
+                    body,
+                    span: token.span,
+                };
+                return Ok(Expr {
+                    kind: ExprKind::Lambda(Rc::new(def)),
                     span: token.span,
                 });
             }
@@ -400,6 +428,27 @@ impl<'t> Parser<'t> {
             kind,
             span: token.span,
         })
+    }
+
+    /// params = VAR { "," VAR }。開き括弧の後に呼ぶ。`]` まで読み進める
+    fn params(&mut self) -> PResult<Vec<String>> {
+        let mut params = Vec::new();
+        if self.eat(&TokenKind::RBracket) {
+            return Ok(params);
+        }
+        loop {
+            let TokenKind::Var(name) = &self.peek().kind else {
+                return Err(self.unexpected("変数（`@x`）"));
+            };
+            params.push(name.clone());
+            self.advance();
+            if self.eat(&TokenKind::RBracket) {
+                return Ok(params);
+            }
+            if !self.eat(&TokenKind::Comma) {
+                return Err(self.unexpected("`,` か `]`"));
+            }
+        }
     }
 
     /// array_lit = "{" [ args ] "}"
@@ -687,6 +736,40 @@ else (
     fn non_variable_param() {
         let e = error("f[1] (\n)");
         assert_eq!(e.message, "関数定義の引数は変数（`@x`）で書きます");
+    }
+
+    #[test]
+    fn function_values() {
+        // 関数名だけ = 関数値、無名関数、値の呼び出し
+        assert_eq!(
+            ast("@f := add
+@g := [@a, @b] ( # @a + @b )
+log[@f[1], @g[1, 2], make[][3]]"),
+            "(:= @f (ref add))
+(:= @g (fn (@a @b) ((# (+ @a @b)))))
+(log (call @f 1) (call @g 1 2) (call (make) 3))
+"
+        );
+        // 名前つきの呼び出しと関数定義は、これまでどおり
+        assert_eq!(
+            ast("f[@a] (
+    # @a
+)"),
+            "(def f (@a) ((# @a)))
+"
+        );
+        // 無名関数は複数行に書ける
+        assert_eq!(
+            ast("log[[@x] (
+    @y := @x
+    # @y
+)]"),
+            "(log (fn (@x) ((:= @y @x) (# @y))))
+"
+        );
+        // 引数は変数だけ
+        let e = error("@f := [1] ( )");
+        assert_eq!(e.message, "変数（`@x`）が必要です（`1`がありました）");
     }
 
     #[test]

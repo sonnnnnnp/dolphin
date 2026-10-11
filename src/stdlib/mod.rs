@@ -84,6 +84,13 @@ fn array_arg<'v>(
     }
 }
 
+fn func_arg<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v Value, String> {
+    match &args[i] {
+        f @ (Value::Func(_) | Value::Native(_)) => Ok(f),
+        other => Err(type_error(name, i, "関数", other)),
+    }
+}
+
 fn map_arg<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v Rc<RefCell<Map>>, String> {
     match &args[i] {
         Value::Map(map) => Ok(map),

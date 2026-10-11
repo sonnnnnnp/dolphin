@@ -48,6 +48,7 @@ count: 3
 | `@x = 2` | 宣言済みの変数への代入（宣言していなければ実行前エラー） |
 | `name[a, b]` | 関数呼び出し |
 | `name[@a, @b] ( … )` | 関数定義 |
+| `[@a] ( … )` / `@f := name` / `@f[1]` | 無名関数、関数値、関数値の呼び出し。外側の変数を捕まえる（クロージャ） |
 | `# value` | 関数から値を返す |
 | `if 条件 ( … )` / `else ( … )` / `else if` | 条件分岐 |
 | `while 条件 ( … )` / `break` / `continue` | 繰り返し |
@@ -72,6 +73,10 @@ count: 3
   - マップ（連想配列）
   - 文字列・数値変換・数学の組み込み関数
   - 対話モード（REPL）
+- [x] **段階 3.5**: 言語の土台の見直し（[design.md 8 章](docs/design.md)）
+  - [x] 変数を `@` に統一、`:=` で宣言、添字を `{ }` に、スコープ
+  - [x] 関数値とクロージャ（`[@n] ( # @n + 1 )`、`arr_map` など）
+  - [ ] エラー処理、イベントループと非同期
 - [ ] **段階 3**: 複数ファイル、ファイル入出力
   - [x] `import`（名前空間つき。`@u := import["util.dol"]`、`@u.add[1, 2]`）
   - [x] ファイル入出力（`file_read` `file_write` `file_append` `file_exists`）
@@ -89,6 +94,7 @@ count: 3
 | [v0.3.0](https://github.com/sonnnnnnp/dolphin/tree/v0.3.0) | `import`（名前空間つき） | [v0.2.0...v0.3.0](https://github.com/sonnnnnnp/dolphin/compare/v0.2.0...v0.3.0) |
 | [v0.4.0](https://github.com/sonnnnnnp/dolphin/tree/v0.4.0) | ファイル入出力 | [v0.3.0...v0.4.0](https://github.com/sonnnnnnp/dolphin/compare/v0.3.0...v0.4.0) |
 | [v0.5.0](https://github.com/sonnnnnnp/dolphin/tree/v0.5.0) | 文法の見直し（`$` の廃止、`:=`、添字 `{ }`、スコープ） | [v0.4.0...v0.5.0](https://github.com/sonnnnnnp/dolphin/compare/v0.4.0...v0.5.0) |
+| [v0.6.0](https://github.com/sonnnnnnp/dolphin/tree/v0.6.0) | 関数値とクロージャ | [v0.5.0...v0.6.0](https://github.com/sonnnnnnp/dolphin/compare/v0.5.0...v0.6.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

@@ -1,0 +1,5 @@
+// 無名関数の中の break は、外側の while を抜けられない
+while true (
+    @f := [] ( break )
+    @f[]
+)

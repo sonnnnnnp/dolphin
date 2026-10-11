@@ -1,6 +1,6 @@
-//! 配列: arr_len, arr_push, arr_pop
+//! 配列: arr_len, arr_push, arr_pop, arr_map, arr_filter, arr_each
 
-use super::{array_arg, expect_args};
+use super::{array_arg, expect_args, func_arg, new_array};
 use crate::runtime::interp::Interpreter;
 use crate::runtime::value::Value;
 
@@ -8,6 +8,9 @@ pub fn register(interp: &mut Interpreter<'_>) {
     interp.register("arr_len", arr_len);
     interp.register("arr_push", arr_push);
     interp.register("arr_pop", arr_pop);
+    interp.register("arr_map", arr_map);
+    interp.register("arr_filter", arr_filter);
+    interp.register("arr_each", arr_each);
 }
 
 fn arr_len(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
@@ -32,4 +35,49 @@ fn arr_pop(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         .borrow_mut()
         .pop()
         .ok_or_else(|| "空の配列からは取り出せません".to_string())
+}
+
+/// 各要素に `f` を適用した新しい配列。呼んでいる間に元の配列が書き換えられても、
+/// 呼び始めたときの要素を使う
+fn arr_map(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("arr_map", args, 2)?;
+    let items = array_arg("arr_map", args, 0)?.borrow().clone();
+    let f = func_arg("arr_map", args, 1)?;
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        out.push(interp.call_value(f, vec![item])?);
+    }
+    Ok(new_array(out))
+}
+
+/// `f` が `true` を返した要素だけの新しい配列
+fn arr_filter(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("arr_filter", args, 2)?;
+    let items = array_arg("arr_filter", args, 0)?.borrow().clone();
+    let f = func_arg("arr_filter", args, 1)?;
+    let mut out = Vec::new();
+    for item in items {
+        match interp.call_value(f, vec![item.clone()])? {
+            Value::Bool(true) => out.push(item),
+            Value::Bool(false) => {}
+            other => {
+                return Err(format!(
+                    "arr_filter の関数は真偽値を返す必要があります（{}でした）",
+                    other.type_name()
+                ));
+            }
+        }
+    }
+    Ok(new_array(out))
+}
+
+/// 各要素に `f` を適用する。`f` の戻り値は捨てる
+fn arr_each(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("arr_each", args, 2)?;
+    let items = array_arg("arr_each", args, 0)?.borrow().clone();
+    let f = func_arg("arr_each", args, 1)?;
+    for item in items {
+        interp.call_value(f, vec![item])?;
+    }
+    Ok(Value::Nil)
 }
