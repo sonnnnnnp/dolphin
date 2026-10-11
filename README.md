@@ -76,9 +76,22 @@ count: 3
   - 対話モード（REPL）
 - [ ] **段階 3**: 複数ファイル、ファイル入出力
   - [x] `import`（名前空間つき。`@u = import["util.dol"]`、`@u.add[1, 2]`）
-  - [ ] ファイル入出力
+  - [x] ファイル入出力（`file_read` `file_write` `file_append` `file_exists`）
 - [ ] **段階 4**: HTTP サーバー、JSON → バックエンド API
 - [ ] **段階 5**: ウィンドウ・描画・入力 → デスクトップアプリ（旧 C++ 実装では SFML で対応済み）
+
+## コードを段階ごとに読む
+
+機能ごとにタグを付けています。タグの間の差分を見ると、その機能で何が増えたかを読めます。
+
+| タグ | 内容 | 差分（前のタグから） |
+|---|---|---|
+| [v0.1.0](https://github.com/sonnnnnnp/dolphin/tree/v0.1.0) | 段階 1: コア言語 | — |
+| [v0.2.0](https://github.com/sonnnnnnp/dolphin/tree/v0.2.0) | 段階 2: エラー表示、文字列、マップ、REPL | [v0.1.0...v0.2.0](https://github.com/sonnnnnnp/dolphin/compare/v0.1.0...v0.2.0) |
+| [v0.3.0](https://github.com/sonnnnnnp/dolphin/tree/v0.3.0) | `import`（名前空間つき） | [v0.2.0...v0.3.0](https://github.com/sonnnnnnp/dolphin/compare/v0.2.0...v0.3.0) |
+| [v0.4.0](https://github.com/sonnnnnnp/dolphin/tree/v0.4.0) | ファイル入出力 | [v0.3.0...v0.4.0](https://github.com/sonnnnnnp/dolphin/compare/v0.3.0...v0.4.0) |
+
+差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 
 エラーは該当箇所を指して表示します。
 
