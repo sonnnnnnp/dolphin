@@ -1,7 +1,5 @@
 # 🐬 Dolphin
 
-[English](README.en.md)
-
 `@` で変数を宣言する、Rust 製の小さなインタプリタ言語。拡張子は `.dol`。
 
 ## このプロジェクトについて
