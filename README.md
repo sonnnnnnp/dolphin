@@ -113,7 +113,7 @@ runtime_error.dol:5:12: エラー: 添字 5 は範囲外です（要素は 2 個
 | Lexer | ソース文字列をトークン列に分割する |
 | Parser | トークン列を再帰下降で解析し、AST（構文木）を作る |
 | Resolver | 実行前に、未定義の関数・引数の数・変数を使える場所などを検査する |
-| Interpreter | AST を木たどりで評価する |
+| Interpreter | AST を tree-walking で評価する |
 
 全体像は [docs/architecture.md](docs/architecture.md) にまとめています。コア言語は外部クレートに依存しません。
 

@@ -1,4 +1,4 @@
-//! AST の木たどり評価器
+//! AST の tree-walking 評価器
 
 use std::cell::RefCell;
 use std::cmp::Ordering;

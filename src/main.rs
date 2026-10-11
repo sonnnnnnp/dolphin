@@ -14,7 +14,7 @@ enum Mode {
     Ast,
 }
 
-/// 木たどり評価は Dolphin の関数呼び出し 1 段ごとに Rust の再帰が何段も深くなる。
+/// tree-walking 評価は Dolphin の関数呼び出し 1 段ごとに Rust の再帰が何段も深くなる。
 /// MAX_DEPTH 段まで呼んでもあふれないよう、大きめのスタックのスレッドで動かす
 const STACK_SIZE: usize = 256 * 1024 * 1024;
 

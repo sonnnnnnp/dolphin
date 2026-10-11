@@ -14,7 +14,7 @@
                 └───────────────────────┬────────────────────────┘
                                         ▼
  .dol ─▶ Lexer ─▶ Parser ─▶  AST  ─▶ Resolver ─▶ Interpreter ─▶ 実行結果
-        トークン   再帰下降          スコープ検査     木たどり評価
+        トークン   再帰下降          スコープ検査     tree-walking 評価
                                     関数の事前登録   （将来 VM に差し替え可）
           │          │                 │               │
           └──────────┴──── Diagnostics ┴───────────────┘
@@ -32,7 +32,7 @@
 | Lexer | `&str` → `Vec<Token>` | 字句に分割する。`[ ]` `{ }` の中の改行を捨てる | ✅ |
 | Parser | `&[Token]` → `Program` | design.md 4 章の EBNF を再帰下降で解析する | ✅ |
 | Resolver | `&Program` → `()` | 関数の重複・未定義の関数・引数の数・関数の外での `$x` と `#`・未定義の `$x` を実行前に検査する | ✅ |
-| Interpreter | `&Program` → 出力 | AST を木たどりで評価する。呼び出しの深さは 1000 段まで | ✅ |
+| Interpreter | `&Program` → 出力 | AST を tree-walking で評価する。呼び出しの深さは 1000 段まで | ✅ |
 | Diagnostics | 各層のエラー → 文字列 | すべての層のエラーを同じ形で表示する | ✅ |
 | 標準ライブラリ | `&[Value]` → `Value` | ネイティブ関数を Interpreter に登録する | 🚧 |
 
@@ -51,7 +51,7 @@ Resolver を独立させる理由:
 | 構文解析 | PEG パーサ（`Grammar/python.gram`） | `syntax/parser.rs`（再帰下降） |
 | 構文木 | `ast` モジュール | `syntax/ast.rs` |
 | 名前解決 | `Python/symtable.c` | `sema/resolver.rs` |
-| 実行 | `compile.c` → バイトコード → `ceval.c` | `runtime/interp.rs`（木たどり） |
+| 実行 | `compile.c` → バイトコード → `ceval.c` | `runtime/interp.rs`（tree-walking） |
 | 値 | `PyObject` | `runtime/value.rs` の `Value` |
 | 組み込み関数 | `builtins`、C 拡張 | `stdlib/`（`NativeFn` を登録） |
 
@@ -209,8 +209,8 @@ main.dol:2:6: エラー: 文字列が閉じられていません
 | 段階 4 HTTP | tokio は複数スレッドで動くが、インタプリタは `Rc` を使っていて別スレッドに渡せない（`Send` でない） | サーバーは別スレッドで動かし、リクエストはチャネルでインタプリタのスレッドに送る。インタプリタは 1 スレッドで順番に処理する（JavaScript のイベントループと同じ型） |
 | 段階 5 GUI | macroquad がメインループを握る | `gameloop` を「毎フレーム呼ばれる関数」として登録し、macroquad の側から呼ぶ（design.md 7.2） |
 | メモリ | `Rc` は循環参照を解放できない（配列が自分自身を含む場合など） | 当面は許容する。問題になったら GC を自作する。表示と `==` は循環しても止まるようにしてある |
-| スタック | 木たどりは Dolphin の呼び出し 1 段で Rust の再帰が何段も深くなり、Windows の既定スタック（1 MB）ではすぐあふれる | 呼び出しの深さを 1000 段に制限し、CLI は 256 MB のスタックを持つスレッドで動かす |
-| 性能 | 木たどりは遅い | 段階 6 でバイトコード VM にする。Resolver の層があるので差し替えやすい |
+| スタック | tree-walking は Dolphin の呼び出し 1 段で Rust の再帰が何段も深くなり、Windows の既定スタック（1 MB）ではすぐあふれる | 呼び出しの深さを 1000 段に制限し、CLI は 256 MB のスタックを持つスレッドで動かす |
+| 性能 | tree-walking は遅い | 段階 6 でバイトコード VM にする。Resolver の層があるので差し替えやすい |
 
 ---
 
