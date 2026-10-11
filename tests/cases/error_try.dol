@@ -1,0 +1,45 @@
+// `?` は、エラーなら関数からそのエラーを返し、そうでなければ値になる
+parse_sum[@a, @b] (
+    @x := to_num[@a]?
+    @y := to_num[@b]?
+    # @x + @y
+)
+log[parse_sum["1", "2"]]
+log[parse_sum["1", "two"]]
+@r := parse_sum["x", "2"]
+log[is_error[@r], err_kind[@r]]
+
+// 呼び出しの連なりの中を伝わる
+load_twice[@path] (
+    @text := file_read[@path]?
+    # str_len[@text] * 2
+)
+report[@path] (
+    @n := load_twice[@path]
+    if is_error[@n] (
+        # "失敗: " + err_message[@n]
+    )
+    # "文字数の 2 倍: @n"
+)
+log[report["target/no_such_file.txt"]]
+file_write["target/golden_error_try.txt", "abc"]
+log[report["target/golden_error_try.txt"]]
+
+// 無名関数の中の ? は、無名関数から返る
+@safe := [@s] (
+    @v := to_num[@s]?
+    # @v * 10
+)
+log[@safe["4"], is_error[@safe["z"]]]
+log[arr_map[{"1", "z"}, @safe]]
+
+// ループの途中からも抜けられる
+first_bad[@items] (
+    for @s in @items (
+        @n := to_num[@s]?
+        log["ok", @n]
+    )
+    # "all ok"
+)
+log[first_bad[{"1", "2"}]]
+log[first_bad[{"1", "x", "3"}]]

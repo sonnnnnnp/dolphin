@@ -133,18 +133,21 @@ fn to_str(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
     Ok(string(args[0].to_string()))
 }
 
-/// 文字列を数値にする（前後の空白は無視）。数値はそのまま返す
+/// 文字列を数値にする（前後の空白は無視）。数値はそのまま返す。
+/// 数値として読めない文字列は、`parse` のエラー値を返す
 fn to_num(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
     expect_args("to_num", args, 1)?;
     match &args[0] {
         Value::Num(n) => Ok(Value::Num(*n)),
-        Value::Str(s) => s
+        Value::Str(s) => Ok(s
             .trim()
             .parse::<f64>()
             .ok()
             .filter(|n| n.is_finite())
             .map(Value::Num)
-            .ok_or_else(|| format!("数値に変換できません（{s:?}）")),
+            .unwrap_or_else(|| {
+                super::error_value("parse", format!("数値に変換できません（{s:?}）"))
+            })),
         other => Err(format!(
             "to_num の 1 番目の引数は文字列か数値です（{}が渡されました）",
             other.type_name()

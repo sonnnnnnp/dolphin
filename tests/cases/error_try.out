@@ -1,0 +1,12 @@
+3
+<エラー parse: 数値に変換できません（"two"）>
+true parse
+失敗: `target/no_such_file.txt` を読み込めません: ファイルが見つかりません
+文字数の 2 倍: 6
+40 true
+{10, <エラー parse: 数値に変換できません（"z"）>}
+ok 1
+ok 2
+all ok
+ok 1
+<エラー parse: 数値に変換できません（"x"）>

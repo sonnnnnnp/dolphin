@@ -1,0 +1,4 @@
+error_ignored.dol:2:1: エラー: エラー値が捨てられました（not_found: `target/no_such_dir/x.txt` を書き込めません: ファイルが見つかりません）。変数に入れるか、`?` か `is_error` で扱ってください
+  |
+2 | file_write["target/no_such_dir/x.txt", "a"]
+  | ^

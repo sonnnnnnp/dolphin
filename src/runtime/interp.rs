@@ -71,6 +71,11 @@ pub struct Interpreter<'a> {
     /// 組み込み関数が呼んだ関数値の中で起きたエラー。`call_value` が預け、
     /// 組み込み関数がエラーを返したときに `call_native` が取り出す（呼び出し履歴を保つため）
     native_error: Option<RuntimeError>,
+    /// 関数の中を実行しているか。`?` がエラーを返せる場所かどうか（import したファイルの
+    /// トップレベルは、呼び出し元が関数の中でも「関数の外」）
+    in_func: bool,
+    /// `?` が関数から返そうとしているエラー値（`RuntimeError::early_return` と組）
+    returning: Option<Value>,
 }
 
 impl<'a> Interpreter<'a> {
@@ -88,6 +93,8 @@ impl<'a> Interpreter<'a> {
             natives: HashMap::new(),
             native_span: Span { line: 1, col: 1 },
             native_error: None,
+            in_func: false,
+            returning: None,
         }
     }
 
@@ -129,7 +136,10 @@ impl<'a> Interpreter<'a> {
 
     /// プログラムを実行する。最後の文が式なら、その値を返す（REPL で表示するため）。
     /// 何度呼んでも変数と関数は残る
-    pub fn run(&mut self, program: &Program) -> RResult<Option<Value>> {
+    ///
+    /// `keep_last` が false なら、最後の文が式でも値は捨てる（ファイルの実行。
+    /// 捨てられたエラー値は、ほかの文と同じく実行時エラーになる）
+    pub fn run(&mut self, program: &Program, keep_last: bool) -> RResult<Option<Value>> {
         // 定義より前の行から呼べるように、先に全関数を登録する（design.md 5.2）
         for stmt in &program.stmts {
             if let StmtKind::FuncDef(def) = &stmt.kind {
@@ -146,7 +156,7 @@ impl<'a> Interpreter<'a> {
             return Ok(None);
         };
         self.exec_block(rest)?;
-        if let StmtKind::Expr(expr) = &last.kind {
+        if keep_last && let StmtKind::Expr(expr) = &last.kind {
             return Ok(Some(self.eval(expr)?));
         }
         self.exec(last)?;
@@ -267,7 +277,16 @@ impl<'a> Interpreter<'a> {
                 index_set(&container, &key, value, stmt.span, last.span)?;
             }
             StmtKind::Expr(expr) => {
-                self.eval(expr)?;
+                // 捨てられたエラー値は、失敗に気づかないまま進まないよう実行時エラーにする
+                if let Value::Error(e) = self.eval(expr)? {
+                    return Err(RuntimeError::new(
+                        expr.span,
+                        format!(
+                            "エラー値が捨てられました（{}: {}）。変数に入れるか、`?` か `is_error` で扱ってください",
+                            e.kind, e.message
+                        ),
+                    ));
+                }
             }
         }
         Ok(Flow::Normal)
@@ -347,6 +366,18 @@ impl<'a> Interpreter<'a> {
                 })?
             }
             ExprKind::FuncRef(name) => self.func_value(name, span)?,
+            ExprKind::Try(inner) => match self.eval(inner)? {
+                Value::Error(e) if self.in_func => {
+                    // いまの関数からエラーを返す。呼び出し（call_def）が受け取る
+                    self.returning = Some(Value::Error(e));
+                    let mut signal = RuntimeError::new(span, "`?` による戻り");
+                    signal.early_return = true;
+                    return Err(signal);
+                }
+                // 関数の外では、エラーで止まる
+                Value::Error(e) => return Err(RuntimeError::new(span, &*e.message)),
+                value => value,
+            },
             ExprKind::Lambda(def) => Value::Func(Rc::new(Closure {
                 def: Rc::clone(def),
                 env: Rc::clone(&self.env),
@@ -606,12 +637,16 @@ impl<'a> Interpreter<'a> {
         });
         let caller = mem::replace(&mut self.current, Rc::clone(module));
         let caller_env = mem::replace(&mut self.env, env);
+        let was_in_func = mem::replace(&mut self.in_func, true);
         let result = self.exec_block(&def.body);
+        self.in_func = was_in_func;
         self.env = caller_env;
         self.current = caller;
         self.frames.pop();
 
         match result {
+            // `?` が返したエラー値が、この呼び出しの戻り値になる
+            Err(e) if e.early_return => Ok(self.returning.take().unwrap_or(Value::Nil)),
             Ok(Flow::Return(value)) => Ok(value),
             // break / continue が関数の外へ出ないことは Resolver が保証している
             Ok(Flow::Normal | Flow::Break | Flow::Continue) => Ok(Value::Nil),
@@ -719,13 +754,16 @@ impl<'a> Interpreter<'a> {
                 span: diag.span,
                 trace: vec![entry.clone()],
                 origin: Some(Rc::clone(&origin)),
+                early_return: false,
             })?;
 
         self.modules.insert(key.clone(), ModuleState::Loading);
         self.loading.push(shown);
         let importer = mem::replace(&mut self.current, Rc::clone(&module));
         let importer_env = mem::replace(&mut self.env, Rc::clone(&module.globals));
-        let result = self.run(&program);
+        let importer_in_func = mem::replace(&mut self.in_func, false);
+        let result = self.run(&program, false);
+        self.in_func = importer_in_func;
         self.env = importer_env;
         self.current = importer;
         self.loading.pop();

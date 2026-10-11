@@ -1,4 +1,4 @@
-file_write_bad_dir.dol:1:1: エラー: `target/no_such_dir/x.txt` を書き込めません: ファイルが見つかりません
+file_write_bad_dir.dol:1:1: エラー: エラー値が捨てられました（not_found: `target/no_such_dir/x.txt` を書き込めません: ファイルが見つかりません）。変数に入れるか、`?` か `is_error` で扱ってください
   |
 1 | file_write["target/no_such_dir/x.txt", "a"]
   | ^

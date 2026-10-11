@@ -1,0 +1,9 @@
+true not_found
+`target/no_such_file.txt` を読み込めません: ファイルが見つかりません
+true parse <エラー parse: 数値に変換できません（"abc"）>
+false 13
+<エラー custom: something failed> true false
+false false false
+true not_found
+false true
+{false, true, false}

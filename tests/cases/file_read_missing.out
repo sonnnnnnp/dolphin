@@ -1,4 +1,4 @@
-file_read_missing.dol:1:1: エラー: `target/no_such_file.txt` を読み込めません: ファイルが見つかりません
+file_read_missing.dol:1:1: エラー: エラー値が捨てられました（not_found: `target/no_such_file.txt` を読み込めません: ファイルが見つかりません）。変数に入れるか、`?` か `is_error` で扱ってください
   |
 1 | file_read["target/no_such_file.txt"]
   | ^

@@ -264,6 +264,7 @@ impl<'a> Resolver<'a> {
                 };
                 self.func_body(def, &mut inner)
             }
+            ExprKind::Try(inner) => self.expr(inner, ctx),
             ExprKind::CallValue { callee, args } => {
                 self.expr(callee, ctx)?;
                 args.iter().try_for_each(|arg| self.expr(arg, ctx))

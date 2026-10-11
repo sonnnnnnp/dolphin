@@ -1,4 +1,0 @@
-to_num_error.dol:1:9: エラー: 数値に変換できません（"abc"）
-  |
-1 | @age := to_num["abc"]
-  |         ^

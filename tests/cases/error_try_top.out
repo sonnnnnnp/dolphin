@@ -1,0 +1,4 @@
+error_try_top.dol:2:10: エラー: `target/no_such_file.txt` を読み込めません: ファイルが見つかりません
+  |
+2 | @text := file_read["target/no_such_file.txt"]?
+  |          ^

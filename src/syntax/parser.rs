@@ -338,7 +338,7 @@ impl<'t> Parser<'t> {
         })
     }
 
-    /// postfix = primary { "{" expression "}" | "[" [ args ] "]" | "." member }
+    /// postfix = primary { "{" expression "}" | "[" [ args ] "]" | "." member | "?" }
     /// member  = IDENT [ "[" [ args ] "]" ]
     fn postfix(&mut self) -> PResult<Expr> {
         let mut expr = self.primary()?;
@@ -361,6 +361,11 @@ impl<'t> Parser<'t> {
                         callee: Box::new(expr),
                         args,
                     },
+                    span,
+                };
+            } else if self.eat(&TokenKind::Question) {
+                expr = Expr {
+                    kind: ExprKind::Try(Box::new(expr)),
                     span,
                 };
             } else if self.eat(&TokenKind::Dot) {
@@ -796,6 +801,14 @@ log[@f[1], @g[1, 2], make[][3]]"),
         assert_eq!(e.message, "変数（`@x`）が必要です（`1`がありました）");
         let e = error("for @x @a ( )");
         assert_eq!(e.message, "`in`が必要です（`@a`がありました）");
+    }
+
+    #[test]
+    fn try_operator() {
+        assert_eq!(
+            ast("@t := file_read[@p]?\n@n := to_num[@t]? + 1\n@v := @f[1]?{0}"),
+            "(:= @t (? (file_read @p)))\n(:= @n (+ (? (to_num @t)) 1))\n(:= @v ({} (? (call @f 1)) 0))\n"
+        );
     }
 
     #[test]

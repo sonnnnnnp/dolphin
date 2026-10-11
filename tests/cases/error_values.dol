@@ -1,0 +1,24 @@
+// 外の世界の失敗は、エラー値として返る（design.md 8.6）
+@r := file_read["target/no_such_file.txt"]
+log[is_error[@r], err_kind[@r]]
+log[err_message[@r]]
+
+// 数値に読めない文字列
+@n := to_num["abc"]
+log[is_error[@n], err_kind[@n], @n]
+log[is_error[to_num["12"]], to_num["12"] + 1]
+
+// 自分で作る。種類とメッセージが同じなら等しい
+@e := err_new["custom", "something failed"]
+log[@e, @e == err_new["custom", "something failed"], @e == err_new["x", "something failed"]]
+log[is_error[1], is_error[nil], is_error["error"]]
+
+// ファイルの書き込みの失敗も、値として見られる
+@w := file_write["target/no_such_dir/x.txt", "a"]
+log[is_error[@w], err_kind[@w]]
+@ok := file_write["target/golden_error_values.txt", "ok"]
+log[is_error[@ok], @ok == nil]
+
+// エラー値は、変数に入れたり配列に入れたりして扱える
+@results := arr_map[{"1", "x", "3"}, to_num]
+log[arr_map[@results, is_error]]

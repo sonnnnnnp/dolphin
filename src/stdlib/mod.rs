@@ -3,6 +3,7 @@
 //! 関数の一覧と仕様は design.md 5.5
 
 pub mod array;
+pub mod error;
 pub mod fs;
 pub mod io;
 pub mod map;
@@ -18,6 +19,7 @@ use crate::runtime::value::Value;
 
 pub fn register(interp: &mut Interpreter<'_>) {
     io::register(interp);
+    error::register(interp);
     fs::register(interp);
     string::register(interp);
     array::register(interp);
@@ -96,6 +98,12 @@ fn map_arg<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v Rc<RefCell
         Value::Map(map) => Ok(map),
         other => Err(type_error(name, i, "マップ", other)),
     }
+}
+
+/// 失敗したときに返すエラー値（design.md 8.6）。引数の型の間違いなどプログラムの間違いは、
+/// これではなく `Err(メッセージ)` で実行時エラーにする
+fn error_value(kind: &str, message: impl Into<String>) -> Value {
+    Value::error(kind, message.into())
 }
 
 fn new_array(items: Vec<Value>) -> Value {

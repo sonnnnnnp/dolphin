@@ -23,8 +23,7 @@ pub fn run_source(src: &str, out: &mut dyn Write) -> Result<(), Diagnostic> {
 
 /// `import` の相対パスを `base_dir` から引いて実行する（普通は実行するファイルのあるディレクトリ）
 pub fn run_source_in(src: &str, base_dir: PathBuf, out: &mut dyn Write) -> Result<(), Diagnostic> {
-    Session::with_base_dir(out, base_dir).eval(src)?;
-    Ok(())
+    Session::with_base_dir(out, base_dir).run(src)
 }
 
 /// 変数と関数を保ったまま、ソースを何回かに分けて実行する（REPL で使う）
@@ -44,8 +43,17 @@ impl<'a> Session<'a> {
         Self { interp }
     }
 
-    /// `src` を実行する。最後の文が式なら、その値を返す
+    /// `src` を実行する。最後の文が式なら、その値を返す（REPL で表示するため）
     pub fn eval(&mut self, src: &str) -> Result<Option<Value>, Diagnostic> {
+        self.exec(src, true)
+    }
+
+    /// `src` を実行する。値は返さない（ファイルの実行）
+    pub fn run(&mut self, src: &str) -> Result<(), Diagnostic> {
+        self.exec(src, false).map(|_| ())
+    }
+
+    fn exec(&mut self, src: &str, keep_last: bool) -> Result<Option<Value>, Diagnostic> {
         let tokens = syntax::lexer::tokenize(src)?;
         let program = syntax::parser::parse(&tokens)?;
         sema::resolver::resolve(
@@ -53,7 +61,7 @@ impl<'a> Session<'a> {
             |name| self.interp.callee(name),
             |name| self.interp.has_global(name),
         )?;
-        Ok(self.interp.run(&program)?)
+        Ok(self.interp.run(&program, keep_last)?)
     }
 }
 

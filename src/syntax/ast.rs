@@ -95,6 +95,8 @@ pub enum ExprKind {
     FuncRef(String),
     /// `[@a, @b] ( … )`。作られた場所のスコープを捕まえる
     Lambda(Rc<FuncDef>),
+    /// `expr?`。値がエラー値なら、いまの関数からそのエラーを返す
+    Try(Box<Expr>),
     /// `callee[args]`。関数値を呼ぶ（`@f[1]`）
     CallValue {
         callee: Box<Expr>,
@@ -253,6 +255,7 @@ impl fmt::Display for Expr {
                 write!(f, ")")
             }
             ExprKind::FuncRef(name) => write!(f, "(ref {name})"),
+            ExprKind::Try(inner) => write!(f, "(? {inner})"),
             ExprKind::Lambda(def) => {
                 write!(f, "(fn (")?;
                 write_seq(f, def.params.iter().map(|p| format!("@{p}")))?;

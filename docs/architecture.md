@@ -125,7 +125,7 @@ struct Stmt { kind: StmtKind, span: Span }
 enum StmtKind { FuncDef(Rc<FuncDef>), If { .. }, While { .. }, Return(..), Assign { .. }, Expr(..) }
 
 struct Expr { kind: ExprKind, span: Span }
-enum ExprKind { Number, Str, Bool, Var, Call, FuncRef, Lambda, CallValue, Array, Map, Member, MemberCall, Index, Unary, Binary }
+enum ExprKind { Number, Str, Bool, Var, Call, FuncRef, Lambda, CallValue, Try, Array, Map, Member, MemberCall, Index, Unary, Binary }
 ```
 
 - すべての文と式が `Span` を持つ。実行時エラーにも行・列を出すため
@@ -144,6 +144,7 @@ enum Value {
     Module(Rc<Module>),              // runtime/module.rs。import の結果
     Func(Rc<Closure>),               // 関数値。定義と、作られた場所の Env の組
     Native(NativeRef),               // 関数値になった組み込み関数
+    Error(Rc<ErrorValue>),           // 外の世界の失敗（種類とメッセージ）。`?` で伝える
 }
 ```
 

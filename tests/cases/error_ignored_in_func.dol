@@ -1,0 +1,6 @@
+save[@text] (
+    file_write["target/no_such_dir/x.txt", @text]
+    # true
+)
+log["before"]
+save["a"]

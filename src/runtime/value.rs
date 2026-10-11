@@ -26,6 +26,24 @@ pub enum Value {
     Func(Rc<Closure>),
     /// 関数値になった組み込み関数
     Native(NativeRef),
+    /// 外の世界の失敗（design.md 8.6）。失敗しうる関数が、成功の値の代わりに返す
+    Error(Rc<ErrorValue>),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ErrorValue {
+    /// `"not_found"` `"parse"` のような、プログラムで見分けるための種類
+    pub kind: Rc<str>,
+    pub message: Rc<str>,
+}
+
+impl Value {
+    pub fn error(kind: &str, message: impl Into<Rc<str>>) -> Value {
+        Value::Error(Rc::new(ErrorValue {
+            kind: kind.into(),
+            message: message.into(),
+        }))
+    }
 }
 
 /// 関数値の実体。`env` は関数が作られた場所のスコープで、呼び出すたびにその内側に
@@ -67,6 +85,7 @@ impl Value {
             Value::Map(_) => "マップ",
             Value::Module(_) => "モジュール",
             Value::Func(_) | Value::Native(_) => "関数",
+            Value::Error(_) => "エラー",
         }
     }
 
@@ -86,6 +105,7 @@ impl Value {
                 Rc::ptr_eq(a, b) || (Rc::ptr_eq(&a.def, &b.def) && Rc::ptr_eq(&a.env, &b.env))
             }
             (Value::Native(a), Value::Native(b)) => a.name == b.name,
+            (Value::Error(a), Value::Error(b)) => a == b,
             (Value::Array(a), Value::Array(b)) => {
                 let (a, b) = (a.borrow(), b.borrow());
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.equals(y))
@@ -134,6 +154,7 @@ fn write_value(
         Value::Func(c) if c.def.name.is_empty() => return write!(f, "<関数>"),
         Value::Func(c) => return write!(f, "<関数 {}>", c.def.name),
         Value::Native(n) => return write!(f, "<組み込み関数 {}>", n.name),
+        Value::Error(e) => return write!(f, "<エラー {}: {}>", e.kind, e.message),
         Value::Array(items) => Rc::as_ptr(items).cast::<()>(),
         Value::Map(map) => Rc::as_ptr(map).cast::<()>(),
     };

@@ -1,0 +1,4 @@
+@n := to_num["abc"]
+if @n (
+    log["x"]
+)

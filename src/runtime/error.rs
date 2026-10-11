@@ -22,6 +22,9 @@ pub struct RuntimeError {
     pub trace: Vec<TraceEntry>,
     /// import したファイルで起きたエラーなら、そのファイル
     pub origin: Option<Rc<Origin>>,
+    /// 本物のエラーではなく、`?` が関数から抜けるための合図。返す値は
+    /// `Interpreter::returning` にある。関数の呼び出しが受け取って、戻り値にする
+    pub early_return: bool,
 }
 
 impl RuntimeError {
@@ -31,6 +34,7 @@ impl RuntimeError {
             span,
             trace: Vec::new(),
             origin: None,
+            early_return: false,
         }
     }
 }
