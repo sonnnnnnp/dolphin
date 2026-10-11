@@ -144,4 +144,3 @@ cargo test
 |---|---|
 | `main` | 作り直し版（Rust） |
 | [`archive/cpp`](https://github.com/sonnnnnnp/dolphin/tree/archive/cpp) | 初期実装（C++17 + SFML）。サンプルスクリプトは `my_scripts/` |
-| [`archive/rust`](https://github.com/sonnnnnnp/dolphin/tree/archive/rust) | 初期実装を Rust + macroquad に移植したもの |
