@@ -1,0 +1,26 @@
+// マップの関数（design.md 5.12）
+@m := {"a": 1, "b": 2}
+log[map_values[@m], map_items[@m]]
+log[map_get[@m, "a", 0], map_get[@m, "z", "none"], map_get[@m, "z", nil] == nil]
+
+// merge は新しいマップ。同じキーは右が勝ち、位置は左のまま
+@merged := map_merge[@m, {"b": 20, "c": 30}]
+log[@merged, @m]
+
+// copy は浅いコピー
+@copy := map_copy[@m]
+@copy{"a"} = 100
+log[@m, @copy]
+@inner := {"list": {1}}
+@shallow := map_copy[@inner]
+arr_push[@shallow{"list"}, 2]
+log[@inner]
+
+// items を for で回す
+for @pair in map_items[@merged] (
+    log[@pair{0}, "=", @pair{1}]
+)
+
+// clear はその場で空にする
+map_clear[@copy]
+log[@copy, map_len[@copy], @m]

@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-12
+
+基本型の関数の穴をふさいだ（[design.md 5.12](docs/design.md)）。配列・マップをその場で書き換えるのは `push` `pop` `insert` `remove` `clear` だけで、ほかは新しい値を返す。
+
+### 追加
+- `type_of[v]`（`"nil"` `"bool"` `"number"` `"string"` `"array"` `"map"` `"function"` `"module"` `"error"`）
+- 配列: `arr_slice` `arr_concat` `arr_reverse` `arr_sort`（数値だけか文字列だけ。安定）`arr_sort_by`（比較関数つき。安定。矛盾した比較関数でもパニックしない自前のマージソート）`arr_index_of` `arr_contains` `arr_find` `arr_find_index` `arr_any` `arr_all` `arr_reduce` `arr_insert` `arr_remove` `arr_clear` `arr_copy`
+- マップ: `map_values` `map_items` `map_get`（既定値つき）`map_merge` `map_clear` `map_copy`
+- 文字列: `str_starts_with` `str_ends_with` `str_repeat` `str_pad_left` `str_pad_right` `str_trim_start` `str_trim_end` `str_lines` `str_code_at` `str_from_code` `str_rfind`
+- 数値: `num_fixed`（小数点以下の桁数を指定した文字列。ちょうど半分は 0 から遠いほうへ丸める）`trunc` `sign` `clamp`
+- `std:math`: 定数 `pi` `e` `inf` `nan`（組み込みモジュールが定数の変数を持てるようになった）、三角関数、`exp` `ln` `log10` `log2` `hypot`、`is_nan` `is_finite`。IEEE 754 に従い、定義できない入力には `nan` や `inf` を返す
+- 文字列のエスケープ `\t` と `\r`
+`
+
 ## [0.10.0] - 2026-10-12
 
 ### 追加

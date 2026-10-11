@@ -1,0 +1,7 @@
+// type_of（design.md 5.12）
+add[@a, @b] ( # @a + @b )
+@values := {nil, true, 1.5, "s", {1}, {"k": 1}, add, [@x] ( # @x ), log, import["std:json"], to_num["x"]}
+for @v in @values (
+    log[type_of[@v]]
+)
+log[type_of[1] == "number", type_of[{}] == "array", type_of[{:}] == "map"]

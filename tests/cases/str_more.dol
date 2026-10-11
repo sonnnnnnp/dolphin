@@ -1,0 +1,24 @@
+// 文字列の関数（design.md 5.12）
+log[str_starts_with["dolphin", "dol"], str_starts_with["dolphin", "phin"], str_ends_with["dolphin", "phin"], str_starts_with["a", ""]]
+log[str_repeat["ab", 3], "[" + str_repeat["x", 0] + "]", str_repeat["イルカ", 2]]
+
+// パディング。すでに幅以上なら、そのまま
+log["[" + str_pad_left["7", 3] + "]", "[" + str_pad_left["7", 3, "0"] + "]", "[" + str_pad_right["ab", 5, "."] + "]"]
+log[str_pad_left["12345", 3], str_pad_right["イルカ", 4, "・"], str_pad_left["", 2, "*"]]
+
+log["[" + str_trim_start["  hi  "] + "]", "[" + str_trim_end["  hi  "] + "]"]
+
+// 行に分ける。末尾の改行で空の要素は作らない
+log[str_lines["a\nb\n"], str_lines["a\r\nb"], str_lines[""], str_lines["\n"], str_lines["x"]]
+
+// コードポイント
+log[str_code_at["A", 0], str_code_at["イルカ", 1], str_from_code[65], str_from_code[12452]]
+log[str_from_code[str_code_at["z", 0] - 1]]
+@code := ""
+for @i in range[0, 3] (
+    @code = @code + str_from_code[97 + @i]
+)
+log[@code]
+
+// 後ろから探す
+log[str_rfind["abcabc", "bc"], str_find["abcabc", "bc"], str_rfind["abc", "x"], str_rfind["イルカイルカ", "カ"]]

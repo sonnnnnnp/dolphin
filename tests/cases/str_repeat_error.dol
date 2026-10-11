@@ -1,0 +1,1 @@
+log[str_repeat["ab", -1]]

@@ -1,0 +1,15 @@
+// 数値の関数と std:math（design.md 5.12）
+log[num_fixed[3.14159, 2], num_fixed[2, 3], num_fixed[2.5, 0], num_fixed[3.5, 0], num_fixed[-2.5, 0]]
+log[num_fixed[0.125, 2], num_fixed[1.005, 2], num_fixed[-0.001, 2], num_fixed[1234567.891, 1], num_fixed[0, 0]]
+log[num_fixed[pow[10, 21], 0], num_fixed[0.1 + 0.2, 20]]
+
+log[trunc[2.7], trunc[-2.7], sign[-5], sign[0], sign[3.5]]
+log[clamp[5, 0, 3], clamp[-1, 0, 3], clamp[2, 0, 3]]
+
+@m := import["std:math"]
+log[@m]
+log[@m.pi, @m.e]
+log[num_fixed[@m.sin[@m.pi / 2], 3], num_fixed[@m.cos[0], 1], num_fixed[@m.atan2[1, 1] * 4, 5]]
+log[@m.exp[0], @m.ln[1], @m.log10[1000], @m.log2[8], @m.hypot[3, 4]]
+log[@m.inf, -@m.inf, @m.is_nan[@m.nan], @m.is_nan[1], @m.is_finite[@m.inf], @m.is_finite[1]]
+log[@m.is_nan[@m.ln[-1]], @m.ln[0], @m.is_nan[@m.asin[2]]]

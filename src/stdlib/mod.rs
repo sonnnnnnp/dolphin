@@ -12,6 +12,7 @@ pub mod json;
 pub mod map;
 pub mod math;
 pub mod string;
+pub mod types;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -31,6 +32,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     array::register(interp);
     map::register(interp);
     math::register(interp);
+    types::register(interp);
 }
 
 // ---- 引数の検査（エラーはメッセージだけ返し、位置は Interpreter が付ける） ----
@@ -110,6 +112,10 @@ fn map_arg<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v Rc<RefCell
 /// これではなく `Err(メッセージ)` で実行時エラーにする
 fn error_value(kind: &str, message: impl Into<String>) -> Value {
     Value::error(kind, message.into())
+}
+
+fn new_map(map: Map) -> Value {
+    Value::Map(Rc::new(RefCell::new(map)))
 }
 
 fn new_array(items: Vec<Value>) -> Value {

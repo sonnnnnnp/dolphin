@@ -1,0 +1,4 @@
+num_fixed_error.dol:1:5: エラー: num_fixed の桁数は 0〜20 です（21）
+  |
+1 | log[num_fixed[1.5, 21]]
+  |     ^

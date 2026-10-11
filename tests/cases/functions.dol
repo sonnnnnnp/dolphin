@@ -1,6 +1,6 @@
 // 定義より前から呼べる・再帰・早期 return・ローカル変数
 log[fib[20]]
-log[sign[-5], sign[0], sign[3]]
+log[sgn[-5], sgn[0], sgn[3]]
 log[sum_to[100]]
 @touched := false
 log[nothing[], @touched]
@@ -12,7 +12,7 @@ fib[@n] (
     # fib[@n - 1] + fib[@n - 2]
 )
 
-sign[@x] (
+sgn[@x] (
     if @x < 0 (
         # -1
     )

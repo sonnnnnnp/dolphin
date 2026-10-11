@@ -1,0 +1,4 @@
+arr_sort_by_error.dol:1:5: エラー: arr_sort_by の関数は数値を返す必要があります（文字列でした）
+  |
+1 | log[arr_sort_by[{2, 1}, [@x, @y] ( # "no" )]]
+  |     ^

@@ -52,6 +52,11 @@ impl Map {
         Some(value)
     }
 
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.index.clear();
+    }
+
     /// 追加順に (キー, 値) を返す
     pub fn iter(&self) -> impl Iterator<Item = (&Rc<str>, &Value)> {
         self.entries.iter().map(|(k, v)| (k, v))

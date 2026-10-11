@@ -1,0 +1,4 @@
+str_pad_error.dol:1:5: エラー: str_pad_left の 3 番目の引数は 1 文字です（"ab"）
+  |
+1 | log[str_pad_left["a", 3, "ab"]]
+  |     ^

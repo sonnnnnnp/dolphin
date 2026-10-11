@@ -1,0 +1,1 @@
+log[str_pad_left["a", 3, "ab"]]

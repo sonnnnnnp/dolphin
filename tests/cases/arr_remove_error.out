@@ -1,0 +1,4 @@
+arr_remove_error.dol:1:1: エラー: arr_remove の位置 2 は範囲外です（要素は 2 個）
+  |
+1 | arr_remove[{1, 2}, 2]
+  | ^

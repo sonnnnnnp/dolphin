@@ -1,0 +1,4 @@
+arr_insert_error.dol:1:1: エラー: arr_insert の位置 3 は使えません（0 ≦ 位置 ≦ 2）
+  |
+1 | arr_insert[{1, 2}, 3, 0]
+  | ^

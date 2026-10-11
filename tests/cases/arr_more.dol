@@ -1,0 +1,42 @@
+// 配列の関数（design.md 5.12）
+@a := {3, 1, 2}
+
+// 新しい配列を返す関数は、元を変えない
+log[arr_slice[{10, 20, 30, 40}, 1, 3], arr_slice[@a, 0, 0], arr_slice[@a, 3, 3]]
+log[arr_concat[@a, {9}], arr_reverse[@a], arr_sort[@a], @a]
+log[arr_sort[{"b", "a", "c"}], arr_sort[{}], arr_sort[{2.5, -1, 0}]]
+
+// その場で書き換える関数
+arr_insert[@a, 0, 99]
+arr_insert[@a, arr_len[@a], 100]
+log[@a]
+log[arr_remove[@a, 0], arr_remove[@a, 3], @a]
+@copy := arr_copy[@a]
+arr_clear[@a]
+log[@a, @copy]
+arr_push[@copy, 7]
+log[@copy, arr_len[@a]]
+
+// 探す
+@n := {5, 7, 9, 7}
+log[arr_index_of[@n, 7], arr_index_of[@n, 1], arr_contains[@n, 9], arr_contains[@n, 8]]
+log[arr_contains[{{1}, {2}}, {2}], arr_index_of[{"a", nil}, nil]]
+log[arr_find[@n, [@x] ( # @x > 5 )], arr_find[@n, [@x] ( # @x > 100 )] == nil]
+log[arr_find_index[@n, [@x] ( # @x > 5 )], arr_find_index[@n, [@x] ( # @x > 100 )]]
+log[arr_any[@n, [@x] ( # @x == 9 )], arr_any[{}, [@x] ( # true )]]
+log[arr_all[@n, [@x] ( # @x > 4 )], arr_all[@n, [@x] ( # @x > 5 )], arr_all[{}, [@x] ( # false )]]
+
+// 畳み込み
+log[arr_reduce[{1, 2, 3, 4}, 0, [@acc, @x] ( # @acc + @x )]]
+log[arr_reduce[{"a", "b"}, "", [@acc, @x] ( # @x + @acc )], arr_reduce[{}, "init", log]]
+
+// 比較関数つきの並べ替え。同じ値は元の順を保つ（安定）
+@people := {{"n": "a", "age": 30}, {"n": "b", "age": 25}, {"n": "c", "age": 30}, {"n": "d", "age": 20}}
+@by_age := arr_sort_by[@people, [@x, @y] ( # @x{"age"} - @y{"age"} )]
+log[arr_map[@by_age, [@p] ( # @p{"n"} )]]
+@desc := arr_sort_by[{3, 1, 2}, [@x, @y] ( # @y - @x )]
+log[@desc]
+log[arr_sort_by[{"bb", "a", "ccc"}, [@x, @y] ( # str_len[@x] - str_len[@y] )]]
+
+// 関数値として渡せる
+log[arr_map[{{3, 1}, {2}}, arr_sort]]

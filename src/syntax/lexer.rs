@@ -316,6 +316,8 @@ impl Lexer {
                 '"' => break,
                 '\\' => match self.bump() {
                     Some('n') => text.push('\n'),
+                    Some('t') => text.push('\t'),
+                    Some('r') => text.push('\r'),
                     Some(c @ ('"' | '\\' | '@' | '$')) => text.push(c),
                     Some(other) => {
                         return self.error(esc_span, format!("不明なエスケープ `\\{other}`"));

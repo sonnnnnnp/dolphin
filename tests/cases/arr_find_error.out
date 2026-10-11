@@ -1,0 +1,4 @@
+arr_find_error.dol:1:5: エラー: arr_find の関数は真偽値を返す必要があります（数値でした）
+  |
+1 | log[arr_find[{1, 2}, [@x] ( # @x )]]
+  |     ^

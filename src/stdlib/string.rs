@@ -18,6 +18,17 @@ pub fn register(interp: &mut Interpreter<'_>) {
     interp.register("str_split", str_split);
     interp.register("str_join", str_join);
     interp.register("str_sub", str_sub);
+    interp.register("str_starts_with", str_starts_with);
+    interp.register("str_ends_with", str_ends_with);
+    interp.register("str_repeat", str_repeat);
+    interp.register("str_pad_left", |_, args| pad("str_pad_left", args, true));
+    interp.register("str_pad_right", |_, args| pad("str_pad_right", args, false));
+    interp.register("str_trim_start", str_trim_start);
+    interp.register("str_trim_end", str_trim_end);
+    interp.register("str_lines", str_lines);
+    interp.register("str_code_at", str_code_at);
+    interp.register("str_from_code", str_from_code);
+    interp.register("str_rfind", str_rfind);
     interp.register("to_str", to_str);
     interp.register("to_num", to_num);
 }
@@ -153,4 +164,126 @@ fn to_num(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
             other.type_name()
         )),
     }
+}
+
+fn str_starts_with(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("str_starts_with", args, 2)?;
+    let s = str_arg("str_starts_with", args, 0)?;
+    Ok(Value::Bool(s.starts_with(str_arg(
+        "str_starts_with",
+        args,
+        1,
+    )?)))
+}
+
+fn str_ends_with(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("str_ends_with", args, 2)?;
+    let s = str_arg("str_ends_with", args, 0)?;
+    Ok(Value::Bool(s.ends_with(str_arg("str_ends_with", args, 1)?)))
+}
+
+/// 作れる文字列の長さの上限（文字数）
+const STR_MAX: usize = 100_000_000;
+
+/// `s` を `n` 回つなげる
+fn str_repeat(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("str_repeat", args, 2)?;
+    let s = str_arg("str_repeat", args, 0)?;
+    let n = int_arg("str_repeat", args, 1)?;
+    if n < 0 {
+        return Err(format!("str_repeat の回数は 0 以上です（{n}）"));
+    }
+    let total = s.chars().count().checked_mul(n as usize);
+    if total.is_none_or(|t| t > STR_MAX) {
+        return Err(format!(
+            "str_repeat の結果が大きすぎます（{STR_MAX} 文字まで）"
+        ));
+    }
+    Ok(string(s.repeat(n as usize)))
+}
+
+/// 文字数が `width` になるまで `fill`（1 文字。省略は空白）を足す。すでに `width` 以上ならそのまま
+fn pad(name: &str, args: &[Value], left: bool) -> Result<Value, String> {
+    if !(2..=3).contains(&args.len()) {
+        return Err(format!(
+            "{name} の引数は 2 個か 3 個です（{} 個渡されました）",
+            args.len()
+        ));
+    }
+    let s = str_arg(name, args, 0)?;
+    let width = int_arg(name, args, 1)?;
+    let fill = match args.get(2) {
+        Some(_) => {
+            let fill = str_arg(name, args, 2)?;
+            let mut chars = fill.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) => c,
+                _ => return Err(format!("{name} の 3 番目の引数は 1 文字です（{fill:?}）")),
+            }
+        }
+        None => ' ',
+    };
+    if !(0..=STR_MAX as i64).contains(&width) {
+        return Err(format!("{name} の幅は 0〜{STR_MAX} です（{width}）"));
+    }
+    let missing = (width as usize).saturating_sub(s.chars().count());
+    let padding: String = std::iter::repeat_n(fill, missing).collect();
+    Ok(string(if left {
+        format!("{padding}{s}")
+    } else {
+        format!("{s}{padding}")
+    }))
+}
+
+fn str_trim_start(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("str_trim_start", args, 1)?;
+    Ok(string(str_arg("str_trim_start", args, 0)?.trim_start()))
+}
+
+fn str_trim_end(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("str_trim_end", args, 1)?;
+    Ok(string(str_arg("str_trim_end", args, 0)?.trim_end()))
+}
+
+/// 改行（`\n` と `\r\n`）で分けた配列。末尾の改行で空の要素は作らない
+fn str_lines(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("str_lines", args, 1)?;
+    let s = str_arg("str_lines", args, 0)?;
+    Ok(new_array(s.lines().map(string).collect()))
+}
+
+/// `i` 番目の文字のコードポイント
+fn str_code_at(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("str_code_at", args, 2)?;
+    let s = str_arg("str_code_at", args, 0)?;
+    let i = int_arg("str_code_at", args, 1)?;
+    let len = s.chars().count();
+    match usize::try_from(i).ok().and_then(|i| s.chars().nth(i)) {
+        Some(c) => Ok(Value::Num(f64::from(u32::from(c)))),
+        None => Err(format!(
+            "str_code_at の位置 {i} は範囲外です（文字は {len} 個）"
+        )),
+    }
+}
+
+/// コードポイントから 1 文字の文字列
+fn str_from_code(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("str_from_code", args, 1)?;
+    let n = int_arg("str_from_code", args, 0)?;
+    match u32::try_from(n).ok().and_then(char::from_u32) {
+        Some(c) => Ok(string(c.to_string())),
+        None => Err(format!("str_from_code のコードポイント {n} は使えません")),
+    }
+}
+
+/// 最後に見つかった位置（文字単位）。なければ -1
+fn str_rfind(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("str_rfind", args, 2)?;
+    let s = str_arg("str_rfind", args, 0)?;
+    let sub = str_arg("str_rfind", args, 1)?;
+    let pos = match s.rfind(sub) {
+        Some(byte_pos) => s[..byte_pos].chars().count() as f64,
+        None => -1.0,
+    };
+    Ok(Value::Num(pos))
 }

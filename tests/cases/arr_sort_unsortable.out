@@ -1,0 +1,4 @@
+arr_sort_unsortable.dol:1:5: エラー: arr_sort の要素は、すべて数値かすべて文字列である必要があります（配列は並べ替えられません。`arr_sort_by` を使ってください）
+  |
+1 | log[arr_sort[{{1}, {2}}]]
+  |     ^

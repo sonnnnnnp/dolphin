@@ -1,0 +1,4 @@
+str_repeat_error.dol:1:5: エラー: str_repeat の回数は 0 以上です（-1）
+  |
+1 | log[str_repeat["ab", -1]]
+  |     ^

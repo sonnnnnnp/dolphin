@@ -77,6 +77,8 @@ pub struct Interpreter<'a> {
     /// 組み込みモジュールの登録（`std:json` → 関数の表）と、import 済みのもの
     std_registry: HashMap<&'static str, Vec<(&'static str, NativeFn)>>,
     std_loaded: HashMap<&'static str, Rc<Module>>,
+    /// 組み込みモジュールの定数（`std:math` の `pi` など）
+    std_consts: HashMap<&'static str, Vec<(&'static str, f64)>>,
     /// `?` が関数から返そうとしているエラー値（`RuntimeError::early_return` と組）
     returning: Option<Value>,
 }
@@ -99,6 +101,7 @@ impl<'a> Interpreter<'a> {
             in_func: false,
             std_registry: HashMap::new(),
             std_loaded: HashMap::new(),
+            std_consts: HashMap::new(),
             returning: None,
         }
     }
@@ -111,6 +114,15 @@ impl<'a> Interpreter<'a> {
     /// モジュール名をつけて書き、`.` より後ろが `@j.parse[...]` で呼ぶときの名前になる
     pub fn register_module(&mut self, name: &'static str, functions: &[(&'static str, NativeFn)]) {
         self.std_registry.insert(name, functions.to_vec());
+    }
+
+    /// 組み込みモジュールの定数（数値）を登録する。モジュールの変数として読める
+    pub fn register_module_constants(
+        &mut self,
+        name: &'static str,
+        constants: &[(&'static str, f64)],
+    ) {
+        self.std_consts.insert(name, constants.to_vec());
     }
 
     pub fn native(&self, name: &str) -> Option<NativeFn> {
@@ -830,6 +842,9 @@ impl<'a> Interpreter<'a> {
         for &(full, f) in functions {
             let short = full.rsplit('.').next().unwrap_or(full);
             module.natives.insert(short, NativeRef { name: full, f });
+        }
+        for &(name, value) in self.std_consts.get(key).into_iter().flatten() {
+            module.globals.declare(name, Value::Num(value));
         }
         let module = Rc::new(module);
         self.std_loaded.insert(key, Rc::clone(&module));

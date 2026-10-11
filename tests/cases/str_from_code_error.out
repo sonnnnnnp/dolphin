@@ -1,0 +1,4 @@
+str_from_code_error.dol:1:5: エラー: str_from_code のコードポイント 55296 は使えません
+  |
+1 | log[str_from_code[55296]]
+  |     ^

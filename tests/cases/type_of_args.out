@@ -1,0 +1,4 @@
+type_of_args.dol:1:5: エラー: type_of の引数は 1 個です（0 個渡されました）
+  |
+1 | log[type_of[]]
+  |     ^

@@ -1,0 +1,4 @@
+arr_slice_error.dol:1:5: エラー: arr_slice の範囲 2〜5 は使えません（0 ≦ 開始 ≦ 終了 ≦ 3）
+  |
+1 | log[arr_slice[{1, 2, 3}, 2, 5]]
+  |     ^
