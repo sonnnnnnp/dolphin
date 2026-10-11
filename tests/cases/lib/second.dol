@@ -1,5 +1,5 @@
-@count = 100
-@util = import["util.dol"]
+@count := 100
+@util := import["util.dol"]
 
 bump[] (
     @count = @count + 1

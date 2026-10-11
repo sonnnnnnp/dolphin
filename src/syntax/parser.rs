@@ -140,19 +140,27 @@ impl<'t> Parser<'t> {
     /// 代入・関数定義・式文。どれも式から始まるので、まず式として読み、
     /// 続くトークンで区別する
     ///
-    /// - `=` が続く → 代入。左辺は変数か `変数[式]` に限る
+    /// - `:=` が続く → 宣言。左辺は変数に限る
+    /// - `=` が続く → 代入。左辺は変数か `変数{式}...` に限る
     /// - `(` が続き、左辺が呼び出しの形 → 関数定義（design.md 4.1）
     fn simple_statement(&mut self) -> PResult<Stmt> {
         let span = self.peek().span;
         let expr = self.expression()?;
 
-        let kind = if self.at(&TokenKind::Assign) {
-            let (target, index) = assign_target(expr)?;
+        let kind = if self.at(&TokenKind::Declare) {
+            let ExprKind::Var(target) = expr.kind else {
+                return Err(Diagnostic::new(expr.span, "宣言できるのは変数だけです"));
+            };
+            self.advance();
+            let value = self.expression()?;
+            StmtKind::Declare { target, value }
+        } else if self.at(&TokenKind::Assign) {
+            let (target, indices) = assign_target(expr)?;
             self.advance();
             let value = self.expression()?;
             StmtKind::Assign {
                 target,
-                index,
+                indices,
                 value,
             }
         } else if self.at(&TokenKind::LParen) {
@@ -167,15 +175,15 @@ impl<'t> Parser<'t> {
     }
 
     /// func_def = IDENT "[" [ params ] "]" block
-    /// 引数部分は呼び出しとして読み済みなので、`$` 変数だけかを確かめる
+    /// 引数部分は呼び出しとして読み済みなので、変数だけかを確かめる
     fn func_def(&mut self, name: String, args: Vec<Expr>, span: Span) -> PResult<FuncDef> {
         let params = args
             .into_iter()
             .map(|arg| match arg.kind {
-                ExprKind::Var(Var::Local(param)) => Ok(param),
+                ExprKind::Var(Var(param)) => Ok(param),
                 _ => Err(Diagnostic::new(
                     arg.span,
-                    "関数定義の引数は `$` 変数で書きます",
+                    "関数定義の引数は変数（`@x`）で書きます",
                 )),
             })
             .collect::<PResult<Vec<_>>>()?;
@@ -317,15 +325,15 @@ impl<'t> Parser<'t> {
         })
     }
 
-    /// postfix = primary { "[" expression "]" | "." member }
+    /// postfix = primary { "{" expression "}" | "." member }
     /// member  = IDENT [ "[" [ args ] "]" ]
     fn postfix(&mut self) -> PResult<Expr> {
         let mut expr = self.primary()?;
         loop {
             let span = expr.span;
-            if self.eat(&TokenKind::LBracket) {
+            if self.eat(&TokenKind::LBrace) {
                 let index = self.expression()?;
-                self.expect(&TokenKind::RBracket)?;
+                self.expect(&TokenKind::RBrace)?;
                 expr = Expr {
                     kind: ExprKind::Index {
                         target: Box::new(expr),
@@ -360,8 +368,7 @@ impl<'t> Parser<'t> {
             TokenKind::Str(parts) => ExprKind::Str(parts.clone()),
             TokenKind::True => ExprKind::Bool(true),
             TokenKind::False => ExprKind::Bool(false),
-            TokenKind::Global(name) => ExprKind::Var(Var::Global(name.clone())),
-            TokenKind::Local(name) => ExprKind::Var(Var::Local(name.clone())),
+            TokenKind::Var(name) => ExprKind::Var(Var(name.clone())),
             // call = IDENT "[" [ args ] "]"
             TokenKind::Ident(name) => {
                 self.advance();
@@ -475,8 +482,8 @@ fn binary(op: BinaryOp, lhs: Expr, rhs: Expr, span: Span) -> Expr {
     }
 }
 
-/// 代入の左辺を (変数, 添字) に分解する
-fn assign_target(expr: Expr) -> PResult<(Var, Option<Expr>)> {
+/// 代入の左辺を (変数, 添字を外側から順に並べたもの) に分解する
+fn assign_target(expr: Expr) -> PResult<(Var, Vec<Expr>)> {
     let invalid = || Diagnostic::new(expr.span, "代入できるのは変数か配列の要素だけです");
     let module_var = || {
         Diagnostic::new(
@@ -484,15 +491,21 @@ fn assign_target(expr: Expr) -> PResult<(Var, Option<Expr>)> {
             "モジュールの変数は外から書き換えられません（書き換えたいときは、そのファイルに setter 関数を書いてください）",
         )
     };
-    match expr.kind {
-        ExprKind::Member { .. } => Err(module_var()),
-        ExprKind::Var(var) => Ok((var, None)),
-        ExprKind::Index { target, index } => match target.kind {
-            ExprKind::Var(var) => Ok((var, Some(*index))),
-            ExprKind::Member { .. } => Err(module_var()),
-            _ => Err(invalid()),
-        },
-        _ => Err(invalid()),
+    let mut indices = Vec::new();
+    let mut current = expr.kind;
+    loop {
+        match current {
+            ExprKind::Member { .. } => return Err(module_var()),
+            ExprKind::Var(var) => {
+                indices.reverse();
+                return Ok((var, indices));
+            }
+            ExprKind::Index { target, index } => {
+                indices.push(*index);
+                current = target.kind;
+            }
+            _ => return Err(invalid()),
+        }
     }
 }
 
@@ -513,8 +526,8 @@ mod tests {
     #[test]
     fn precedence() {
         assert_eq!(
-            ast("@x = 1 + 2 * 3 - -$y"),
-            "(= @x (- (+ 1 (* 2 3)) (- $y)))\n"
+            ast("@x = 1 + 2 * 3 - -@y"),
+            "(= @x (- (+ 1 (* 2 3)) (- @y)))\n"
         );
         assert_eq!(
             ast("@ok = !@a || @b && @c >= 1"),
@@ -534,8 +547,8 @@ mod tests {
     #[test]
     fn func_def_and_call() {
         assert_eq!(
-            ast("add[$a, $b] (\n    # $a + $b\n)\nlog[add[1, 2]]\nf[] (\n    #\n)"),
-            "(def add ($a $b) ((# (+ $a $b))))\n(log (add 1 2))\n(def f () ((#)))\n"
+            ast("add[@a, @b] (\n    # @a + @b\n)\nlog[add[1, 2]]\nf[] (\n    #\n)"),
+            "(def add (@a @b) ((# (+ @a @b))))\n(log (add 1 2))\n(def f () ((#)))\n"
         );
     }
 
@@ -565,8 +578,13 @@ else (
     #[test]
     fn arrays_and_index() {
         assert_eq!(
-            ast("@n = {1, 2}\n@n[0] = @n[1]\n@e = {}"),
-            "(= @n {1 2})\n(= ([] @n 0) ([] @n 1))\n(= @e {})\n"
+            ast("@n := {1, 2}\n@n{0} = @n{1}\n@e := {}"),
+            "(:= @n {1 2})\n(= ({} @n 0) ({} @n 1))\n(:= @e {})\n"
+        );
+        // 添字は続けて書ける。代入の左辺にも書ける
+        assert_eq!(
+            ast("@m{\"a\"}{0} = @m{\"b\"}{1}"),
+            "(= ({} ({} @m \"a\") 0) ({} ({} @m \"b\") 1))\n"
         );
     }
 
@@ -576,10 +594,10 @@ else (
             ast("@x = @u.add[1, 2] + @u.version"),
             "(= @x (+ ((. @u add) 1 2) (. @u version)))\n"
         );
-        // `.名前[...]` は常に関数呼び出し。モジュールの配列の要素は括弧で囲んで読む
+        // `.名前[...]` は関数呼び出し、添字は `{ }`
         assert_eq!(
-            ast("log[@u.items[0], (@u.items)[0], @a.b.f[]]"),
-            "(log ((. @u items) 0) ([] (. @u items) 0) ((. (. @a b) f)))\n"
+            ast("log[@u.items{0}, @a.b.f[]]"),
+            "(log ({} (. @u items) 0) ((. (. @a b) f)))\n"
         );
         // 数値の小数点とは区別される
         assert_eq!(ast("@x = 1.5"), "(= @x 1.5)\n");
@@ -597,32 +615,32 @@ else (
                 .contains("外から書き換えられません")
         );
         assert!(
-            error("(@u.items)[0] = 1")
+            error("@u.items{0} = 1")
                 .message
                 .contains("外から書き換えられません")
         );
         // 関数定義は名前空間つきでは書けない
-        assert!(parse(&tokenize("@u.f[$a] (\n)").unwrap()).is_err());
+        assert!(parse(&tokenize("@u.f[@a] (\n)").unwrap()).is_err());
     }
 
     #[test]
     fn maps() {
         assert_eq!(
-            ast("@m = {\"a\": 1, @k: {:}}\n@m[\"a\"] = {}"),
-            "(= @m {\"a\": 1 @k: {:}})\n(= ([] @m \"a\") {})\n"
+            ast("@m := {\"a\": 1, @k: {:}}\n@m{\"a\"} = {}"),
+            "(:= @m {\"a\": 1 @k: {:}})\n(= ({} @m \"a\") {})\n"
         );
         // { } の中の改行は無視されるので複数行に書ける
         assert_eq!(
-            ast("@m = {\n    \"x\": 1,\n    \"y\": 2\n}"),
-            "(= @m {\"x\": 1 \"y\": 2})\n"
+            ast("@m := {\n    \"x\": 1,\n    \"y\": 2\n}"),
+            "(:= @m {\"x\": 1 \"y\": 2})\n"
         );
     }
 
     #[test]
     fn mixed_array_and_map() {
-        let e = error("@m = {\"a\": 1, 2}");
+        let e = error("@m := {\"a\": 1, 2}");
         assert_eq!(e.message, "`:`が必要です（`}`がありました）");
-        let e = error("@a = {1, 2: 3}");
+        let e = error("@a := {1, 2: 3}");
         assert_eq!(e.message, "`,` か `}`が必要です（`:`がありました）");
     }
 
@@ -666,9 +684,18 @@ else (
     }
 
     #[test]
-    fn global_param() {
-        let e = error("f[@a] (\n)");
-        assert_eq!(e.message, "関数定義の引数は `$` 変数で書きます");
+    fn non_variable_param() {
+        let e = error("f[1] (\n)");
+        assert_eq!(e.message, "関数定義の引数は変数（`@x`）で書きます");
+    }
+
+    #[test]
+    fn declare() {
+        assert_eq!(ast("@x := 1 + 2"), "(:= @x (+ 1 2))\n");
+        let e = error("@a{0} := 1");
+        assert_eq!(e.message, "宣言できるのは変数だけです");
+        let e = error("f[] := 1");
+        assert_eq!(e.message, "宣言できるのは変数だけです");
     }
 
     #[test]

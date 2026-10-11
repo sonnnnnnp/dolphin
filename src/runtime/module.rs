@@ -1,4 +1,4 @@
-//! モジュール（design.md 5.7）。import したファイル 1 つ分の `@` 変数と関数
+//! モジュール（design.md 5.7）。import したファイル 1 つ分のトップレベルの変数と関数
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -6,7 +6,7 @@ use std::fmt;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use super::env::Scope;
+use super::env::Env;
 use crate::diag::Origin;
 use crate::syntax::ast::FuncDef;
 
@@ -17,7 +17,8 @@ pub struct Module {
     pub dir: PathBuf,
     /// エラー表示のためのファイルの中身。実行中の本体は None
     pub origin: Option<Rc<Origin>>,
-    pub globals: RefCell<Scope>,
+    /// トップレベルのスコープ。ファイル内の関数はここを外側として実行される
+    pub globals: Rc<Env>,
     pub functions: RefCell<HashMap<String, Rc<FuncDef>>>,
 }
 
@@ -27,7 +28,7 @@ impl Module {
             name,
             dir,
             origin,
-            globals: RefCell::default(),
+            globals: Env::new(None),
             functions: RefCell::default(),
         }
     }

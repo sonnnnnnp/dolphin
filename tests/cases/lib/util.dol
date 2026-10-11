@@ -1,10 +1,10 @@
-@version = "1.0"
-@count = 0
-@loaded = "util"
+@version := "1.0"
+@count := 0
+@loaded := "util"
 log["util.dol を読み込み中"]
 
-add[$a, $b] (
-    # $a + $b
+add[@a, @b] (
+    # @a + @b
 )
 
 next[] (

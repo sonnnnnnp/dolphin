@@ -1,5 +1,5 @@
 // break と continue は、いちばん内側の while に効く
-@i = 0
+@i := 0
 while true (
     @i = @i + 1
     if @i % 2 == 0 (
@@ -12,10 +12,10 @@ while true (
 )
 
 // 入れ子: 内側の break は内側の while だけを抜ける
-@row = 0
+@row := 0
 while @row < 3 (
-    @col = 0
-    @line = ""
+    @col := 0
+    @line := ""
     while true (
         if @col > @row (
             break
@@ -28,13 +28,13 @@ while @row < 3 (
 )
 
 // 関数の中の while から # で返す
-find[$arr, $target] (
-    $i = 0
-    while $i < arr_len[$arr] (
-        if $arr[$i] == $target (
-            # $i
+find[@arr, @target] (
+    @i := 0
+    while @i < arr_len[@arr] (
+        if @arr{@i} == @target (
+            # @i
         )
-        $i = $i + 1
+        @i = @i + 1
     )
     # -1
 )

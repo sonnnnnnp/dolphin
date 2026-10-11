@@ -1,6 +1,6 @@
 [package]
 name = "dolphin"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 
 # コア言語（lib）は外部クレートに依存しない。CLI の便利機能だけ feature で足す

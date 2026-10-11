@@ -48,7 +48,11 @@ impl<'a> Session<'a> {
     pub fn eval(&mut self, src: &str) -> Result<Option<Value>, Diagnostic> {
         let tokens = syntax::lexer::tokenize(src)?;
         let program = syntax::parser::parse(&tokens)?;
-        sema::resolver::resolve(&program, |name| self.interp.callee(name))?;
+        sema::resolver::resolve(
+            &program,
+            |name| self.interp.callee(name),
+            |name| self.interp.has_global(name),
+        )?;
         Ok(self.interp.run(&program)?)
     }
 }
@@ -61,13 +65,13 @@ mod tests {
     fn session_keeps_state() {
         let mut out = Vec::new();
         let mut session = Session::new(&mut out);
-        session.eval("@x = 1").unwrap();
-        session.eval("inc[$n] (\n    # $n + 1\n)").unwrap();
+        session.eval("@x := 1").unwrap();
+        session.eval("inc[@n] (\n    # @n + 1\n)").unwrap();
         let value = session.eval("inc[@x]").unwrap();
         assert!(matches!(value, Some(Value::Num(2.0))));
 
         // 前の入力で定義した関数は再定義でき、引数の数も検査される
-        session.eval("inc[$n] (\n    # $n + 10\n)").unwrap();
+        session.eval("inc[@n] (\n    # @n + 10\n)").unwrap();
         assert!(matches!(
             session.eval("inc[1]").unwrap(),
             Some(Value::Num(11.0))
@@ -80,7 +84,7 @@ mod tests {
     fn statement_has_no_value() {
         let mut out = Vec::new();
         let mut session = Session::new(&mut out);
-        assert!(session.eval("@x = 1").unwrap().is_none());
+        assert!(session.eval("@x := 1").unwrap().is_none());
         assert!(session.eval("").unwrap().is_none());
     }
 
@@ -90,14 +94,14 @@ mod tests {
         let mut session = Session::new(&mut out);
         for src in [
             "f[] (",
-            "@m = {\"a\": 1,",
+            "@m := {\"a\": 1,",
             "log[\"abc",
             "if true (\n    log[1]\n",
         ] {
             let e = session.eval(src).unwrap_err();
             assert!(e.unexpected_eof, "{src:?}: {}", e.message);
         }
-        for src in ["@x = )", "log[1 2]"] {
+        for src in ["@x := )", "log[1 2]"] {
             let e = session.eval(src).unwrap_err();
             assert!(!e.unexpected_eof, "{src:?}: {}", e.message);
         }

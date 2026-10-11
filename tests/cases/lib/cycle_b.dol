@@ -1,1 +1,1 @@
-@a = import["cycle_a.dol"]
+@a := import["cycle_a.dol"]

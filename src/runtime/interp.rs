@@ -9,7 +9,7 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use super::env::{Frame, Scope};
+use super::env::{Env, Frame};
 use super::error::{RuntimeError, TraceEntry};
 use super::map::Map;
 use super::module::Module;
@@ -52,9 +52,12 @@ enum ModuleState {
 pub struct Interpreter<'a> {
     /// `log` の出力先。テストでは Vec<u8> を渡して出力を取り出す
     pub out: &'a mut dyn Write,
-    /// 今実行しているコードが属するモジュール。`@x` と関数名はここから引く。
+    /// 今実行しているコードが属するモジュール。関数名はここから引く。
     /// 最初は実行中の本体で、import したファイルや、そのファイルの関数を実行している間は切り替わる
     current: Rc<Module>,
+    /// いま入っているスコープ。変数はここから外側へ向かって探す。
+    /// `( )` のブロックと関数呼び出しごとに内側のスコープへ入り、出るときに戻す
+    env: Rc<Env>,
     /// 本体のあるディレクトリ。モジュールの表示名をここからの相対パスにする
     root_dir: PathBuf,
     /// import 済みのファイル（正規化したパス → 状態）
@@ -68,9 +71,11 @@ pub struct Interpreter<'a> {
 impl<'a> Interpreter<'a> {
     /// `base_dir` は、本体が `import` する相対パスの基準
     pub fn new(out: &'a mut dyn Write, base_dir: PathBuf) -> Self {
+        let current = Rc::new(Module::new("".into(), base_dir.clone(), None));
         Self {
             out,
-            current: Rc::new(Module::new("".into(), base_dir.clone(), None)),
+            env: Rc::clone(&current.globals),
+            current,
             root_dir: base_dir,
             modules: HashMap::new(),
             loading: Vec::new(),
@@ -106,22 +111,13 @@ impl<'a> Interpreter<'a> {
         (name == "import" || self.natives.contains_key(name)).then_some(Callee::Native)
     }
 
-    pub fn get_var(&self, var: &Var) -> Option<Value> {
-        match var {
-            Var::Global(name) => self.current.globals.borrow().get(name).cloned(),
-            Var::Local(name) => self.frames.last()?.locals.get(name).cloned(),
-        }
+    /// Resolver に渡す、前の入力（REPL）で宣言したトップレベルの変数があるか
+    pub fn has_global(&self, name: &str) -> bool {
+        self.current.globals.get_own(name).is_some()
     }
 
-    /// `$x` は関数の中でしか使えないことを Resolver が保証している前提
-    pub fn set_var(&mut self, var: &Var, value: Value) {
-        match var {
-            Var::Global(name) => self.current.globals.borrow_mut().set(name, value),
-            Var::Local(name) => {
-                let frame = self.frames.last_mut().expect("関数の外で $ 変数");
-                frame.locals.set(name, value);
-            }
-        }
+    pub fn get_var(&self, var: &Var) -> Option<Value> {
+        self.env.get(&var.0)
     }
 
     /// プログラムを実行する。最後の文が式なら、その値を返す（REPL で表示するため）。
@@ -137,6 +133,7 @@ impl<'a> Interpreter<'a> {
                     .insert(def.name.clone(), def);
             }
         }
+        debug_assert!(Rc::ptr_eq(&self.env, &self.current.globals));
         // トップレベルの `#` は Resolver が弾いているので、Flow は見なくてよい
         let Some((last, rest)) = program.stmts.split_last() else {
             return Ok(None);
@@ -150,6 +147,15 @@ impl<'a> Interpreter<'a> {
     }
 
     // ---- 文 ----
+
+    /// 新しいスコープに入ってブロックを実行する。エラーでも元のスコープに戻す
+    fn exec_scoped(&mut self, block: &[Stmt]) -> RResult<Flow> {
+        let inner = Env::new(Some(Rc::clone(&self.env)));
+        let outer = mem::replace(&mut self.env, inner);
+        let result = self.exec_block(block);
+        self.env = outer;
+        result
+    }
 
     fn exec_block(&mut self, block: &[Stmt]) -> RResult<Flow> {
         for stmt in block {
@@ -171,15 +177,15 @@ impl<'a> Interpreter<'a> {
                 else_block,
             } => {
                 if self.eval_cond(cond)? {
-                    return self.exec_block(then_block);
+                    return self.exec_scoped(then_block);
                 }
                 if let Some(block) = else_block {
-                    return self.exec_block(block);
+                    return self.exec_scoped(block);
                 }
             }
             StmtKind::While { cond, body } => {
                 while self.eval_cond(cond)? {
-                    match self.exec_block(body)? {
+                    match self.exec_scoped(body)? {
                         Flow::Normal | Flow::Continue => {}
                         Flow::Break => break,
                         Flow::Return(value) => return Ok(Flow::Return(value)),
@@ -195,27 +201,35 @@ impl<'a> Interpreter<'a> {
             }
             StmtKind::Break => return Ok(Flow::Break),
             StmtKind::Continue => return Ok(Flow::Continue),
-            StmtKind::Assign {
-                target,
-                index: None,
-                value,
-            } => {
+            StmtKind::Declare { target, value } => {
                 let value = self.eval(value)?;
-                self.set_var(target, value);
+                self.env.declare(&target.0, value);
             }
             StmtKind::Assign {
                 target,
-                index: Some(index),
+                indices,
                 value,
             } => {
-                // 配列とマップは参照なので、clone しても同じものを書き換える
-                let container = match self.get_var(target) {
-                    Some(container) => container.clone(),
+                let Some((last, outer)) = indices.split_last() else {
+                    let value = self.eval(value)?;
+                    if !self.env.assign(&target.0, value) {
+                        return Err(undefined(target, stmt.span));
+                    }
+                    return Ok(Flow::Normal);
+                };
+                // 配列とマップは参照なので、clone しても同じものを書き換える。
+                // `@m{"a"}{"b"} = v` は、外側の添字を読んでいって最後の 1 つだけ書く
+                let mut container = match self.get_var(target) {
+                    Some(container) => container,
                     None => return Err(undefined(target, stmt.span)),
                 };
-                let key = self.eval(index)?;
+                for index in outer {
+                    let key = self.eval(index)?;
+                    container = index_get(&container, &key, stmt.span, index.span)?;
+                }
+                let key = self.eval(last)?;
                 let value = self.eval(value)?;
-                index_set(&container, &key, value, stmt.span, index.span)?;
+                index_set(&container, &key, value, stmt.span, last.span)?;
             }
             StmtKind::Expr(expr) => {
                 self.eval(expr)?;
@@ -280,7 +294,7 @@ impl<'a> Interpreter<'a> {
             }
             ExprKind::Member { target, name } => {
                 let module = self.eval_module(target)?;
-                let value = module.globals.borrow().get(name).cloned();
+                let value = module.globals.get_own(name);
                 value.ok_or_else(|| {
                     RuntimeError::new(
                         span,
@@ -431,16 +445,18 @@ impl<'a> Interpreter<'a> {
             ));
         }
 
-        let mut locals = Scope::default();
+        // 関数のスコープは、そのファイルのトップレベルのスコープの内側に作る
+        let env = Env::new(Some(Rc::clone(&module.globals)));
         for (param, value) in def.params.iter().zip(args) {
-            locals.set(param, value);
+            env.declare(param, value);
         }
         self.frames.push(Frame {
             func_name: def.name.clone(),
-            locals,
         });
         let caller = mem::replace(&mut self.current, Rc::clone(module));
+        let caller_env = mem::replace(&mut self.env, env);
         let result = self.exec_block(&def.body);
+        self.env = caller_env;
         self.current = caller;
         self.frames.pop();
 
@@ -544,7 +560,7 @@ impl<'a> Interpreter<'a> {
         let program = lexer::tokenize(&origin.src)
             .and_then(|tokens| parser::parse(&tokens))
             .and_then(|program| {
-                resolver::resolve(&program, |name| self.native_callee(name))?;
+                resolver::resolve(&program, |name| self.native_callee(name), |_| false)?;
                 Ok(program)
             })
             .map_err(|diag| RuntimeError {
@@ -557,7 +573,9 @@ impl<'a> Interpreter<'a> {
         self.modules.insert(key.clone(), ModuleState::Loading);
         self.loading.push(shown);
         let importer = mem::replace(&mut self.current, Rc::clone(&module));
+        let importer_env = mem::replace(&mut self.env, Rc::clone(&module.globals));
         let result = self.run(&program);
+        self.env = importer_env;
         self.current = importer;
         self.loading.pop();
 
@@ -599,7 +617,7 @@ fn undefined(var: &Var, span: Span) -> RuntimeError {
     RuntimeError::new(span, format!("未定義の変数 `{var}`"))
 }
 
-/// `container[key]` を読む。配列なら番号、マップなら文字列のキー
+/// `container{key}` を読む。配列なら番号、マップなら文字列のキー
 fn index_get(container: &Value, key: &Value, target_span: Span, key_span: Span) -> RResult<Value> {
     match container {
         Value::Array(items) => {
@@ -618,7 +636,7 @@ fn index_get(container: &Value, key: &Value, target_span: Span, key_span: Span) 
     }
 }
 
-/// `container[key] = value`。マップにキーがなければ追加する
+/// `container{key} = value`。マップにキーがなければ追加する
 fn index_set(
     container: &Value,
     key: &Value,

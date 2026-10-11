@@ -1,8 +1,8 @@
 outer[] (
     # inner[{1, 2}]
 )
-inner[$arr] (
-    # $arr[5]
+inner[@arr] (
+    # @arr{5}
 )
 log["before"]
 outer[]

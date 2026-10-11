@@ -1,1 +1,1 @@
-@age = to_num["abc"]
+@age := to_num["abc"]

@@ -39,10 +39,15 @@ pub enum StmtKind {
     Break,
     /// `while` の次の繰り返しへ進む
     Continue,
-    /// `@x = expr` / `@x[i] = expr`
+    /// `@x := expr`。いま入っているスコープに新しい変数を作る
+    Declare {
+        target: Var,
+        value: Expr,
+    },
+    /// `@x = expr` / `@x{i} = expr` / `@x{i}{j} = expr`。`indices` は添字を外側から順に並べたもの
     Assign {
         target: Var,
-        index: Option<Expr>,
+        indices: Vec<Expr>,
         value: Expr,
     },
     Expr(Expr),
@@ -56,11 +61,9 @@ pub struct FuncDef {
     pub span: Span,
 }
 
+/// `@name`。名前に `@` は含まない
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Var {
-    Global(String),
-    Local(String),
-}
+pub struct Var(pub String);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expr {
@@ -94,7 +97,7 @@ pub enum ExprKind {
         name: String,
         args: Vec<Expr>,
     },
-    /// `target[index]`
+    /// `target{index}`
     Index {
         target: Box<Expr>,
         index: Box<Expr>,
@@ -135,9 +138,10 @@ pub enum BinaryOp {
 
 // ---- S 式での表示（`dolphin --ast` とテストで使う） ----
 //
-// @x = 1 + 2      → (= @x (+ 1 2))
-// @a[0] = 1       → (= ([] @a 0) 1)
-// add[$a, $b] ( … ) → (def add ($a $b) (…))
+// @x := 1 + 2     → (:= @x (+ 1 2))
+// @x = 1          → (= @x 1)
+// @a{0} = 1       → (= ({} @a 0) 1)
+// add[@a, @b] ( … ) → (def add (@a @b) (…))
 // if c ( … ) else ( … ) → (if c (…) (…))
 
 impl fmt::Display for Program {
@@ -154,7 +158,7 @@ impl fmt::Display for Stmt {
         match &self.kind {
             StmtKind::FuncDef(def) => {
                 write!(f, "(def {} (", def.name)?;
-                write_seq(f, def.params.iter().map(|p| format!("${p}")))?;
+                write_seq(f, def.params.iter().map(|p| format!("@{p}")))?;
                 write!(f, ") {})", BlockDisplay(&def.body))
             }
             StmtKind::If {
@@ -173,16 +177,18 @@ impl fmt::Display for Stmt {
             StmtKind::Return(None) => write!(f, "(#)"),
             StmtKind::Break => write!(f, "(break)"),
             StmtKind::Continue => write!(f, "(continue)"),
+            StmtKind::Declare { target, value } => write!(f, "(:= {target} {value})"),
             StmtKind::Assign {
                 target,
-                index: Some(index),
+                indices,
                 value,
-            } => write!(f, "(= ([] {target} {index}) {value})"),
-            StmtKind::Assign {
-                target,
-                index: None,
-                value,
-            } => write!(f, "(= {target} {value})"),
+            } => {
+                let mut place = target.to_string();
+                for index in indices {
+                    place = format!("({{}} {place} {index})");
+                }
+                write!(f, "(= {place} {value})")
+            }
             StmtKind::Expr(expr) => write!(f, "{expr}"),
         }
     }
@@ -207,11 +213,7 @@ impl fmt::Display for Expr {
                 for part in parts {
                     match part {
                         StrPart::Text(text) => {
-                            let escaped = text
-                                .escape_debug()
-                                .to_string()
-                                .replace('@', "\\@")
-                                .replace('$', "\\$");
+                            let escaped = text.escape_debug().to_string().replace('@', "\\@");
                             write!(f, "{escaped}")?;
                         }
                         StrPart::Var(var) => write!(f, "{var}")?,
@@ -247,7 +249,7 @@ impl fmt::Display for Expr {
                 }
                 write!(f, ")")
             }
-            ExprKind::Index { target, index } => write!(f, "([] {target} {index})"),
+            ExprKind::Index { target, index } => write!(f, "({{}} {target} {index})"),
             ExprKind::Unary { op, operand } => write!(f, "({op} {operand})"),
             ExprKind::Binary { op, lhs, rhs } => write!(f, "({op} {lhs} {rhs})"),
         }
@@ -256,10 +258,7 @@ impl fmt::Display for Expr {
 
 impl fmt::Display for Var {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Var::Global(name) => write!(f, "@{name}"),
-            Var::Local(name) => write!(f, "${name}"),
-        }
+        write!(f, "@{}", self.0)
     }
 }
 

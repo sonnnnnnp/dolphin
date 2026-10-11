@@ -1,1 +1,1 @@
-@a = import[1]
+@a := import[1]

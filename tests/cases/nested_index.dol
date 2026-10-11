@@ -1,0 +1,15 @@
+// 添字は { }。続けて書けて、代入の左辺にも書ける
+@data := {"user": {"name": "Dolphin", "tags": {"a", "b"}}, "n": 1}
+log[@data{"user"}{"name"}, @data{"user"}{"tags"}{1}]
+@data{"user"}{"name"} = "Iruka"
+@data{"user"}{"tags"}{0} = "z"
+@data{"new"} = {:}
+@data{"new"}{"k"} = 42
+log[@data]
+
+@grid := {{1, 2}, {3, 4}}
+@grid{1}{0} = @grid{0}{1} + 10
+log[@grid]
+
+// [ ] は呼び出し専用
+log[str_len["abc"]]

@@ -1,0 +1,6 @@
+before
+undeclared_global.dol:4:7: エラー: 未定義の変数 `@late`
+  |
+4 |     # @late
+  |       ^
+  = read の中（7:5 から呼び出し）

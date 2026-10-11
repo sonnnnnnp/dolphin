@@ -1,0 +1,4 @@
+block_scope_error.dol:4:5: エラー: 未定義の変数 `@inner`
+  |
+4 | log[@inner]
+  |     ^

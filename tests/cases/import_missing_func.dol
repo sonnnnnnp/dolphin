@@ -1,2 +1,2 @@
-@u = import["lib/util.dol"]
+@u := import["lib/util.dol"]
 @u.nope[1]

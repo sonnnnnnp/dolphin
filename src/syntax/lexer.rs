@@ -7,7 +7,6 @@ use super::span::Span;
 use crate::diag::Diagnostic;
 
 /// 文字列リテラルの中身。`"Hi, @name!"` は Text("Hi, "), Var(@name), Text("!") になる。
-/// `$x` も同じように展開する
 #[derive(Debug, Clone, PartialEq)]
 pub enum StrPart {
     Text(String),
@@ -16,8 +15,7 @@ pub enum StrPart {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
-    Global(String),
-    Local(String),
+    Var(String),
     Ident(String),
     Number(f64),
     Str(Vec<StrPart>),
@@ -42,6 +40,8 @@ pub enum TokenKind {
     Colon,
     Dot,
     Assign,
+    /// `:=`
+    Declare,
     Hash,
 
     // 演算子
@@ -69,8 +69,7 @@ impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use TokenKind::*;
         let s = match self {
-            Global(name) => return write!(f, "`@{name}`"),
-            Local(name) => return write!(f, "`${name}`"),
+            Var(name) => return write!(f, "`@{name}`"),
             Ident(name) => return write!(f, "`{name}`"),
             Number(n) => return write!(f, "`{n}`"),
             Str(_) => "文字列",
@@ -91,6 +90,7 @@ impl fmt::Display for TokenKind {
             Colon => "`:`",
             Dot => "`.`",
             Assign => "`=`",
+            Declare => "`:=`",
             Hash => "`#`",
             Plus => "`+`",
             Minus => "`-`",
@@ -163,18 +163,16 @@ impl Lexer {
                         self.bump();
                     }
                 }
-                '@' | '$' => {
+                '@' => {
                     self.bump();
                     let name = self.ident();
                     if name.is_empty() {
-                        return self.error(start, format!("`{c}` の後に変数名がありません"));
+                        return self.error(start, "`@` の後に変数名がありません");
                     }
-                    let kind = if c == '@' {
-                        TokenKind::Global(name)
-                    } else {
-                        TokenKind::Local(name)
-                    };
-                    self.push(kind, start);
+                    self.push(TokenKind::Var(name), start);
+                }
+                '$' => {
+                    return self.error(start, "`$` は使えません（変数はすべて `@` で書きます）");
                 }
                 '"' => {
                     self.bump();
@@ -314,21 +312,16 @@ impl Lexer {
                         return Err(Diagnostic::new(start, "文字列が閉じられていません").at_eof());
                     }
                 },
-                '@' | '$' => {
+                '@' => {
                     let name = self.ident();
                     if name.is_empty() {
-                        // `$100` のように識別子が続かなければ、ただの文字
+                        // `@` の後に識別子が続かなければ、ただの文字
                         text.push(c);
                     } else {
                         if !text.is_empty() {
                             parts.push(StrPart::Text(std::mem::take(&mut text)));
                         }
-                        let var = if c == '@' {
-                            Var::Global(name)
-                        } else {
-                            Var::Local(name)
-                        };
-                        parts.push(StrPart::Var(var));
+                        parts.push(StrPart::Var(Var(name)));
                     }
                 }
                 _ => text.push(c),
@@ -362,6 +355,7 @@ impl Lexer {
                 }
             }
             ',' => Comma,
+            ':' if self.eat('=') => Declare,
             ':' => Colon,
             '.' => Dot,
             '#' => Hash,
@@ -389,6 +383,7 @@ impl Lexer {
 
 #[cfg(test)]
 mod tests {
+    use super::TokenKind::Var;
     use super::TokenKind::*;
     use super::*;
 
@@ -399,16 +394,27 @@ mod tests {
     #[test]
     fn assignment() {
         assert_eq!(
-            kinds("@x = 1.5 + $y"),
+            kinds("@x = 1.5 + @y"),
             vec![
-                Global("x".into()),
+                Var("x".into()),
                 Assign,
                 Number(1.5),
                 Plus,
-                Local("y".into()),
+                Var("y".into()),
                 Eof,
             ]
         );
+        assert_eq!(
+            kinds("@x := 1"),
+            vec![Var("x".into()), Declare, Number(1.0), Eof]
+        );
+    }
+
+    #[test]
+    fn dollar_is_not_allowed() {
+        let err = tokenize("$x = 1").unwrap_err();
+        assert_eq!(err.span, Span { line: 1, col: 1 });
+        assert!(err.message.contains("`$` は使えません"));
     }
 
     #[test]
@@ -417,7 +423,7 @@ mod tests {
             kinds("if @a >= 1 && !true ("),
             vec![
                 If,
-                Global("a".into()),
+                Var("a".into()),
                 GtEq,
                 Number(1.0),
                 AndAnd,
@@ -432,14 +438,12 @@ mod tests {
     #[test]
     fn string_interpolation() {
         assert_eq!(
-            kinds(r#""Hi, @name! $x costs $100 \@a \$b""#),
+            kinds(r#""Hi, @name! $x costs $100 \@a @ end""#),
             vec![
                 Str(vec![
                     StrPart::Text("Hi, ".into()),
-                    StrPart::Var(Var::Global("name".into())),
-                    StrPart::Text("! ".into()),
-                    StrPart::Var(Var::Local("x".into())),
-                    StrPart::Text(" costs $100 @a $b".into()),
+                    StrPart::Var(crate::syntax::ast::Var("name".into())),
+                    StrPart::Text("! $x costs $100 @a @ end".into()),
                 ]),
                 Eof,
             ]
@@ -470,7 +474,7 @@ mod tests {
     fn comments() {
         assert_eq!(
             kinds("// head\n@a = 1 // tail"),
-            vec![Newline, Global("a".into()), Assign, Number(1.0), Eof]
+            vec![Newline, Var("a".into()), Assign, Number(1.0), Eof]
         );
     }
 

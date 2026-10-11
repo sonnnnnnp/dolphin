@@ -1,1 +1,1 @@
-@a = import["lib/nothing.dol"]
+@a := import["lib/nothing.dol"]

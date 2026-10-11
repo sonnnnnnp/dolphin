@@ -1,1 +1,1 @@
-@a = import["lib/toplevel_error.dol"]
+@a := import["lib/toplevel_error.dol"]

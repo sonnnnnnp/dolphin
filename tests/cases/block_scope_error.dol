@@ -1,0 +1,4 @@
+if true (
+    @inner := 1
+)
+log[@inner]
