@@ -1,13 +1,17 @@
 [package]
 name = "dolphin"
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 
 # コア言語（lib）は外部クレートに依存しない。CLI の便利機能だけ feature で足す
 [dependencies]
 rustyline = { version = "18.0.1", optional = true }
+# HTTP クライアント（std:http）。TLS は rustls
+ureq = { version = "3.4", optional = true }
 
 [features]
-default = ["repl"]
+default = ["repl", "http"]
 # REPL の行編集（矢印キー・履歴）。wasm 版などでは外す
 repl = ["dep:rustyline"]
+# HTTP クライアント（`import["std:http"]`）。外すと TLS などの依存がビルドに入らない
+http = ["dep:ureq"]

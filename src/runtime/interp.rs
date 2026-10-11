@@ -807,6 +807,12 @@ impl<'a> Interpreter<'a> {
     /// 組み込みモジュール（`std:json` など）。同じものは同じモジュールを返す
     fn import_std(&mut self, name: &str, span: Span) -> RResult<Value> {
         let Some((&key, functions)) = self.std_registry.get_key_value(name) else {
+            if name == "std:http" {
+                return Err(RuntimeError::new(
+                    span,
+                    "この版には `std:http` が含まれていません（`http` feature を付けてビルドしてください）",
+                ));
+            }
             let mut names: Vec<&str> = self.std_registry.keys().copied().collect();
             names.sort_unstable();
             return Err(RuntimeError::new(

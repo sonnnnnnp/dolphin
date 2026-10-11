@@ -86,7 +86,8 @@ count: 3
   - [x] ファイル入出力（`file_read` `file_write` `file_append` `file_exists`）
 - [ ] **段階 4**: HTTP、JSON → バックエンド API
   - [x] 組み込みモジュール（`import["std:..."]`）と JSON（`std:json`）
-  - [ ] HTTP クライアント・サーバー
+  - [x] HTTP クライアント（`std:http`）
+  - [ ] HTTP サーバー
 - [ ] **段階 5**: ウィンドウ・描画・入力 → デスクトップアプリ（旧 C++ 実装では SFML で対応済み）
 
 ## コードを段階ごとに読む
@@ -104,6 +105,7 @@ count: 3
 | [v0.7.0](https://github.com/sonnnnnnp/dolphin/tree/v0.7.0) | `nil`、`for`、`range` | [v0.6.0...v0.7.0](https://github.com/sonnnnnnp/dolphin/compare/v0.6.0...v0.7.0) |
 | [v0.8.0](https://github.com/sonnnnnnp/dolphin/tree/v0.8.0) | エラー値と `?` | [v0.7.0...v0.8.0](https://github.com/sonnnnnnp/dolphin/compare/v0.7.0...v0.8.0) |
 | [v0.9.0](https://github.com/sonnnnnnp/dolphin/tree/v0.9.0) | 組み込みモジュールと `std:json` | [v0.8.0...v0.9.0](https://github.com/sonnnnnnp/dolphin/compare/v0.8.0...v0.9.0) |
+| [v0.10.0](https://github.com/sonnnnnnp/dolphin/tree/v0.10.0) | HTTP クライアント `std:http` | [v0.9.0...v0.10.0](https://github.com/sonnnnnnp/dolphin/compare/v0.9.0...v0.10.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 
@@ -131,7 +133,7 @@ runtime_error.dol:5:12: エラー: 添字 5 は範囲外です（要素は 2 個
 | Resolver | 実行前に、未定義の関数・引数の数・宣言されていない変数などを検査する |
 | Interpreter | AST を tree-walking で評価する |
 
-全体像は [docs/architecture.md](docs/architecture.md) にまとめています。コア言語は外部クレートに依存しません。
+全体像は [docs/architecture.md](docs/architecture.md) にまとめています。コア言語は外部クレートに依存しません（HTTP の TLS は、既定で有効な `http` feature の `ureq` を使います）。
 
 ## ビルド・実行方法
 

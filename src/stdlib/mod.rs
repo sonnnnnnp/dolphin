@@ -5,6 +5,8 @@
 pub mod array;
 pub mod error;
 pub mod fs;
+#[cfg(feature = "http")]
+pub mod http;
 pub mod io;
 pub mod json;
 pub mod map;
@@ -22,6 +24,8 @@ pub fn register(interp: &mut Interpreter<'_>) {
     io::register(interp);
     error::register(interp);
     json::register(interp);
+    #[cfg(feature = "http")]
+    http::register(interp);
     fs::register(interp);
     string::register(interp);
     array::register(interp);

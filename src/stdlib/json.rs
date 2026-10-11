@@ -316,10 +316,16 @@ impl Parser<'_> {
 
 /// `indent` が Some なら、その幅で整形する
 fn write_json(name: &str, value: &Value, indent: Option<usize>) -> Result<Value, String> {
+    Ok(Value::Str(to_json_string(name, value, indent)?.into()))
+}
+
+/// 値を JSON の文字列にする。`name` はエラーメッセージに出す関数名。
+/// JSON にできない値は、プログラムの間違いとしてメッセージを返す
+pub fn to_json_string(name: &str, value: &Value, indent: Option<usize>) -> Result<String, String> {
     let mut out = String::new();
     let mut seen = Vec::new();
     write_value(name, &mut out, value, indent, 0, &mut seen)?;
-    Ok(Value::Str(out.into()))
+    Ok(out)
 }
 
 fn write_value(

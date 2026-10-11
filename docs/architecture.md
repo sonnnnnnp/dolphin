@@ -91,7 +91,7 @@ dolphin/
 │     ├─ math.rs         abs, floor, …, random（乱数は xorshift64* を自前で実装）
 │     ├─ error.rs        is_error, err_kind, err_message, err_new
 │     ├─ json.rs         std:json（parse / stringify / pretty。自前の実装、外部クレートなし）
-│     ├─ http.rs         ⬜ 段階 4（feature = "http"）
+│     ├─ http.rs         std:http（feature = "http"。ureq + rustls）
 │     └─ gfx.rs          ⬜ 段階 5（feature = "gfx"）
 ├─ tests/
 │  ├─ golden.rs          cases/*.dol を実行し、*.out と比較する

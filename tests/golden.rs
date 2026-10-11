@@ -1,5 +1,6 @@
 //! tests/cases/*.dol を実行し、出力を同名の *.out と比較する
-//! エラーになるケースは、エラー表示も含めて *.out に書く
+//! エラーになるケースは、エラー表示も含めて *.out に書く。
+//! `http` feature を外したときだけ出力が変わるケースは、`名前.nohttp.out` に書く
 
 use std::fs;
 use std::path::Path;
@@ -16,7 +17,13 @@ fn golden() {
         }
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
         let src = fs::read_to_string(&path).unwrap();
-        let expected = fs::read_to_string(path.with_extension("out")).unwrap_or_default();
+        let variant = path.with_extension("nohttp.out");
+        let expected_path = if !cfg!(feature = "http") && variant.exists() {
+            variant
+        } else {
+            path.with_extension("out")
+        };
+        let expected = fs::read_to_string(expected_path).unwrap_or_default();
 
         let mut out = Vec::new();
         let result = dolphin::run_source_in(&src, dir.clone(), &mut out);

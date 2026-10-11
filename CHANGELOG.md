@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-12
+
+### 追加
+- HTTP クライアント `std:http`（[design.md 5.11](docs/design.md)）。`ureq`（TLS は rustls）を使う、ブロッキングの実装
+  - `request[options]`、`get[url]`、`post[url, options]`、`put`、`delete`
+  - `options` は `headers` `query` `body` `json` `timeout` `redirects`。`json` は JSON にして送り、`Content-Type` も付ける
+  - 戻り値は `{"status", "ok", "headers", "body"}` のマップ。`404` や `500` もエラーにせず、普通のレスポンスとして返す
+  - 通信の失敗はエラー値（種類は `timeout` `url` `request` `too_large` `parse` `network`）。`?` で伝えられる
+  - オプションの間違い（知らないキー、型の違い）は、プログラムの間違いとして実行時エラー
+- `http` feature（既定で有効）。`--no-default-features` ならビルドに入らず、`import["std:http"]` は「含まれていません」と案内する。CI で両方のビルドを検査する
+
 ## [0.9.0] - 2026-10-11
 
 ### 追加

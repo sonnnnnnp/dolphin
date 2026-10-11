@@ -1,0 +1,19 @@
+// HTTP で JSON を取ってくる（ネットワークが必要）
+@http := import["std:http"]
+@json := import["std:json"]
+
+fetch[@url] (
+    @r := @http.get[@url, {"timeout": 10, "headers": {"Accept": "application/json"}}]?
+    if !@r{"ok"} (
+        # err_new["http", "status " + to_str[@r{"status"}]]
+    )
+    # @json.parse[@r{"body"}]
+)
+
+@data := fetch["https://httpbin.org/json"]
+if is_error[@data] (
+    log["失敗:", err_message[@data]]
+)
+else (
+    log[@json.pretty[@data]]
+)
