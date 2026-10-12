@@ -1,0 +1,42 @@
+// 分割代入（design.md 5.19）
+{@a, @b} := {1, 2}
+log[@a, @b]
+{@head, ...@tail} := {10, 20, 30}
+log[@head, @tail]
+{@first, @second} := {"x", "y", "余り"}
+log[@first, @second]
+{...@all} := {1, 2}
+log[@all]
+
+@point := {"x": 3, "y": 4, "z": 5}
+{"x": @px, "y": @py} := @point
+log[@px, @py]
+
+// 入れ子
+@entity := {"name": "slime", "pos": {7, 8}, "tags": {"a", "b", "c"}}
+{"name": @name, "pos": {@ex, @ey}, "tags": {@t0, ...@trest}} := @entity
+log[@name, @ex, @ey, @t0, @trest]
+
+// 代入（宣言済みの変数に入れる）
+@x := 1
+@y := 2
+{@x, @y} = {@y, @x}
+log[@x, @y]
+{"k": @x} = {"k": "新しい"}
+log[@x]
+
+// 関数の中・ループの中・戻り値の受け取り
+minmax[@list] (
+    # {min[...@list], max[...@list]}
+)
+{@lo, @hi} := minmax[{5, 3, 9}]
+log[@lo, @hi]
+for @pair in {{1, "one"}, {2, "two"}} (
+    {@num, @word} := @pair
+    log["@num=@word"]
+)
+swap_all[@m] (
+    {"a": @a1, "b": @b1} := @m
+    # {"a": @b1, "b": @a1}
+)
+log[swap_all[{"a": 1, "b": 2}]]

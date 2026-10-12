@@ -74,6 +74,13 @@ pub fn resolve(
             StmtKind::Declare { target, .. } => {
                 hoisted.insert(target.0.as_str());
             }
+            StmtKind::Destructure {
+                pattern,
+                declare: true,
+                ..
+            } => {
+                hoisted.extend(pattern.vars().into_iter().map(|v| v.0.as_str()));
+            }
             _ => {}
         }
     }
@@ -271,6 +278,32 @@ impl<'a> Resolver<'a> {
                     self.expr(index, ctx)?;
                 }
                 self.expr(value, ctx)
+            }
+            StmtKind::Destructure {
+                pattern,
+                value,
+                declare,
+            } => {
+                self.expr(value, ctx)?;
+                for var in pattern.vars() {
+                    if *declare {
+                        let scope = ctx.scopes.last_mut().expect("スコープは最低 1 つある");
+                        if !scope.insert(var.0.as_str()) {
+                            return Err(Diagnostic::new(
+                                stmt.span,
+                                format!("変数 `{var}` はすでに宣言されています"),
+                            ));
+                        }
+                    } else if !self.visible(var, ctx) {
+                        return Err(Diagnostic::new(
+                            stmt.span,
+                            format!(
+                                "宣言されていない変数 `{var}` に代入しています（`:=` で宣言してください）"
+                            ),
+                        ));
+                    }
+                }
+                Ok(())
             }
             StmtKind::Expr(expr) => self.expr(expr, ctx),
         }

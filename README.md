@@ -134,6 +134,7 @@ count: 3
 | [v0.23.0](https://github.com/sonnnnnnp/dolphin/tree/v0.23.0) | 引数の既定値 | [v0.22.0...v0.23.0](https://github.com/sonnnnnnp/dolphin/compare/v0.22.0...v0.23.0) |
 | [v0.24.0](https://github.com/sonnnnnnp/dolphin/tree/v0.24.0) | 可変長引数 `...@rest` と展開 `...式` | [v0.23.0...v0.24.0](https://github.com/sonnnnnnp/dolphin/compare/v0.23.0...v0.24.0) |
 | [v0.25.0](https://github.com/sonnnnnnp/dolphin/tree/v0.25.0) | 文字列の式展開 `"@{a + b}"` と生の文字列 `r"…"` | [v0.24.0...v0.25.0](https://github.com/sonnnnnnp/dolphin/compare/v0.24.0...v0.25.0) |
+| [v0.26.0](https://github.com/sonnnnnnp/dolphin/tree/v0.26.0) | 分割代入（`{@a, @b} := …`） | [v0.25.0...v0.26.0](https://github.com/sonnnnnnp/dolphin/compare/v0.25.0...v0.26.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

@@ -523,6 +523,18 @@ log[...@x, 1, ...{2}]
     }
 
     #[test]
+    fn destructuring() {
+        assert_eq!(
+            fmt("{@a,@b ,...@r}:=@x
+{\"k\":{@p}}=@y
+"),
+            "{@a, @b, ...@r} := @x
+{\"k\": {@p}} = @y
+"
+        );
+    }
+
+    #[test]
     fn line_endings_are_kept() {
         assert_eq!(fmt("@x=1\r\n@y=2\r\n"), "@x = 1\r\n@y = 2\r\n");
     }

@@ -55,7 +55,66 @@ pub enum StmtKind {
         indices: Vec<Expr>,
         value: Expr,
     },
+    /// `{@a, @b} := expr` / `{"k": @v} = expr`。`declare` なら宣言、でなければ代入（design.md 5.19）
+    Destructure {
+        pattern: Pattern,
+        value: Expr,
+        declare: bool,
+    },
     Expr(Expr),
+}
+
+/// 分割代入の左辺
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    Var(Var),
+    /// `{@a, @b, ...@rest}`
+    Array {
+        items: Vec<Pattern>,
+        rest: Option<Var>,
+    },
+    /// `{"key": パターン, ...}`
+    Map(Vec<(String, Pattern)>),
+}
+
+impl Pattern {
+    /// パターンに含まれる変数を、左から順に
+    pub fn vars(&self) -> Vec<&Var> {
+        match self {
+            Pattern::Var(var) => vec![var],
+            Pattern::Array { items, rest } => items
+                .iter()
+                .flat_map(Pattern::vars)
+                .chain(rest.iter())
+                .collect(),
+            Pattern::Map(entries) => entries.iter().flat_map(|(_, p)| p.vars()).collect(),
+        }
+    }
+}
+
+impl fmt::Display for Pattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Pattern::Var(var) => write!(f, "{var}"),
+            Pattern::Array { items, rest } => {
+                write!(f, "(arr")?;
+                for item in items {
+                    write!(f, " {item}")?;
+                }
+                if let Some(rest) = rest {
+                    write!(f, " (... {rest})")?;
+                }
+                write!(f, ")")
+            }
+            Pattern::Map(entries) => {
+                write!(f, "(map")?;
+                for (key, pattern) in entries {
+                    write!(f, " ({key:?} {pattern})")?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -243,6 +302,14 @@ impl fmt::Display for Stmt {
             StmtKind::Break => write!(f, "(break)"),
             StmtKind::Continue => write!(f, "(continue)"),
             StmtKind::Declare { target, value } => write!(f, "(:= {target} {value})"),
+            StmtKind::Destructure {
+                pattern,
+                value,
+                declare,
+            } => {
+                let op = if *declare { ":=" } else { "=" };
+                write!(f, "({op} {pattern} {value})")
+            }
             StmtKind::Assign {
                 target,
                 indices,

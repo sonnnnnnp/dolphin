@@ -1,0 +1,4 @@
+destructure_missing_key.dol:1:1: エラー: キー "k" がありません
+  |
+1 | {"k": @v} := {"x": 1}
+  | ^

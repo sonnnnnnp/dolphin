@@ -17,7 +17,7 @@ use super::value::{Closure, NativeRef, Value};
 use crate::diag::Origin;
 use crate::sema::resolver::{self, Callee};
 use crate::syntax::ast::{
-    BinaryOp, Expr, ExprKind, FuncDef, Program, Stmt, StmtKind, StrSegment, UnaryOp, Var,
+    BinaryOp, Expr, ExprKind, FuncDef, Pattern, Program, Stmt, StmtKind, StrSegment, UnaryOp, Var,
 };
 use crate::syntax::span::Span;
 use crate::syntax::{lexer, parser};
@@ -222,6 +222,76 @@ impl<'a> Interpreter<'a> {
         result
     }
 
+    /// 分割代入。`pattern` の変数に、`value` の要素を宣言か代入で入れる
+    fn destructure(
+        &mut self,
+        pattern: &Pattern,
+        value: &Value,
+        declare: bool,
+        span: Span,
+    ) -> RResult<()> {
+        match pattern {
+            Pattern::Var(var) => {
+                if declare {
+                    self.env.declare(&var.0, value.clone());
+                } else if !self.env.assign(&var.0, value.clone()) {
+                    return Err(undefined(var, span));
+                }
+            }
+            Pattern::Array { items, rest } => {
+                let Value::Array(array) = value else {
+                    return Err(RuntimeError::new(
+                        span,
+                        format!(
+                            "配列のパターンの右辺は配列である必要があります（{}でした）",
+                            value.type_name()
+                        ),
+                    ));
+                };
+                let elements = array.borrow().clone();
+                if elements.len() < items.len() {
+                    return Err(RuntimeError::new(
+                        span,
+                        format!(
+                            "分割代入の要素が足りません（{} 個必要、配列は {} 個）",
+                            items.len(),
+                            elements.len()
+                        ),
+                    ));
+                }
+                for (item, element) in items.iter().zip(&elements) {
+                    self.destructure(item, element, declare, span)?;
+                }
+                if let Some(rest) = rest {
+                    let remaining = gc::new_array(elements[items.len()..].to_vec());
+                    self.destructure(&Pattern::Var(rest.clone()), &remaining, declare, span)?;
+                }
+            }
+            Pattern::Map(entries) => {
+                let Value::Map(map) = value else {
+                    return Err(RuntimeError::new(
+                        span,
+                        format!(
+                            "マップのパターンの右辺はマップである必要があります（{}でした）",
+                            value.type_name()
+                        ),
+                    ));
+                };
+                for (key, entry) in entries {
+                    let element = map.borrow().get(key).cloned();
+                    let Some(element) = element else {
+                        return Err(RuntimeError::new(
+                            span,
+                            format!("キー {key:?} がありません"),
+                        ));
+                    };
+                    self.destructure(entry, &element, declare, span)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn exec_block(&mut self, block: &[Stmt]) -> RResult<Flow> {
         for stmt in block {
             let flow = self.exec(stmt)?;
@@ -299,6 +369,14 @@ impl<'a> Interpreter<'a> {
             StmtKind::Declare { target, value } => {
                 let value = self.eval(value)?;
                 self.env.declare(&target.0, value);
+            }
+            StmtKind::Destructure {
+                pattern,
+                value,
+                declare,
+            } => {
+                let value = self.eval(value)?;
+                self.destructure(pattern, &value, *declare, stmt.span)?;
             }
             StmtKind::Assign {
                 target,

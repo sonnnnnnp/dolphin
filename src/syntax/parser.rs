@@ -5,8 +5,8 @@
 use std::rc::Rc;
 
 use super::ast::{
-    BinaryOp, Block, Expr, ExprKind, FuncDef, Param, Program, Stmt, StmtKind, StrSegment, UnaryOp,
-    Var,
+    BinaryOp, Block, Expr, ExprKind, FuncDef, Param, Pattern, Program, Stmt, StmtKind, StrSegment,
+    UnaryOp, Var,
 };
 use super::lexer::{StrPart, Token, TokenKind};
 use super::span::Span;
@@ -148,6 +148,7 @@ impl<'t> Parser<'t> {
                 self.advance();
                 StmtKind::Continue
             }
+            TokenKind::LBrace if self.looks_like_destructure() => return self.destructure(),
             _ => return self.simple_statement(),
         };
         Ok(Stmt { kind, span })
@@ -206,6 +207,109 @@ impl<'t> Parser<'t> {
             StmtKind::Expr(expr)
         };
         Ok(Stmt { kind, span })
+    }
+
+    /// 文の先頭の `{ … }` の直後が `:=` か `=` か（分割代入）
+    fn looks_like_destructure(&self) -> bool {
+        let mut depth = 0;
+        for (i, token) in self.tokens.iter().enumerate().skip(self.pos) {
+            match token.kind {
+                TokenKind::LBracket | TokenKind::LBrace | TokenKind::LParen => depth += 1,
+                TokenKind::RBracket | TokenKind::RBrace | TokenKind::RParen => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return self.tokens.get(i + 1).is_some_and(|t| {
+                            matches!(t.kind, TokenKind::Declare | TokenKind::Assign)
+                        });
+                    }
+                }
+                TokenKind::Eof => return false,
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// destructure = pattern ( ":=" | "=" ) expression
+    fn destructure(&mut self) -> PResult<Stmt> {
+        let span = self.peek().span;
+        let pattern = self.pattern()?;
+        let declare = self.at(&TokenKind::Declare);
+        self.advance();
+        let value = self.expression()?;
+        Ok(Stmt {
+            kind: StmtKind::Destructure {
+                pattern,
+                value,
+                declare,
+            },
+            span,
+        })
+    }
+
+    /// pattern = VAR | "{" [ pattern { "," pattern } ] [ "," ] [ "..." VAR ] "}"
+    ///         | "{" STRING ":" pattern { "," STRING ":" pattern } "}"
+    fn pattern(&mut self) -> PResult<Pattern> {
+        if let TokenKind::Var(name) = &self.peek().kind {
+            let var = Var(name.clone());
+            self.advance();
+            return Ok(Pattern::Var(var));
+        }
+        self.expect(&TokenKind::LBrace)?;
+        // マップのパターンは、最初の要素が `"キー":`
+        let is_map = matches!(&self.peek().kind, TokenKind::Str(_))
+            && self.tokens[self.pos + 1].kind == TokenKind::Colon;
+        if is_map {
+            let mut entries = Vec::new();
+            loop {
+                let key_span = self.peek().span;
+                let TokenKind::Str(parts) = &self.peek().kind else {
+                    return Err(self.unexpected("キーの文字列"));
+                };
+                let key = match parts.as_slice() {
+                    [StrPart::Text(text)] => text.clone(),
+                    _ => {
+                        return Err(Diagnostic::new(
+                            key_span,
+                            "分割代入のキーは、展開を含まない文字列です",
+                        ));
+                    }
+                };
+                self.advance();
+                self.expect(&TokenKind::Colon)?;
+                entries.push((key, self.pattern()?));
+                if self.eat(&TokenKind::RBrace) {
+                    return Ok(Pattern::Map(entries));
+                }
+                self.expect(&TokenKind::Comma)?;
+            }
+        }
+        let mut items = Vec::new();
+        let mut rest = None;
+        loop {
+            if self.eat(&TokenKind::RBrace) {
+                break;
+            }
+            if self.eat(&TokenKind::Ellipsis) {
+                let TokenKind::Var(name) = &self.peek().kind else {
+                    return Err(self.unexpected("変数（`@rest`）"));
+                };
+                rest = Some(Var(name.clone()));
+                self.advance();
+                if !self.at(&TokenKind::RBrace) {
+                    return Err(Diagnostic::new(
+                        self.peek().span,
+                        "`...@名前` はパターンの最後にだけ書けます",
+                    ));
+                }
+                continue;
+            }
+            items.push(self.pattern()?);
+            if !self.at(&TokenKind::RBrace) && !self.eat(&TokenKind::Comma) {
+                return Err(self.unexpected("`,` か `}`"));
+            }
+        }
+        Ok(Pattern::Array { items, rest })
     }
 
     /// 文の先頭が `IDENT "[" … "]" "("` の形か。`]` の直後が `(` なら関数定義（design.md 4.1）。
