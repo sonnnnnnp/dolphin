@@ -1,0 +1,4 @@
+net_not_handle.dol:2:5: エラー: net.close の 1 番目の引数はハンドルです（数値が渡されました）
+  |
+2 | log[@net.close[1]]
+  |     ^

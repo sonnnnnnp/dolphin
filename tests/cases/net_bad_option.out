@@ -1,0 +1,4 @@
+net_bad_option.dol:2:5: エラー: net.connect のオプション `nope` は知りません
+  |
+2 | log[@net.connect["127.0.0.1", 80, {"nope": 1}]]
+  |     ^

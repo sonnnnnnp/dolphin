@@ -1,0 +1,4 @@
+net_conn_accept.dol:4:5: エラー: net.accept に渡せるのは待ち受けのハンドルです（接続でした）
+  |
+4 | log[@net.accept[@c]]
+  |     ^

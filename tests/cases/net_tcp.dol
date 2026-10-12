@@ -1,0 +1,45 @@
+// std:net（design.md 5.21）。1 つのスクリプトの中で、待ち受けと接続の両方を動かす
+@net := import["std:net"]
+@listener := @net.listen[0]
+log[type_of[@listener], str_find[to_str[@listener], "待ち受け 127.0.0.1:"] >= 0]
+@port := @net.local_addr[@listener].port
+log[@port > 0, @net.local_addr[@listener].host]
+
+@client := @net.connect["127.0.0.1", @port]
+@server := @net.accept[@listener]
+log[type_of[@client], @client == @client, @client == @server]
+log[@net.peer_addr[@client].port == @port, @net.peer_addr[@server].port == @net.local_addr[@client].port]
+
+// 行と、バイト列
+@net.write[@client, "こんにちは\r\nsecond line\nrest"]
+log[@net.read_line[@server], @net.read_line[@server], @net.read[@server, 100]]
+@net.write[@server, str_to_bytes["ab"]]
+@net.write[@server, "cdef"]
+log[@net.read_exact[@client, 5], @net.read[@client, 10], @net.read[@client, 0]]
+
+// 時間切れ（何も届かない）
+@net.set_timeout[@client, 0.05]
+@r := @net.read[@client, 1]
+log[err_kind[@r]]
+@r = @net.read_line[@client]
+log[err_kind[@r]]
+@net.set_timeout[@client, nil]
+
+// 相手が閉じる: 行は nil、read は空、read_exact は eof
+@net.write[@server, "最後"]
+@net.close[@server]
+@net.close[@server]
+log[@net.read_line[@client], @net.read_line[@client], @net.read[@client, 10], err_kind[@net.read_exact[@client, 1]]]
+
+// 閉じたハンドル
+log[err_kind[@net.read[@server, 1]], err_kind[@net.write[@server, "x"]], to_str[@server]]
+@net.close[@listener]
+log[err_kind[@net.accept[@listener]]]
+
+// 失敗（メッセージと種類は OS によって違うので、エラー値かどうかだけ見る）
+@r = @net.connect["127.0.0.1", @port, {"timeout": 2}]
+log[is_error[@r]]
+@r = @net.connect["nonexistent.invalid", 80]
+log[is_error[@r]]
+@other := @net.listen[0]
+log[is_error[@net.listen[@net.local_addr[@other].port]]]

@@ -1,0 +1,4 @@
+net_listener_read.dol:3:5: エラー: net.read に渡せるのは接続のハンドルです（待ち受けでした）
+  |
+3 | log[@net.read[@l, 1]]
+  |     ^

@@ -1,0 +1,4 @@
+@net := import["std:net"]
+@l := @net.listen[0]
+@c := @net.connect["127.0.0.1", @net.local_addr[@l].port]
+log[@net.accept[@c]]

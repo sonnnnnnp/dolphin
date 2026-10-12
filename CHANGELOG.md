@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-10-12
+
+TCP（[design.md 5.21](docs/design.md)）。
+
+### 追加
+- 新しい値の型 `handle`（`type_of` は `"handle"`、表示は `<tcp 接続 127.0.0.1:80>`）。閉じる必要のある外部の資源を表し、参照されなくなると自動で閉じる
+- `import["std:net"]`（標準ライブラリだけ、feature なし）: `connect` `listen` `accept` `read` `read_exact` `read_line` `write` `close` `set_timeout` `local_addr` `peer_addr`。ブロッキングで、失敗はエラー値（種類 `timeout` `eof` `closed` `parse` `network`）
+
 ## [0.28.0] - 2026-10-12
 
 正規表現（[design.md 5.20](docs/design.md)）。F2 の最初。

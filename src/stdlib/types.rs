@@ -22,6 +22,7 @@ fn type_of(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         Value::Module(_) => "module",
         Value::Error(_) => "error",
         Value::Bytes(_) => "bytes",
+        Value::Handle(_) => "handle",
     };
     Ok(Value::Str(name.into()))
 }

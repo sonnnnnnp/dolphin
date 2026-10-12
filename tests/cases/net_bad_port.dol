@@ -1,0 +1,2 @@
+@net := import["std:net"]
+log[@net.listen[70000]]

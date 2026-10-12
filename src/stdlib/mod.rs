@@ -20,6 +20,7 @@ pub mod io;
 pub mod json;
 pub mod map;
 pub mod math;
+pub mod net;
 pub mod os;
 pub mod path;
 #[cfg(feature = "regex")]
@@ -47,6 +48,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     map::register(interp);
     math::register(interp);
     bits::register(interp);
+    net::register(interp);
     types::register(interp);
     gc::register(interp);
     debug::register(interp);

@@ -1,0 +1,14 @@
+handle true
+true 127.0.0.1
+handle true false
+true true
+こんにちは second line <bytes 72657374>
+<bytes 6162636465> <bytes 66> <bytes >
+timeout
+timeout
+最後 nil <bytes > eof
+closed closed <tcp 閉じています>
+closed
+true
+true
+true

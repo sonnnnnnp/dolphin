@@ -80,6 +80,7 @@ dolphin/
 │  │  ├─ value.rs        値の型
 │  │  ├─ map.rs          順序つきマップ
 │  │  ├─ gc.rs           循環回収器（配列・マップ・スコープ・関数値の登録簿と試行削除）
+│  │  ├─ handle.rs       ハンドル（TCP の接続・待ち受けなど、閉じる必要のある資源）
 │  │  ├─ module.rs       モジュール（import したファイル 1 つ分の `@` 変数と関数）
 │  │  ├─ env.rs          Env（スコープ 1 つ分の変数表。外側への参照を持つ）と Frame（呼び出し 1 回分）
 │  │  ├─ error.rs        RuntimeError（呼び出し履歴つき）
@@ -100,6 +101,7 @@ dolphin/
 │     ├─ encoding.rs     std:encoding（base64 / hex / URL。自前）
 │     ├─ crypto.rs       std:crypto（feature = "crypto"。ring + md-5）
 │     ├─ regex.rs        std:regex（feature = "regex"。regex クレート）
+│     ├─ net.rs          std:net（TCP。ブロッキング、標準ライブラリだけ）
 │     ├─ path.rs         std:path
 │     ├─ os.rs           std:os（args / env / exit / run など）
 │     ├─ time.rs         std:time（暦の計算は自前）
@@ -162,6 +164,7 @@ enum Value {
     Native(NativeRef),               // 関数値になった組み込み関数
     Error(Rc<ErrorValue>),           // 外の世界の失敗（種類とメッセージ）。`?` で伝える
     Bytes(Rc<[u8]>),                 // バイト列。変更できない
+    Handle(Rc<Handle>),              // 閉じる必要のある資源（TCP など）
 }
 ```
 

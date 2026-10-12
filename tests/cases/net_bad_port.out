@@ -1,0 +1,4 @@
+net_bad_port.dol:2:5: エラー: net.listen のポートは 0〜65535 の整数です（70000）
+  |
+2 | log[@net.listen[70000]]
+  |     ^

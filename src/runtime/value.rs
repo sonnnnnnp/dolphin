@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use super::env::Env;
 use super::gc;
+use super::handle::Handle;
 use super::interp::NativeFn;
 use super::map::Map;
 use super::module::Module;
@@ -31,6 +32,8 @@ pub enum Value {
     Error(Rc<ErrorValue>),
     /// バイト列（design.md 5.14）。変更できない
     Bytes(Rc<[u8]>),
+    /// 閉じる必要のある外部の資源（TCP など。design.md 5.21）
+    Handle(Rc<Handle>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -103,6 +106,7 @@ impl Value {
             Value::Func(_) | Value::Native(_) => "関数",
             Value::Error(_) => "エラー",
             Value::Bytes(_) => "バイト列",
+            Value::Handle(_) => "ハンドル",
         }
     }
 
@@ -124,6 +128,7 @@ impl Value {
             (Value::Native(a), Value::Native(b)) => a.name == b.name,
             (Value::Error(a), Value::Error(b)) => a == b,
             (Value::Bytes(a), Value::Bytes(b)) => a == b,
+            (Value::Handle(a), Value::Handle(b)) => Rc::ptr_eq(a, b),
             (Value::Array(a), Value::Array(b)) => {
                 let (a, b) = (a.borrow(), b.borrow());
                 a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| x.equals(y))
@@ -174,6 +179,7 @@ fn write_value(
         Value::Native(n) => return write!(f, "<組み込み関数 {}>", n.name),
         Value::Error(e) => return write!(f, "<エラー {}: {}>", e.kind, e.message),
         Value::Bytes(b) => return write_bytes(f, b),
+        Value::Handle(h) => return write!(f, "{h}"),
         Value::Array(items) => Rc::as_ptr(items).cast::<()>(),
         Value::Map(map) => Rc::as_ptr(map).cast::<()>(),
     };
