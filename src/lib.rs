@@ -4,6 +4,7 @@
 //! 全体像は docs/architecture.md
 
 pub mod diag;
+pub mod fmt;
 pub mod runtime;
 pub mod sema;
 pub mod stdlib;

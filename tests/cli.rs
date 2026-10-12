@@ -287,3 +287,56 @@ fn test_runs_test_functions() {
     assert_eq!(output.status.code(), Some(1));
     assert!(stdout(&output).contains("テストが見つかりません"));
 }
+
+#[test]
+fn fmt_rewrites_checks_and_prints() {
+    let messy = "@x:=1+2   // c\nf[@a](\n# @a\n)\n";
+    let tidy = "@x := 1 + 2 // c\nf[@a] (\n    # @a\n)\n";
+    let path = script("fmt_messy.dol", messy);
+
+    // --check は書き換えず、整形が必要なら 1
+    let output = dolphin()
+        .arg("fmt")
+        .arg("--check")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stdout(&output).contains("fmt_messy.dol"));
+    assert_eq!(fs::read_to_string(&path).unwrap(), messy);
+
+    // --stdout は結果を出す
+    let output = dolphin()
+        .arg("fmt")
+        .arg("--stdout")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert_eq!(stdout(&output), tidy);
+    assert_eq!(fs::read_to_string(&path).unwrap(), messy);
+
+    // 書き戻す。整形済みなら何も出さず、--check も 0
+    let output = dolphin().arg("fmt").arg(&path).output().unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(fs::read_to_string(&path).unwrap(), tidy);
+    let output = dolphin().arg("fmt").arg(&path).output().unwrap();
+    assert_eq!(stdout(&output), "");
+    let output = dolphin()
+        .arg("fmt")
+        .arg("--check")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0));
+
+    // 構文エラーは整形せず、1
+    let bad = script("fmt_bad.dol", "@x := (\n");
+    let output = dolphin().arg("fmt").arg(&bad).output().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(fs::read_to_string(&bad).unwrap(), "@x := (\n");
+
+    assert_eq!(
+        dolphin().arg("fmt").output().unwrap().status.code(),
+        Some(2)
+    );
+}
