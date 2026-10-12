@@ -14,8 +14,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::diag::Diagnostic;
-use crate::syntax::ast::{Expr, ExprKind, FuncDef, Program, Stmt, StmtKind, Var};
-use crate::syntax::lexer::StrPart;
+use crate::syntax::ast::{Expr, ExprKind, FuncDef, Program, Stmt, StmtKind, StrSegment, Var};
 use crate::syntax::span::Span;
 
 type RResult = Result<(), Diagnostic>;
@@ -281,8 +280,8 @@ impl<'a> Resolver<'a> {
         match &expr.kind {
             ExprKind::Number(_) | ExprKind::Bool(_) | ExprKind::Nil => Ok(()),
             ExprKind::Str(parts) => parts.iter().try_for_each(|part| match part {
-                StrPart::Var(var) => self.var(var, expr.span, ctx),
-                StrPart::Text(_) => Ok(()),
+                StrSegment::Expr(inner) => self.expr(inner, ctx),
+                StrSegment::Text(_) => Ok(()),
             }),
             ExprKind::Var(var) => self.var(var, expr.span, ctx),
             ExprKind::FuncRef(name) => self.callee_arity(name, expr.span).map(|_| ()),

@@ -4,7 +4,7 @@
 //! （整形の前後で字句が同じことを確かめて、違えば結果を返さない）
 
 use crate::diag::Diagnostic;
-use crate::syntax::lexer::{self, TokenKind};
+use crate::syntax::lexer::{self, StrPart, TokenKind};
 use crate::syntax::parser;
 
 const INDENT: &str = "    ";
@@ -45,7 +45,7 @@ pub fn format_source(src: &str) -> Result<String, FmtError> {
 fn significant(tokens: &[lexer::Token]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for token in tokens {
-        let text = format!("{:?}", token.kind);
+        let text = describe(&token.kind);
         if matches!(token.kind, TokenKind::Newline)
             && (out.is_empty() || out.last().is_some_and(|l| *l == text))
         {
@@ -58,6 +58,26 @@ fn significant(tokens: &[lexer::Token]) -> Vec<String> {
         out.remove(out.len() - 2);
     }
     out
+}
+
+/// 字句の比較用の文字列。位置は含めない（文字列の中の `@{ }` の字句にも位置がある）
+fn describe(kind: &TokenKind) -> String {
+    match kind {
+        TokenKind::Str(parts) => {
+            let parts: Vec<String> = parts
+                .iter()
+                .map(|part| match part {
+                    StrPart::Interp(tokens) => {
+                        let inner: Vec<String> = tokens.iter().map(|t| describe(&t.kind)).collect();
+                        format!("Interp[{}]", inner.join(","))
+                    }
+                    other => format!("{other:?}"),
+                })
+                .collect();
+            format!("Str[{}]", parts.join(","))
+        }
+        other => format!("{other:?}"),
+    }
 }
 
 // ---- 字句 ----
@@ -127,11 +147,8 @@ fn scan(src: &str) -> Vec<Tok> {
             }
             '"' => {
                 let start = i;
-                i += 1;
-                while i < chars.len() && chars[i] != '"' {
-                    i += if chars[i] == '\\' { 2 } else { 1 };
-                }
-                i = (i + 1).min(chars.len());
+                // `@{ }` の中の文字列や入れ子も、字句解析と同じ規則で飛ばす（検査済みなので閉じている）
+                i = lexer::string_end(&chars, i + 1).unwrap_or(chars.len());
                 push(&mut toks, Class::Str, chars[start..i].iter().collect());
             }
             '@' => {
@@ -165,6 +182,13 @@ fn scan(src: &str) -> Vec<Tok> {
                     i += 1;
                 }
                 let word: String = chars[start..i].iter().collect();
+                if word == "r"
+                    && let Some(end) = raw_string_end(&chars, i)
+                {
+                    i = end;
+                    push(&mut toks, Class::Str, chars[start..i].iter().collect());
+                    continue;
+                }
                 let class = match word.as_str() {
                     "if" | "else" | "while" | "for" | "in" | "break" | "continue" => Class::Keyword,
                     _ => Class::Word,
@@ -226,6 +250,22 @@ fn scan(src: &str) -> Vec<Tok> {
         }
     }
     toks
+}
+
+/// 生の文字列 `r"…"` / `r#"…"#` の終わりの次の位置。`pos` は `r` の次。生の文字列でなければ None
+fn raw_string_end(chars: &[char], pos: usize) -> Option<usize> {
+    let hashes = chars[pos..].iter().take_while(|c| **c == '#').count();
+    if chars.get(pos + hashes) != Some(&'"') {
+        return None;
+    }
+    let mut i = pos + hashes + 1;
+    while i < chars.len() {
+        if chars[i] == '"' && (0..hashes).all(|k| chars.get(i + 1 + k) == Some(&'#')) {
+            return Some(i + 1 + hashes);
+        }
+        i += 1;
+    }
+    None
 }
 
 /// `0x…` の 16 進数リテラルか（`e` が桁で、指数ではない）
@@ -467,6 +507,19 @@ log[ ...@x,1,...{2}]
 log[...@x, 1, ...{2}]
 "
         );
+    }
+
+    #[test]
+    fn interpolated_and_raw_strings_are_kept() {
+        let src = r##"log[ "a @{ {1,2}{0}  +  f["x" ] } b" ,r"C:\x  " ,r#"q"u  "#]
+"##;
+        let want = r##"log["a @{ {1,2}{0}  +  f["x" ] } b", r"C:\x  ", r#"q"u  "#]
+"##;
+        let out = fmt(src);
+        assert_eq!(out, want);
+        assert_eq!(fmt(&out), out);
+        // 関数 r の呼び出しは、生の文字列ではない
+        assert_eq!(fmt("@x=r[1]+r [2]\n"), "@x = r[1] + r[2]\n");
     }
 
     #[test]

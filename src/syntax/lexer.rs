@@ -7,10 +7,13 @@ use super::span::Span;
 use crate::diag::Diagnostic;
 
 /// 文字列リテラルの中身。`"Hi, @name!"` は Text("Hi, "), Var(@name), Text("!") になる。
+/// `"@{a + 1}"` の `@{ }` は Interp になる（design.md 5.19）。
 #[derive(Debug, Clone, PartialEq)]
 pub enum StrPart {
     Text(String),
     Var(Var),
+    /// `@{ 式 }` の式の字句（末尾は Eof）。式への解析は Parser が行う
+    Interp(Vec<Token>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -131,6 +134,43 @@ pub struct Token {
     pub span: Span,
 }
 
+/// `chars[pos..]`（`@{` の `{` の次から）の `@{ }` の中身が終わる `}` の位置。
+/// 中の `{ }` の入れ子と、中の文字列（その中の `@{ }` も）を飛ばす。閉じられていなければ None
+pub fn interpolation_end(chars: &[char], mut pos: usize) -> Option<usize> {
+    let mut depth = 0;
+    while let Some(&c) = chars.get(pos) {
+        match c {
+            '"' => pos = string_end(chars, pos + 1)?,
+            '{' => {
+                depth += 1;
+                pos += 1;
+            }
+            '}' if depth == 0 => return Some(pos),
+            '}' => {
+                depth -= 1;
+                pos += 1;
+            }
+            _ => pos += 1,
+        }
+    }
+    None
+}
+
+/// 開きの `"` の次から数えて、文字列を閉じる `"` の次の位置。閉じられていなければ None
+pub fn string_end(chars: &[char], mut pos: usize) -> Option<usize> {
+    while let Some(&c) = chars.get(pos) {
+        match c {
+            '\\' => pos += 2,
+            '"' => return Some(pos + 1),
+            '@' if chars.get(pos + 1) == Some(&'{') => {
+                pos = interpolation_end(chars, pos + 2)? + 1;
+            }
+            _ => pos += 1,
+        }
+    }
+    None
+}
+
 pub fn tokenize(src: &str) -> Result<Vec<Token>, Diagnostic> {
     Lexer::new(src).run()
 }
@@ -200,6 +240,13 @@ impl Lexer {
                 }
                 c if c.is_ascii_alphabetic() || c == '_' => {
                     let word = self.ident();
+                    if word == "r"
+                        && matches!(self.peek(), Some('"' | '#'))
+                        && let Some(parts) = self.raw_string(start)?
+                    {
+                        self.push(TokenKind::Str(parts), start);
+                        continue;
+                    }
                     let kind = match word.as_str() {
                         "if" => TokenKind::If,
                         "else" => TokenKind::Else,
@@ -367,6 +414,53 @@ impl Lexer {
         Ok(s)
     }
 
+    /// `@{ 式 }`。`@` を読んだ後（次が `{`）に呼ぶ。中の式を字句に分けて返す
+    fn interpolation(&mut self, start: Span) -> Result<StrPart, Diagnostic> {
+        self.bump(); // `{`
+        let inner_start = self.span();
+        let Some(end) = interpolation_end(&self.chars, self.pos) else {
+            return Err(Diagnostic::new(start, "`@{` が閉じられていません").at_eof());
+        };
+        let mut sub = Lexer::new("");
+        sub.chars = self.chars[self.pos..end].to_vec();
+        sub.line = inner_start.line;
+        sub.col = inner_start.col;
+        let tokens = sub.run()?;
+        while self.pos < end {
+            self.bump();
+        }
+        self.bump(); // `}`
+        Ok(StrPart::Interp(tokens))
+    }
+
+    /// 生の文字列 `r"…"` / `r#"…"#`。`r` を読んだ後、次が `"` か `#` のときに呼ぶ。
+    /// 生の文字列でなければ（`#` の後に `"` がない）None
+    fn raw_string(&mut self, start: Span) -> Result<Option<Vec<StrPart>>, Diagnostic> {
+        let mut hashes = 0;
+        while self.chars.get(self.pos + hashes) == Some(&'#') {
+            hashes += 1;
+        }
+        if self.chars.get(self.pos + hashes) != Some(&'"') {
+            return Ok(None);
+        }
+        for _ in 0..=hashes {
+            self.bump();
+        }
+        let mut text = String::new();
+        loop {
+            let Some(c) = self.bump() else {
+                return Err(Diagnostic::new(start, "文字列が閉じられていません").at_eof());
+            };
+            if c == '"' && (0..hashes).all(|i| self.chars.get(self.pos + i) == Some(&'#')) {
+                for _ in 0..hashes {
+                    self.bump();
+                }
+                return Ok(Some(vec![StrPart::Text(text)]));
+            }
+            text.push(c);
+        }
+    }
+
     /// 開きの `"` を読んだ後に呼ぶ
     fn string(&mut self, start: Span) -> Result<Vec<StrPart>, Diagnostic> {
         let mut parts = Vec::new();
@@ -390,6 +484,12 @@ impl Lexer {
                         return Err(Diagnostic::new(start, "文字列が閉じられていません").at_eof());
                     }
                 },
+                '@' if self.peek() == Some('{') => {
+                    if !text.is_empty() {
+                        parts.push(StrPart::Text(std::mem::take(&mut text)));
+                    }
+                    parts.push(self.interpolation(esc_span)?);
+                }
                 '@' => {
                     let name = self.ident();
                     if name.is_empty() {

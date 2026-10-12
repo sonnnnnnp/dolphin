@@ -3,7 +3,6 @@
 use std::fmt;
 use std::rc::Rc;
 
-use super::lexer::StrPart;
 use super::span::Span;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,6 +69,14 @@ pub struct FuncDef {
     pub span: Span,
 }
 
+/// 文字列リテラルの部分。`"a@{1 + 2}b"` は Text("a"), Expr(1 + 2), Text("b")。
+/// `@name` は Expr(Var) になる
+#[derive(Debug, Clone, PartialEq)]
+pub enum StrSegment {
+    Text(String),
+    Expr(Expr),
+}
+
 /// 関数の引数 1 つ。`default` があれば、渡されなかったときにその式の値になる（design.md 5.19）
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
@@ -102,7 +109,7 @@ pub struct Expr {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
     Number(f64),
-    Str(Vec<StrPart>),
+    Str(Vec<StrSegment>),
     Bool(bool),
     /// `nil`
     Nil,
@@ -270,11 +277,15 @@ impl fmt::Display for Expr {
                 write!(f, "\"")?;
                 for part in parts {
                     match part {
-                        StrPart::Text(text) => {
+                        StrSegment::Text(text) => {
                             let escaped = text.escape_debug().to_string().replace('@', "\\@");
                             write!(f, "{escaped}")?;
                         }
-                        StrPart::Var(var) => write!(f, "{var}")?,
+                        StrSegment::Expr(Expr {
+                            kind: ExprKind::Var(var),
+                            ..
+                        }) => write!(f, "{var}")?,
+                        StrSegment::Expr(expr) => write!(f, "@{{{expr}}}")?,
                     }
                 }
                 write!(f, "\"")

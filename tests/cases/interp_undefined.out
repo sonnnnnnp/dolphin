@@ -1,0 +1,4 @@
+interp_undefined.dol:1:10: エラー: 未定義の変数 `@nope`
+  |
+1 | log["x @{@nope + 1} y"]
+  |          ^

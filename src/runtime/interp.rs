@@ -17,9 +17,8 @@ use super::value::{Closure, NativeRef, Value};
 use crate::diag::Origin;
 use crate::sema::resolver::{self, Callee};
 use crate::syntax::ast::{
-    BinaryOp, Expr, ExprKind, FuncDef, Program, Stmt, StmtKind, UnaryOp, Var,
+    BinaryOp, Expr, ExprKind, FuncDef, Program, Stmt, StmtKind, StrSegment, UnaryOp, Var,
 };
-use crate::syntax::lexer::StrPart;
 use crate::syntax::span::Span;
 use crate::syntax::{lexer, parser};
 
@@ -371,11 +370,8 @@ impl<'a> Interpreter<'a> {
                 let mut s = String::new();
                 for part in parts {
                     match part {
-                        StrPart::Text(text) => s.push_str(text),
-                        StrPart::Var(var) => match self.get_var(var) {
-                            Some(value) => s.push_str(&value.to_string()),
-                            None => return Err(undefined(var, span)),
-                        },
+                        StrSegment::Text(text) => s.push_str(text),
+                        StrSegment::Expr(inner) => s.push_str(&self.eval(inner)?.to_string()),
                     }
                 }
                 Value::Str(s.into())

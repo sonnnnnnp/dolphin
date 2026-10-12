@@ -5,7 +5,8 @@
 use std::rc::Rc;
 
 use super::ast::{
-    BinaryOp, Block, Expr, ExprKind, FuncDef, Param, Program, Stmt, StmtKind, UnaryOp, Var,
+    BinaryOp, Block, Expr, ExprKind, FuncDef, Param, Program, Stmt, StmtKind, StrSegment, UnaryOp,
+    Var,
 };
 use super::lexer::{StrPart, Token, TokenKind};
 use super::span::Span;
@@ -428,7 +429,7 @@ impl<'t> Parser<'t> {
         let token = self.peek();
         let kind = match &token.kind {
             TokenKind::Number(n) => ExprKind::Number(*n),
-            TokenKind::Str(parts) => ExprKind::Str(parts.clone()),
+            TokenKind::Str(parts) => ExprKind::Str(str_segments(parts, token.span)?),
             TokenKind::True => ExprKind::Bool(true),
             TokenKind::False => ExprKind::Bool(false),
             TokenKind::Nil => ExprKind::Nil,
@@ -631,6 +632,30 @@ impl<'t> Parser<'t> {
     }
 }
 
+/// 文字列の部分を AST にする。`@name` は文字列の位置を持つ変数、`@{ }` は式として解析する
+fn str_segments(parts: &[StrPart], span: Span) -> PResult<Vec<StrSegment>> {
+    parts
+        .iter()
+        .map(|part| match part {
+            StrPart::Text(text) => Ok(StrSegment::Text(text.clone())),
+            StrPart::Var(var) => Ok(StrSegment::Expr(Expr {
+                kind: ExprKind::Var(var.clone()),
+                span,
+            })),
+            StrPart::Interp(tokens) => {
+                let mut sub = Parser { tokens, pos: 0 };
+                sub.skip_newlines();
+                let expr = sub.expression()?;
+                sub.skip_newlines();
+                if !sub.at(&TokenKind::Eof) {
+                    return Err(sub.unexpected("`}`"));
+                }
+                Ok(StrSegment::Expr(expr))
+            }
+        })
+        .collect()
+}
+
 fn cmp_op(kind: &TokenKind) -> Option<BinaryOp> {
     match kind {
         TokenKind::Eq => Some(BinaryOp::Eq),
@@ -665,7 +690,7 @@ fn assign_target(expr: Expr) -> PResult<(Var, Vec<Expr>)> {
             // `@m.key = v` は `@m{"key"} = v`。モジュールかどうかは実行時に分かる
             ExprKind::Member { target, name } => {
                 indices.push(Expr {
-                    kind: ExprKind::Str(vec![StrPart::Text(name)]),
+                    kind: ExprKind::Str(vec![StrSegment::Text(name)]),
                     span: target.span,
                 });
                 current = target.kind;
