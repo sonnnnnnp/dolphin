@@ -91,6 +91,7 @@ dolphin/
 │     ├─ string.rs       str_*、to_str、to_num
 │     ├─ array.rs        arr_len, arr_push, arr_pop
 │     ├─ map.rs          map_len, map_keys, map_has, map_remove
+│     ├─ bits.rs         std:bits（ビット演算）
 │     ├─ math.rs         abs, floor, …, random（乱数は xorshift64* を自前で実装）
 │     ├─ types.rs        type_of
 │     ├─ gc.rs           gc_collect

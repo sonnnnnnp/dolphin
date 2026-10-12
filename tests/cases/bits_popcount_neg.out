@@ -1,0 +1,4 @@
+bits_popcount_neg.dol:2:5: エラー: bits.popcount の引数は 0 以上の整数です（-1 が渡されました）
+  |
+2 | log[@b.popcount[-1]]
+  |     ^

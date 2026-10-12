@@ -1,0 +1,2 @@
+@b := import["std:bits"]
+log[@b.shl[1, 53], @b.shl[1, 54]]

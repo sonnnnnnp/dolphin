@@ -3,6 +3,7 @@
 //! 関数の一覧と仕様は design.md 5.5
 
 pub mod array;
+pub mod bits;
 pub mod bytes;
 #[cfg(feature = "crypto")]
 pub mod crypto;
@@ -43,6 +44,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     array::register(interp);
     map::register(interp);
     math::register(interp);
+    bits::register(interp);
     types::register(interp);
     gc::register(interp);
     debug::register(interp);

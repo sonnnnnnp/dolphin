@@ -1,0 +1,2 @@
+@b := import["std:bits"]
+log[@b.popcount[-1]]
