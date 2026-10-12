@@ -100,7 +100,8 @@ dolphin/
 │     ├─ time.rs         std:time（暦の計算は自前）
 │     ├─ error.rs        is_error, err_kind, err_message, err_new
 │     ├─ json.rs         std:json（parse / stringify / pretty。自前の実装、外部クレートなし）
-│     ├─ http.rs         std:http（feature = "http"。ureq + rustls）
+│     ├─ http.rs         std:http のクライアント（feature = "http"。ureq + rustls）
+│     ├─ http_server.rs  std:http の serve（std::net だけ。HTTP の解析は自前）
 │     └─ gfx.rs          ⬜ 段階 5（feature = "gfx"）
 ├─ tests/
 │  ├─ golden.rs          cases/*.dol を実行し、*.out と比較する

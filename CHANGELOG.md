@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-12
+
+HTTP サーバー（[design.md 5.16](docs/design.md)）。
+
+### 追加
+- `std:http` の `serve[port, handler]` / `serve[options, handler]`（`options` は `port` `host` `max_body`）。ハンドラはリクエストのマップ（`method` `path` `query` `headers` `body` `raw` `remote`）を受け取り、`status` `headers` `body` `json` のマップか文字列を返す
+- 接続の受け付けと HTTP の解析・応答の書き込みは補助スレッドで行い、解析済みのデータだけをインタプリタのスレッドに送る。ハンドラは 1 つずつ順番に呼ぶ。HTTP/1.1（keep-alive、`Content-Length` と chunked の本文、`Expect: 100-continue`、`HEAD`）の解析は自前で、外部クレートは使わない
+- ハンドラのエラーや正しくない戻り値は、`500` を返し、位置と呼び出し履歴を標準エラーに出して、サーバーは続ける。`os.exit` はサーバーごと止める。本文が `max_body` を超えれば `413`、読めないリクエストは `400`
+- `tests/http_server.rs`: `dolphin` を子プロセスで起動して HTTP で叩くテスト
+- `examples/todo_api.dol`: JSON でメモを出し入れする小さな API サーバー
+
 ## [0.15.0] - 2026-10-12
 
 メモリ回収（[design.md 5.15](docs/design.md)）。

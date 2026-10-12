@@ -1,0 +1,52 @@
+// メモを JSON で出し入れする小さな API サーバー
+//   dolphin examples/todo_api.dol
+//   curl localhost:8080/todos
+//   curl -X POST localhost:8080/todos -d '{"title": "牛乳を買う"}'
+//   curl -X DELETE localhost:8080/todos/1
+@http := import["std:http"]
+@json := import["std:json"]
+
+@todos := {:}
+@next_id := 1
+
+list_todos[] (
+    @items := {}
+    for @key in map_keys[@todos] (
+        arr_push[@items, @todos{@key}]
+    )
+    # {"json": @items}
+)
+
+add_todo[@req] (
+    @data := @json.parse[@req{"body"}]
+    if is_error[@data] (
+        # {"status": 400, "json": {"error": err_message[@data]}}
+    )
+    @todo := {"id": @next_id, "title": @data{"title"}}
+    @todos{to_str[@next_id]} = @todo
+    @next_id = @next_id + 1
+    # {"status": 201, "json": @todo}
+)
+
+remove_todo[@id] (
+    if !map_has[@todos, @id] (
+        # {"status": 404, "json": {"error": "not found"}}
+    )
+    map_remove[@todos, @id]
+    # {"status": 204}
+)
+
+route[@req] (
+    @method := @req{"method"}
+    @path := @req{"path"}
+    if @path == "/todos" && @method == "GET" ( # list_todos[] )
+    if @path == "/todos" && @method == "POST" ( # add_todo[@req] )
+    if str_starts_with[@path, "/todos/"] && @method == "DELETE" (
+        # remove_todo[str_sub[@path, 7, str_len[@path]]]
+    )
+    # {"status": 404, "json": {"error": "no route"}}
+)
+
+log["http://127.0.0.1:8080 で待ち受けます"]
+@result := @http.serve[8080, route]
+log["サーバーを始められません:", err_message[@result]]

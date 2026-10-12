@@ -603,6 +603,11 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    /// `call_value` が預けたエラー（位置と呼び出し履歴つき）を取り出す
+    pub fn take_native_error(&mut self) -> Option<RuntimeError> {
+        self.native_error.take()
+    }
+
     /// 組み込み関数から関数値を呼ぶ（`arr_map` など）。呼ぶ関数の中で起きたエラーは、
     /// 呼び出し履歴つきで `native_error` に預け、メッセージだけを返す
     pub fn call_value(&mut self, f: &Value, args: Vec<Value>) -> Result<Value, String> {

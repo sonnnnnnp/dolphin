@@ -12,6 +12,8 @@ pub mod fs;
 pub mod gc;
 #[cfg(feature = "http")]
 pub mod http;
+#[cfg(feature = "http")]
+pub mod http_server;
 pub mod io;
 pub mod json;
 pub mod map;

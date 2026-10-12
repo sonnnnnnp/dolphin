@@ -23,6 +23,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
             ("http.post", post),
             ("http.put", put),
             ("http.delete", delete),
+            ("http.serve", super::http_server::serve),
         ],
     );
 }
