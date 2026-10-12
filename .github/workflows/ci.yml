@@ -14,6 +14,8 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # 音（audio feature）のビルドに要る
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
@@ -23,3 +25,6 @@ jobs:
       # GUI（ui feature）も、ビルドと、GUI なしでできるテストが通ること
       - run: cargo clippy --all-targets --features ui -- -D warnings
       - run: cargo test --features ui
+      # 音（audio feature）も、ビルドと、出力機器がなくてできるテストが通ること
+      - run: cargo clippy --all-targets --features audio -- -D warnings
+      - run: cargo test --features audio

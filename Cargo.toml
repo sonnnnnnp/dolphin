@@ -1,6 +1,6 @@
 [package]
 name = "dolphin"
-version = "0.34.0"
+version = "0.35.0"
 edition = "2024"
 
 # コア言語（lib）は外部クレートに依存しない。CLI の便利機能だけ feature で足す
@@ -10,6 +10,8 @@ md-5 = { version = "0.11", optional = true }
 ring = { version = "0.17", optional = true }
 regex = { version = "1", optional = true }
 rustyline = { version = "18.0.1", optional = true }
+# 音の再生（`import["std:audio"]`）。Linux では ALSA の開発用ファイルが要る
+rodio = { version = "0.23", optional = true, default-features = false, features = ["playback", "wav", "flac", "mp3", "vorbis"] }
 # 画像のデコード（`std:canvas` の `image`）
 image = { version = "0.25", optional = true, default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp"] }
 # GUI（`import["std:ui"]`）。OpenGL（glow）で描く
@@ -29,3 +31,5 @@ crypto = ["dep:ring", "dep:md-5"]
 regex = ["dep:regex"]
 # GUI（`import["std:ui"]`）。依存が多くビルドが重いので、既定では無効（`--features ui`）
 ui = ["dep:eframe", "dep:image"]
+# 音の再生（`import["std:audio"]`）。既定では無効（`--features audio`）
+audio = ["dep:rodio"]

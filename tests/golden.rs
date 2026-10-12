@@ -21,8 +21,8 @@ fn golden() {
         if name.starts_with("crypto") && !cfg!(feature = "crypto") {
             continue;
         }
-        // `ui` feature を付けた版では、あるモジュールの一覧が変わる
-        if name == "std_missing.dol" && cfg!(feature = "ui") {
+        // `ui` `audio` feature を付けた版では、あるモジュールの一覧が変わる
+        if name == "std_missing.dol" && (cfg!(feature = "ui") || cfg!(feature = "audio")) {
             continue;
         }
         // `regex` feature を外した版では、std:regex を使うケースは動かさない

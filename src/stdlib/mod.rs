@@ -4,6 +4,8 @@
 
 pub mod array;
 pub mod async_;
+#[cfg(feature = "audio")]
+pub mod audio;
 pub mod bits;
 pub mod bytes;
 #[cfg(feature = "crypto")]
@@ -53,6 +55,8 @@ pub fn register(interp: &mut Interpreter<'_>) {
     bits::register(interp);
     net::register(interp);
     async_::register(interp);
+    #[cfg(feature = "audio")]
+    audio::register(interp);
     #[cfg(feature = "ui")]
     crate::ui::register(interp);
     ws::register(interp);

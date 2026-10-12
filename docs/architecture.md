@@ -107,6 +107,7 @@ dolphin/
 │     ├─ ws_proto.rs     WebSocket のフレーム・メッセージ・ハンドシェイク（RFC 6455。SHA-1 も自前）
 │     ├─ ws.rs           std:ws（クライアント。サーバー側の接続の send / close も受ける）
 │     ├─ async_.rs       std:async（タイマー、コールバック型の非同期の関数の共通処理）
+│     ├─ audio.rs        std:audio（feature = "audio"。rodio。再生は補助スレッド）
 │     ├─ net.rs          std:net（TCP。ブロッキング、標準ライブラリだけ）
 │     ├─ path.rs         std:path
 │     ├─ os.rs           std:os（args / env / exit / run など）

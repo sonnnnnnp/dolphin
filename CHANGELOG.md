@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-10-12
+
+音（[design.md 5.27](docs/design.md)）。G の最後。
+
+### 追加
+- `import["std:audio"]`（`audio` feature。**既定では無効**で、`cargo build --features audio`。`rodio`（cpal + symphonia）を使う。Linux では `libasound2-dev` が要る）: `play[path, options]`（`volume` `speed` `loop`。音の番号を返す）`stop` `stop_all` `pause` `resume` `set_volume` `set_master_volume` `is_playing`。WAV・OGG・MP3・FLAC
+- 再生は補助スレッドが受け持ち、インタプリタは待たない。ファイルを開いて形式を確かめるところまでは `play` の中で行い、失敗（`not_found` `io` `parse`、出力機器がなければ `audio`）はエラー値で返す
+- 出力機器がなくても通る単体テスト（引数・ファイルの検査、音の番号の管理。機器があれば再生と停止も）
+
 ## [0.34.0] - 2026-10-12
 
 画像（[design.md 5.26](docs/design.md)）。`canvas` に画像を足す。

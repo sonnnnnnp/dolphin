@@ -1003,6 +1003,7 @@ impl<'a> Interpreter<'a> {
                 "std:crypto" if !cfg!(feature = "crypto") => Some("crypto"),
                 "std:regex" if !cfg!(feature = "regex") => Some("regex"),
                 "std:ui" if !cfg!(feature = "ui") => Some("ui"),
+                "std:audio" if !cfg!(feature = "audio") => Some("audio"),
                 _ => None,
             };
             if let Some(feature) = missing_feature {
