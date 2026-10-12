@@ -919,6 +919,60 @@ log[@net.read_line[@conn]?]
 
 ---
 
+### 5.22 WebSocket（`std:ws` と `http.serve`、v0.30.0、確定 2026-10-12）
+
+RFC 6455。サーバー側は `http.serve` のハンドラが「この接続を WebSocket にする」と返し、**コールバック**（イベント駆動）で扱う。クライアント側は `std:ws` のブロッキング関数（5.21 の TCP と同じ書き方）。TLS（`wss://`）は後回し。
+
+#### サーバー
+
+```
+@http := import["std:http"]
+@ws := import["std:ws"]
+@http.serve[8080, [@req] (
+    if @req{"path"} == "/chat" (
+        # {"websocket": {
+            "on_open": [@conn] ( @ws.send[@conn, "ようこそ"] ),
+            "on_message": [@conn, @msg] ( @ws.send[@conn, "echo: @msg"] ),
+            "on_close": [@conn, @code] ( log["切断", @code] )
+        }}
+    )
+    # {"status": 404, "body": "not found"}
+)]
+```
+
+| 項目 | 内容 | 状態 |
+|---|---|---|
+| 返し方 | ハンドラの戻り値のマップの `websocket` キー（`status` `headers` `body` `json` とは同時に使えない）。値は `on_open` `on_message` `on_close` を持つマップ（どれも省略できる。ほかのキーは実行時エラー） | 確定 |
+| 条件 | リクエストが WebSocket の接続要求（`Upgrade: websocket`、`Sec-WebSocket-Key`、バージョン 13）でなければ `400` を返し、メッセージを標準エラーに出す | 確定 |
+| `on_open[conn]` | 接続が確立した直後 | 確定 |
+| `on_message[conn, message]` | メッセージを受け取るたび。テキストは文字列、バイナリはバイト列。断片化されたメッセージは、まとめてから渡す | 確定 |
+| `on_close[conn, code]` | 接続が終わったとき（相手が閉じた、`close` を呼んだ、通信が切れた）。`code` は相手が送った終了コード（なければ 1005、異常な切断は 1006）。1 つの接続につき 1 回 | 確定 |
+| 実行 | コールバックは、HTTP のハンドラと同じインタプリタのスレッドで、**1 つずつ順番に**呼ぶ（5.16）。待ち受け・フレームの解析・送信は補助スレッド。コールバックのエラーは標準エラーに出して続ける（その接続も続く） | 確定 |
+| `conn` | ハンドル（5.21）。サーバー側の接続は `send` `close` だけ使える（`recv` は実行時エラー。受け取りはコールバック） | 確定 |
+
+#### `std:ws`
+
+| 関数 | 内容 |
+|---|---|
+| `connect[url]` `connect[url, options]` | `ws://host[:port]/path?query` に接続して、接続のハンドルを返す。`options` は `{"headers": {…}, "timeout": 秒}`（`timeout` は接続とハンドシェイクのとき。省略は 30） |
+| `send[conn, data]` | 文字列はテキスト、バイト列はバイナリで送る。戻り値は `nil` |
+| `recv[conn]` | クライアントの接続だけ。次のメッセージを待って返す（文字列かバイト列）。接続が閉じたら `nil`。ping には自動で pong を返す |
+| `close[conn]` `close[conn, code, reason]` | 閉じる（close フレームを送る）。既定の `code` は 1000。何度呼んでもよい |
+| `set_timeout[conn, seconds]` | クライアントの `recv` の時間切れ。`nil` で時間切れなし（既定） |
+
+| 項目 | 内容 | 状態 |
+|---|---|---|
+| 失敗 | エラー値。種類は `timeout` `closed`（閉じた接続の使用）`network`（接続・通信の失敗、ハンドシェイクの失敗、`wss://` 未対応）`protocol`（相手が RFC に反するフレームを送った）`too_large`（メッセージが 16 MB を超えた）`parse`（テキストが UTF-8 でない） | 確定 |
+| フレームの規則 | クライアントのフレームはマスクする。サーバーはマスクされていないフレームを `1002` で拒否する。制御フレーム（ping・pong・close）は 125 バイトまで。メッセージは 16 MB まで（超えたら `1009` で閉じる）。テキストが UTF-8 でなければ `1007` で閉じる | 確定 |
+| 送信 | `send` は待たずに戻る（サーバーの接続は送信用のキューに積む。クライアントは書き込みまで待つ） | 確定 |
+| `Origin` `Sec-WebSocket-Protocol` | 見ない・扱わない（認証や許可は、ハンドラが `@req{"headers"}` を見て決める） | 確定 |
+| 圧縮（permessage-deflate） | 扱わない（申し出られても使わない） | 確定 |
+| 同時接続 | `http.serve` の 256 接続の上限に含む | 確定 |
+| `wss://` | 後回し（TLS を直接扱う実装が要る） | 後回し |
+| ビルド | `http_server`（`http` feature）の中。`std:ws` は標準ライブラリだけで、feature なし（SHA-1 は自前で書く） | 確定 |
+
+---
+
 ## 6. 旧実装からの主な変更（案）
 
 | 旧実装 | 作り直し版 | 理由 |
