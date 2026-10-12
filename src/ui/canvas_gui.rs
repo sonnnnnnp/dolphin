@@ -1,6 +1,6 @@
 //! `std:canvas` の描画（egui）。メインスレッドで動く（design.md 5.25）
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
@@ -56,6 +56,7 @@ pub fn run_window(request: CanvasRequest) {
                 released: HashSet::new(),
                 buttons_pressed: [false; 3],
                 wheel: 0.0,
+                images: Images::default(),
             }))
         }),
     );
@@ -82,6 +83,7 @@ struct App {
     released: HashSet<String>,
     buttons_pressed: [bool; 3],
     wheel: f32,
+    images: Images,
 }
 
 /// 論理座標と、画面（ウィンドウの中の描く領域）の対応
@@ -163,6 +165,7 @@ impl eframe::App for App {
                     &layout,
                     &self.cmds,
                     self.background,
+                    &mut self.images,
                 );
                 layout
             })
@@ -271,7 +274,54 @@ impl App {
     }
 }
 
-fn paint(painter: &egui::Painter, layout: &Layout, cmds: &[Cmd], background: Color) {
+/// 読めた画像（テクスチャと、ピクセルの大きさ）。読めなかったものは None（もう警告を出した）
+type Loaded = Option<(egui::TextureHandle, [f32; 2])>;
+
+/// 読み込んだ画像（GPU のテクスチャ）
+#[derive(Default)]
+struct Images {
+    textures: HashMap<(String, bool), Loaded>,
+}
+
+impl Images {
+    /// 画像を（初めてなら）読み込む。`smooth` は拡大・縮小の補間
+    fn get(
+        &mut self,
+        ctx: &egui::Context,
+        path: &str,
+        smooth: bool,
+    ) -> Option<&(egui::TextureHandle, [f32; 2])> {
+        self.textures
+            .entry((path.to_string(), smooth))
+            .or_insert_with(|| match image::open(path) {
+                Ok(img) => {
+                    let rgba = img.to_rgba8();
+                    let size = [rgba.width() as usize, rgba.height() as usize];
+                    let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                    let options = if smooth {
+                        egui::TextureOptions::LINEAR
+                    } else {
+                        egui::TextureOptions::NEAREST
+                    };
+                    let handle = ctx.load_texture(path, color, options);
+                    Some((handle, [size[0] as f32, size[1] as f32]))
+                }
+                Err(e) => {
+                    eprintln!("canvas: 画像 `{path}` を読めません: {e}");
+                    None
+                }
+            })
+            .as_ref()
+    }
+}
+
+fn paint(
+    painter: &egui::Painter,
+    layout: &Layout,
+    cmds: &[Cmd],
+    background: Color,
+    images: &mut Images,
+) {
     let scale = layout.scale;
     // 論理的な画面は、まず背景色で塗る
     painter.rect_filled(layout.area, egui::CornerRadius::ZERO, color(background));
@@ -355,6 +405,39 @@ fn paint(painter: &egui::Painter, layout: &Layout, cmds: &[Cmd], background: Col
                     None => egui::Shape::convex_polygon(points, color(*c), egui::Stroke::NONE),
                 };
                 painter.add(shape);
+            }
+            Cmd::Image {
+                path,
+                x,
+                y,
+                w,
+                h,
+                src,
+                tint,
+                flip_x,
+                flip_y,
+                smooth,
+            } => {
+                let Some((texture, size)) = images.get(painter.ctx(), path, *smooth) else {
+                    continue;
+                };
+                // 描く範囲（画像のピクセル）→ 0〜1 の UV
+                let [sx, sy, sw, sh] = src.unwrap_or([0.0, 0.0, size[0], size[1]]);
+                let (mut u0, mut u1) = (sx / size[0], (sx + sw) / size[0]);
+                let (mut v0, mut v1) = (sy / size[1], (sy + sh) / size[1]);
+                if *flip_x {
+                    std::mem::swap(&mut u0, &mut u1);
+                }
+                if *flip_y {
+                    std::mem::swap(&mut v0, &mut v1);
+                }
+                let (width, height) = (w.unwrap_or(sw), h.unwrap_or(sh));
+                let rect = egui::Rect::from_min_size(
+                    layout.point(*x, *y),
+                    egui::vec2(width * scale, height * scale),
+                );
+                let uv = egui::Rect::from_min_max(egui::pos2(u0, v0), egui::pos2(u1, v1));
+                painter.image(texture.id(), rect, uv, color(*tint));
             }
             Cmd::Text {
                 x,

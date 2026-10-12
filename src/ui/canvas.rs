@@ -57,6 +57,19 @@ pub enum Cmd {
         color: Color,
         size: f32,
     },
+    /// 画像（design.md 5.26）。`w` `h` が None なら元の大きさ。`src` は画像のうち描く範囲 `[x, y, w, h]`
+    Image {
+        path: String,
+        x: f32,
+        y: f32,
+        w: Option<f32>,
+        h: Option<f32>,
+        src: Option<[f32; 4]>,
+        tint: Color,
+        flip_x: bool,
+        flip_y: bool,
+        smooth: bool,
+    },
 }
 
 /// 1 フレームの入力の状態
@@ -143,6 +156,8 @@ pub fn register(interp: &mut Interpreter<'_>) {
             ("canvas.line", line),
             ("canvas.polygon", polygon),
             ("canvas.text", text),
+            ("canvas.image", image),
+            ("canvas.image_size", image_size),
         ],
     );
 }
@@ -658,6 +673,143 @@ fn text(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         size,
     };
     push("canvas.text", cmd)
+}
+
+// ---- 画像（design.md 5.26） ----
+
+fn image(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    if !matches!(args.len(), 3 | 5 | 6) {
+        return Err(format!(
+            "canvas.image の引数は 3 個か 5 個か 6 個です（{} 個渡されました）",
+            args.len()
+        ));
+    }
+    let path = str_arg("canvas.image", args, 0)?.to_string();
+    let n = |i| float_arg("canvas.image", args, i);
+    let (x, y) = (n(1)?, n(2)?);
+    let (w, h) = if args.len() >= 5 {
+        let (w, h) = (n(3)?, n(4)?);
+        if w < 0.0 || h < 0.0 {
+            return Err(format!("canvas.image の大きさは 0 以上です（{w} × {h}）"));
+        }
+        (Some(w), Some(h))
+    } else {
+        (None, None)
+    };
+    let mut cmd = Cmd::Image {
+        path,
+        x,
+        y,
+        w,
+        h,
+        src: None,
+        tint: [255, 255, 255, 255],
+        flip_x: false,
+        flip_y: false,
+        smooth: true,
+    };
+    if let Some(options) = args.get(5) {
+        image_options(options, &mut cmd)?;
+    }
+    push("canvas.image", cmd)
+}
+
+fn image_options(options: &Value, cmd: &mut Cmd) -> Result<(), String> {
+    let Cmd::Image {
+        src,
+        tint,
+        flip_x,
+        flip_y,
+        smooth,
+        ..
+    } = cmd
+    else {
+        unreachable!("image が作った");
+    };
+    let Value::Map(map) = options else {
+        return Err(type_error("canvas.image", 5, "マップ", options));
+    };
+    for (key, value) in map.borrow().iter() {
+        let wrong = |expected: &str| {
+            format!(
+                "canvas.image のオプション `{key}` は{expected}です（{}が渡されました）",
+                value.type_name()
+            )
+        };
+        match (&**key, value) {
+            ("tint", Value::Str(s)) => {
+                *tint = parse_color(s).ok_or_else(|| wrong("`#rrggbb` の文字列"))?;
+            }
+            ("flip_x", Value::Bool(b)) => *flip_x = *b,
+            ("flip_y", Value::Bool(b)) => *flip_y = *b,
+            ("smooth", Value::Bool(b)) => *smooth = *b,
+            ("src", Value::Map(rect)) => {
+                let rect = rect.borrow();
+                let mut part = [0.0f32; 4];
+                for (i, name) in ["x", "y", "w", "h"].iter().enumerate() {
+                    part[i] = match rect.get(name) {
+                        Some(Value::Num(n)) if n.is_finite() => *n as f32,
+                        _ => {
+                            return Err(
+                                "canvas.image の `src` には、数の `x` `y` `w` `h` が要ります"
+                                    .to_string(),
+                            );
+                        }
+                    };
+                }
+                if part[0] < 0.0 || part[1] < 0.0 || part[2] <= 0.0 || part[3] <= 0.0 {
+                    return Err(
+                        "canvas.image の `src` は、x y が 0 以上、w h が 0 より大きい範囲です"
+                            .to_string(),
+                    );
+                }
+                *src = Some(part);
+            }
+            ("tint", _) => return Err(wrong("`#rrggbb` の文字列")),
+            ("flip_x" | "flip_y" | "smooth", _) => return Err(wrong("真偽値")),
+            ("src", _) => return Err(wrong("マップ")),
+            _ => return Err(format!("canvas.image のオプション `{key}` は知りません")),
+        }
+    }
+    Ok(())
+}
+
+/// 画像の大きさ（ピクセル）。ヘッダーだけ読む
+fn image_size(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("canvas.image_size", args, 1)?;
+    let path = str_arg("canvas.image_size", args, 0)?;
+    Ok(match image_dimensions(path) {
+        Ok((width, height)) => {
+            let mut map = Map::default();
+            map.insert("width".into(), Value::Num(f64::from(width)));
+            map.insert("height".into(), Value::Num(f64::from(height)));
+            new_map(map)
+        }
+        Err((kind, message)) => Value::error(
+            kind,
+            format!("`{path}` の大きさを調べられません: {message}"),
+        ),
+    })
+}
+
+#[cfg(feature = "ui")]
+fn image_dimensions(path: &str) -> Result<(u32, u32), (&'static str, String)> {
+    use std::io::ErrorKind;
+    image::image_dimensions(path).map_err(|e| match &e {
+        image::ImageError::IoError(io) if io.kind() == ErrorKind::NotFound => {
+            ("not_found", "ファイルがありません".to_string())
+        }
+        image::ImageError::IoError(io) => ("io", io.to_string()),
+        other => ("parse", other.to_string()),
+    })
+}
+
+#[cfg(not(feature = "ui"))]
+fn image_dimensions(_: &str) -> Result<(u32, u32), (&'static str, String)> {
+    Err((
+        "io",
+        "この版には画像を読む機能がありません（`ui` feature）".into(),
+    ))
 }
 
 #[cfg(test)]

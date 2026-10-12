@@ -26,14 +26,20 @@ fn handle(mut stream: TcpStream) {
     let mut reader = BufReader::new(stream.try_clone().unwrap());
     let mut request_line = String::new();
     reader.read_line(&mut request_line).unwrap();
-    // ヘッダーを読み捨てる
+    // ヘッダーを読み、本文があれば（読み残すと接続がリセットされるので）読み捨てる
+    let mut length = 0;
     loop {
         let mut line = String::new();
         reader.read_line(&mut line).unwrap();
         if line == "\r\n" || line.is_empty() {
             break;
         }
+        if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+            length = v.trim().parse().unwrap_or(0);
+        }
     }
+    let mut body = vec![0; length];
+    reader.read_exact(&mut body).unwrap();
     let path = request_line.split(' ').nth(1).unwrap_or("/").to_string();
     if let Some(ms) = path.strip_prefix("/slow/") {
         thread::sleep(Duration::from_millis(ms.parse().unwrap()));

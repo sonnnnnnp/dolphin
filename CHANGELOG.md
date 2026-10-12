@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-10-12
+
+画像（[design.md 5.26](docs/design.md)）。`canvas` に画像を足す。
+
+### 追加
+- `canvas.image[path, x, y]` `canvas.image[path, x, y, w, h]` `canvas.image[path, x, y, w, h, options]`（`options` は `src`（画像の一部。スプライトシート用）`tint` `flip_x` `flip_y` `smooth`（`false` で最近傍補間））と、`canvas.image_size[path]`（ヘッダーだけ読んで大きさを返す。失敗はエラー値）
+- 画像のデコードと GPU への転送は GUI 側で行い、インタプリタは、ファイルのパスで画像を指す。同じ画像は使い回し、読めない画像は、最初の 1 回だけ標準エラーに出して描かない。PNG・JPEG・GIF（最初のコマ）・BMP・WebP（`image` クレート。`ui` feature に含む）
+
 ## [0.33.0] - 2026-10-12
 
 `canvas`（[design.md 5.25](docs/design.md)）。G の続き。`ui` feature に含む。

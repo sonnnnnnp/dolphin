@@ -142,6 +142,7 @@ count: 3
 | [v0.31.0](https://github.com/sonnnnnnp/dolphin/tree/v0.31.0) | 非同期の関数（`std:async`、`http.get_async` など） | [v0.30.0...v0.31.0](https://github.com/sonnnnnnp/dolphin/compare/v0.30.0...v0.31.0) |
 | [v0.32.0](https://github.com/sonnnnnnp/dolphin/tree/v0.32.0) | `std:ui`（ウィンドウと宣言的 UI。`--features ui`） | [v0.31.0...v0.32.0](https://github.com/sonnnnnnp/dolphin/compare/v0.31.0...v0.32.0) |
 | [v0.33.0](https://github.com/sonnnnnnp/dolphin/tree/v0.33.0) | `std:canvas`（ゲーム・描画。`--features ui`） | [v0.32.0...v0.33.0](https://github.com/sonnnnnnp/dolphin/compare/v0.32.0...v0.33.0) |
+| [v0.34.0](https://github.com/sonnnnnnp/dolphin/tree/v0.34.0) | 画像（`canvas.image`） | [v0.33.0...v0.34.0](https://github.com/sonnnnnnp/dolphin/compare/v0.33.0...v0.34.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 
