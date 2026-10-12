@@ -63,9 +63,28 @@ pub enum StmtKind {
 pub struct FuncDef {
     /// 無名関数は空文字列
     pub name: String,
-    pub params: Vec<String>,
+    pub params: Vec<Param>,
     pub body: Block,
     pub span: Span,
+}
+
+/// 関数の引数 1 つ。`default` があれば、渡されなかったときにその式の値になる（design.md 5.19）
+#[derive(Debug, Clone, PartialEq)]
+pub struct Param {
+    pub name: String,
+    pub default: Option<Expr>,
+}
+
+impl FuncDef {
+    /// 渡さなければならない引数の数（既定値のない引数の数）
+    pub fn min_args(&self) -> usize {
+        self.params.iter().filter(|p| p.default.is_none()).count()
+    }
+
+    /// 渡せる引数の数の上限
+    pub fn max_args(&self) -> usize {
+        self.params.len()
+    }
 }
 
 /// `@name`。名前に `@` は含まない
@@ -184,7 +203,7 @@ impl fmt::Display for Stmt {
         match &self.kind {
             StmtKind::FuncDef(def) => {
                 write!(f, "(def {} (", def.name)?;
-                write_seq(f, def.params.iter().map(|p| format!("@{p}")))?;
+                write_seq(f, def.params.iter().map(ToString::to_string))?;
                 write!(f, ") {})", BlockDisplay(&def.body))
             }
             StmtKind::If {
@@ -269,7 +288,7 @@ impl fmt::Display for Expr {
             } => write!(f, "(if {cond} {then_expr} {else_expr})"),
             ExprKind::Lambda(def) => {
                 write!(f, "(fn (")?;
-                write_seq(f, def.params.iter().map(|p| format!("@{p}")))?;
+                write_seq(f, def.params.iter().map(ToString::to_string))?;
                 write!(f, ") {})", BlockDisplay(&def.body))
             }
             ExprKind::CallValue { callee, args } => {
@@ -341,6 +360,15 @@ impl fmt::Display for BinaryOp {
 }
 
 /// 空白区切りで並べる
+impl fmt::Display for Param {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.default {
+            Some(default) => write!(f, "(@{} {default})", self.name),
+            None => write!(f, "@{}", self.name),
+        }
+    }
+}
+
 fn write_seq<T: fmt::Display>(
     f: &mut fmt::Formatter<'_>,
     items: impl IntoIterator<Item = T>,

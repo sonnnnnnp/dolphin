@@ -131,6 +131,7 @@ count: 3
 | [v0.20.0](https://github.com/sonnnnnnp/dolphin/tree/v0.20.0) | 組み込み関数を隠す定義 | [v0.19.0...v0.20.0](https://github.com/sonnnnnnp/dolphin/compare/v0.19.0...v0.20.0) |
 | [v0.21.0](https://github.com/sonnnnnnp/dolphin/tree/v0.21.0) | `@m.key` | [v0.20.0...v0.21.0](https://github.com/sonnnnnnp/dolphin/compare/v0.20.0...v0.21.0) |
 | [v0.22.0](https://github.com/sonnnnnnp/dolphin/tree/v0.22.0) | 条件式（`if c ( a ) else ( b )`） | [v0.21.0...v0.22.0](https://github.com/sonnnnnnp/dolphin/compare/v0.21.0...v0.22.0) |
+| [v0.23.0](https://github.com/sonnnnnnp/dolphin/tree/v0.23.0) | 引数の既定値 | [v0.22.0...v0.23.0](https://github.com/sonnnnnnp/dolphin/compare/v0.22.0...v0.23.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

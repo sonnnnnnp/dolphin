@@ -1,0 +1,4 @@
+param_default_undefined.dol:1:8: エラー: 未定義の変数 `@nope`
+  |
+1 | f[@a = @nope] (
+  |        ^

@@ -1,0 +1,30 @@
+// 引数の既定値（design.md 5.19）
+greet[@name, @greeting = "こんにちは"] (
+    # "@greeting、@name"
+)
+log[greet["イルカ"], greet["イルカ", "やあ"]]
+
+// 前の引数を使える。呼ぶたびに評価される
+range_to[@end, @start = 0, @step = if @end > 10 ( 5 ) else ( 1 )] (
+    @out := {}
+    @i := @start
+    while @i < @end (
+        arr_push[@out, @i]
+        @i = @i + @step
+    )
+    # @out
+)
+log[range_to[4], range_to[4, 2], range_to[20], range_to[20, 0, 10]]
+
+@counter := 0
+next_id[@id = @counter + 1] (
+    @counter = @counter + 1
+    # @id
+)
+log[next_id[], next_id[], next_id[100]]
+
+// 無名関数・関数値・コールバック
+@f := [@x, @y = 10] ( # @x + @y )
+log[@f[1], @f[1, 2], arr_map[{1, 2}, @f]]
+@opt := [@x = "既定"] ( # @x )
+log[@opt[], @opt["指定"]]

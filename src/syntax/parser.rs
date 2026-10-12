@@ -4,7 +4,9 @@
 
 use std::rc::Rc;
 
-use super::ast::{BinaryOp, Block, Expr, ExprKind, FuncDef, Program, Stmt, StmtKind, UnaryOp, Var};
+use super::ast::{
+    BinaryOp, Block, Expr, ExprKind, FuncDef, Param, Program, Stmt, StmtKind, UnaryOp, Var,
+};
 use super::lexer::{StrPart, Token, TokenKind};
 use super::span::Span;
 use crate::diag::Diagnostic;
@@ -158,6 +160,26 @@ impl<'t> Parser<'t> {
     /// - `(` が続き、左辺が呼び出しの形 → 関数定義（design.md 4.1）
     fn simple_statement(&mut self) -> PResult<Stmt> {
         let span = self.peek().span;
+        if self.looks_like_func_def() {
+            let TokenKind::Ident(name) = &self.peek().kind else {
+                unreachable!("looks_like_func_def が確かめた")
+            };
+            let name = name.clone();
+            self.advance();
+            self.advance();
+            let params = self.params()?;
+            let body = self.block()?;
+            let def = FuncDef {
+                name,
+                params,
+                body,
+                span,
+            };
+            return Ok(Stmt {
+                kind: StmtKind::FuncDef(Rc::new(def)),
+                span,
+            });
+        }
         let expr = self.expression()?;
 
         let kind = if self.at(&TokenKind::Declare) {
@@ -177,36 +199,39 @@ impl<'t> Parser<'t> {
                 value,
             }
         } else if self.at(&TokenKind::LParen) {
-            let ExprKind::Call { name, args } = expr.kind else {
-                return Err(self.unexpected("改行"));
-            };
-            StmtKind::FuncDef(Rc::new(self.func_def(name, args, span)?))
+            return Err(self.unexpected("改行"));
         } else {
             StmtKind::Expr(expr)
         };
         Ok(Stmt { kind, span })
     }
 
-    /// func_def = IDENT "[" [ params ] "]" block
-    /// 引数部分は呼び出しとして読み済みなので、変数だけかを確かめる
-    fn func_def(&mut self, name: String, args: Vec<Expr>, span: Span) -> PResult<FuncDef> {
-        let params = args
-            .into_iter()
-            .map(|arg| match arg.kind {
-                ExprKind::Var(Var(param)) => Ok(param),
-                _ => Err(Diagnostic::new(
-                    arg.span,
-                    "関数定義の引数は変数（`@x`）で書きます",
-                )),
-            })
-            .collect::<PResult<Vec<_>>>()?;
-        let body = self.block()?;
-        Ok(FuncDef {
-            name,
-            params,
-            body,
-            span,
-        })
+    /// 文の先頭が `IDENT "[" … "]" "("` の形か。`]` の直後が `(` なら関数定義（design.md 4.1）。
+    /// 引数に既定値（`@b = 1`）を書けるので、式として読む前に見分ける
+    fn looks_like_func_def(&self) -> bool {
+        if !matches!(self.peek().kind, TokenKind::Ident(_))
+            || self.tokens[self.pos + 1].kind != TokenKind::LBracket
+        {
+            return false;
+        }
+        let mut depth = 0;
+        for (i, token) in self.tokens.iter().enumerate().skip(self.pos + 1) {
+            match token.kind {
+                TokenKind::LBracket | TokenKind::LBrace | TokenKind::LParen => depth += 1,
+                TokenKind::RBracket | TokenKind::RBrace | TokenKind::RParen => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return self
+                            .tokens
+                            .get(i + 1)
+                            .is_some_and(|t| t.kind == TokenKind::LParen);
+                    }
+                }
+                TokenKind::Eof => return false,
+                _ => {}
+            }
+        }
+        false
     }
 
     /// if_stmt = "if" expression block [ { NEWLINE } "else" ( block | if_stmt ) ]
@@ -482,9 +507,10 @@ impl<'t> Parser<'t> {
         })
     }
 
-    /// params = VAR { "," VAR }。開き括弧の後に呼ぶ。`]` まで読み進める
-    fn params(&mut self) -> PResult<Vec<String>> {
-        let mut params = Vec::new();
+    /// params = param { "," param }、param = VAR [ "=" expression ]。開き括弧の後に呼ぶ。
+    /// `]` まで読み進める。既定値のある引数は、ない引数より後ろにだけ書ける
+    fn params(&mut self) -> PResult<Vec<Param>> {
+        let mut params: Vec<Param> = Vec::new();
         if self.eat(&TokenKind::RBracket) {
             return Ok(params);
         }
@@ -492,8 +518,20 @@ impl<'t> Parser<'t> {
             let TokenKind::Var(name) = &self.peek().kind else {
                 return Err(self.unexpected("変数（`@x`）"));
             };
-            params.push(name.clone());
-            self.advance();
+            let name = name.clone();
+            let name_span = self.advance().span;
+            let default = if self.eat(&TokenKind::Assign) {
+                Some(self.expression()?)
+            } else {
+                if params.last().is_some_and(|p| p.default.is_some()) {
+                    return Err(Diagnostic::new(
+                        name_span,
+                        "既定値のない引数は、既定値のある引数より前に書きます",
+                    ));
+                }
+                None
+            };
+            params.push(Param { name, default });
             if self.eat(&TokenKind::RBracket) {
                 return Ok(params);
             }
@@ -784,7 +822,7 @@ else (
     #[test]
     fn non_variable_param() {
         let e = error("f[1] (\n)");
-        assert_eq!(e.message, "関数定義の引数は変数（`@x`）で書きます");
+        assert_eq!(e.message, "変数（`@x`）が必要です（`1`がありました）");
     }
 
     #[test]

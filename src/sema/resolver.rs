@@ -26,7 +26,17 @@ pub enum Callee {
     /// 組み込み関数。引数の数は実行時に検査する
     Native,
     /// 以前の入力で定義した関数（REPL）
-    User { arity: usize },
+    /// 渡せる引数の数は `min` 個以上 `max` 個以下
+    User { min: usize, max: usize },
+}
+
+/// 引数の数が合わないときのメッセージ。`label` は「`f`」のような関数の呼び名
+pub fn arity_message(label: &str, min: usize, max: usize, got: usize) -> String {
+    if min == max {
+        format!("{label} の引数は {min} 個です（{got} 個渡されました）")
+    } else {
+        format!("{label} の引数は {min} 個以上 {max} 個以下です（{got} 個渡されました）")
+    }
 }
 
 /// `lookup` は、プログラムの外で定義済みの関数を名前から引く。
@@ -51,7 +61,7 @@ pub fn resolve(
                     ));
                 }
                 if functions
-                    .insert(def.name.as_str(), def.params.len())
+                    .insert(def.name.as_str(), (def.min_args(), def.max_args()))
                     .is_some()
                 {
                     return Err(Diagnostic::new(
@@ -95,7 +105,7 @@ struct Ctx<'a> {
 
 struct Resolver<'a> {
     /// 関数名 → 引数の数
-    functions: HashMap<&'a str, usize>,
+    functions: HashMap<&'a str, (usize, usize)>,
     /// トップレベルで宣言される変数すべて（関数の中から見える）
     hoisted: HashSet<&'a str>,
     lookup: &'a dyn Fn(&str) -> Option<Callee>,
@@ -114,16 +124,21 @@ impl<'a> Resolver<'a> {
     /// 関数の本体を検査する。`ctx` は関数を囲むスコープ（無名関数が捕まえる範囲）。
     /// 本体は引数と同じスコープ（引数と同じ名前を `:=` で宣言し直すとエラー）
     fn func_body(&self, def: &'a FuncDef, ctx: &mut Ctx<'a>) -> RResult {
-        let mut params = HashSet::new();
+        // 既定値の式は、それより前の引数を使える
+        ctx.scopes.push(HashSet::new());
         for param in &def.params {
-            if !params.insert(param.as_str()) {
+            if let Some(default) = &param.default {
+                self.expr(default, ctx)?;
+            }
+            let scope = ctx.scopes.last_mut().expect("push したばかり");
+            if !scope.insert(param.name.as_str()) {
+                ctx.scopes.pop();
                 return Err(Diagnostic::new(
                     def.span,
-                    format!("引数 `@{param}` が重複しています"),
+                    format!("引数 `@{}` が重複しています", param.name),
                 ));
             }
         }
-        ctx.scopes.push(params);
         // `break` / `continue` は関数の外側の `while` には効かない
         let result = self.stmts(&def.body, ctx, false);
         ctx.scopes.pop();
@@ -132,11 +147,11 @@ impl<'a> Resolver<'a> {
 
     /// 呼び出せる関数か。組み込み関数と以前の入力で定義した関数を含む。
     /// 戻り値は引数の数（組み込み関数は実行時に検査するので None）
-    fn callee_arity(&self, name: &str, span: Span) -> Result<Option<usize>, Diagnostic> {
+    fn callee_arity(&self, name: &str, span: Span) -> Result<Option<(usize, usize)>, Diagnostic> {
         match self.functions.get(name) {
             Some(&n) => Ok(Some(n)),
             None => match (self.lookup)(name) {
-                Some(Callee::User { arity }) => Ok(Some(arity)),
+                Some(Callee::User { min, max }) => Ok(Some((min, max))),
                 Some(Callee::Native) => Ok(None),
                 None => Err(Diagnostic::new(span, format!("未定義の関数 `{name}`"))),
             },
@@ -280,15 +295,12 @@ impl<'a> Resolver<'a> {
             ExprKind::Call { name, args } => {
                 let arity = self.callee_arity(name, expr.span)?;
                 // 組み込み関数（arity が None）の引数の数は実行時に検査する
-                if let Some(n) = arity
-                    && args.len() != n
+                if let Some((min, max)) = arity
+                    && !(min..=max).contains(&args.len())
                 {
                     return Err(Diagnostic::new(
                         expr.span,
-                        format!(
-                            "`{name}` の引数は {n} 個です（{} 個渡されました）",
-                            args.len()
-                        ),
+                        arity_message(&format!("`{name}`"), min, max, args.len()),
                     ));
                 }
                 args.iter().try_for_each(|arg| self.expr(arg, ctx))

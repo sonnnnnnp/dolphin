@@ -149,9 +149,9 @@ impl<'a> Interpreter<'a> {
             .functions
             .borrow()
             .get(name)
-            .map(|def| def.params.len());
+            .map(|def| (def.min_args(), def.max_args()));
         match arity {
-            Some(arity) => Some(Callee::User { arity }),
+            Some((min, max)) => Some(Callee::User { min, max }),
             None => self.native_callee(name),
         }
     }
@@ -682,6 +682,17 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    /// 渡されなかった引数（`given` 個より後ろ）に、既定値の式の値を入れる
+    fn bind_defaults(&mut self, def: &FuncDef, given: usize) -> RResult<()> {
+        for param in &def.params[given..] {
+            if let Some(default) = &param.default {
+                let value = self.eval(default)?;
+                self.env.declare(&param.name, value);
+            }
+        }
+        Ok(())
+    }
+
     /// `module` の名前つきの関数 `def` を呼ぶ
     fn call_user(
         &mut self,
@@ -705,14 +716,14 @@ impl<'a> Interpreter<'a> {
         span: Span,
     ) -> RResult<Value> {
         let name = func_label(def);
-        if args.len() != def.params.len() {
+        if !(def.min_args()..=def.max_args()).contains(&args.len()) {
             return Err(RuntimeError::new(
                 span,
-                format!(
-                    "{} の引数は {} 個です（{} 個渡されました）",
-                    quoted_label(def),
-                    def.params.len(),
-                    args.len()
+                resolver::arity_message(
+                    &quoted_label(def),
+                    def.min_args(),
+                    def.max_args(),
+                    args.len(),
                 ),
             ));
         }
@@ -728,8 +739,9 @@ impl<'a> Interpreter<'a> {
         gc::maybe_collect();
         // 関数のスコープは、そのファイルのトップレベルのスコープの内側に作る
         let env = Env::new(Some(Rc::clone(parent)));
+        let given = args.len();
         for (param, value) in def.params.iter().zip(args) {
-            env.declare(param, value);
+            env.declare(&param.name, value);
         }
         self.frames.push(Frame {
             func_name: name.to_string(),
@@ -737,7 +749,10 @@ impl<'a> Interpreter<'a> {
         let caller = mem::replace(&mut self.current, Rc::clone(module));
         let caller_env = mem::replace(&mut self.env, env);
         let was_in_func = mem::replace(&mut self.in_func, true);
-        let result = self.exec_block(&def.body);
+        // 渡されなかった引数は、既定値を関数のスコープで評価する（前の引数を使える）
+        let result = self
+            .bind_defaults(def, given)
+            .and_then(|()| self.exec_block(&def.body));
         self.in_func = was_in_func;
         self.env = caller_env;
         self.current = caller;
