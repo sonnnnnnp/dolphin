@@ -141,15 +141,18 @@ fn scan(src: &str) -> Vec<Tok> {
                 push(&mut toks, Class::Word, chars[start..i].iter().collect());
             }
             c if c.is_ascii_digit() => {
+                // 検査済みなので、数字・英字・`_` と、小数点・指数の符号をまとめて取る
                 let start = i;
-                while i < chars.len() && chars[i].is_ascii_digit() {
-                    i += 1;
-                }
-                if chars.get(i) == Some(&'.') && chars.get(i + 1).is_some_and(char::is_ascii_digit)
-                {
-                    i += 1;
-                    while i < chars.len() && chars[i].is_ascii_digit() {
+                while i < chars.len() {
+                    let ch = chars[i];
+                    let sign = matches!(ch, '+' | '-')
+                        && matches!(chars[i - 1], 'e' | 'E')
+                        && !is_hex_literal(&chars[start..i]);
+                    let dot = ch == '.' && chars.get(i + 1).is_some_and(char::is_ascii_digit);
+                    if ch.is_ascii_alphanumeric() || ch == '_' || sign || dot {
                         i += 1;
+                    } else {
+                        break;
                     }
                 }
                 push(&mut toks, Class::Word, chars[start..i].iter().collect());
@@ -217,6 +220,11 @@ fn scan(src: &str) -> Vec<Tok> {
         }
     }
     toks
+}
+
+/// `0x…` の 16 進数リテラルか（`e` が桁で、指数ではない）
+fn is_hex_literal(chars: &[char]) -> bool {
+    chars.starts_with(&['0', 'x'])
 }
 
 /// 直前の字句が値の終わりか
@@ -416,6 +424,16 @@ mod tests {
         assert_eq!(
             fmt("log[\"a  b // c \\\" @x\",1.50 ,\"\"]\n"),
             "log[\"a  b // c \\\" @x\", 1.50, \"\"]\n"
+        );
+    }
+
+    #[test]
+    fn number_literals_are_kept() {
+        assert_eq!(
+            fmt("@x=0xFF+1_000+1e-3-2E+3*0xe+1
+"),
+            "@x = 0xFF + 1_000 + 1e-3 - 2E+3 * 0xe + 1
+"
         );
     }
 

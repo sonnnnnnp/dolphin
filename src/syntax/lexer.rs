@@ -142,6 +142,9 @@ struct Lexer {
     nesting: Vec<char>,
 }
 
+/// これ以下の整数は 64 ビット浮動小数点数で正確に表せる（2^53）
+const MAX_EXACT: u64 = 1 << 53;
+
 impl Lexer {
     fn new(src: &str) -> Self {
         Self {
@@ -189,7 +192,7 @@ impl Lexer {
                     self.push(TokenKind::Str(parts), start);
                 }
                 c if c.is_ascii_digit() => {
-                    let n = self.number();
+                    let n = self.number(start)?;
                     self.push(TokenKind::Number(n), start);
                 }
                 c if c.is_ascii_alphabetic() || c == '_' => {
@@ -286,21 +289,79 @@ impl Lexer {
         s
     }
 
-    fn number(&mut self) -> f64 {
-        let mut s = String::new();
-        while let Some(c) = self.peek().filter(|c| c.is_ascii_digit()) {
-            s.push(c);
+    /// 数値リテラル（design.md 5.19）。`0xFF` `0b1010` `0o17`、桁区切りの `_`、指数 `1e9`
+    fn number(&mut self, start: Span) -> Result<f64, Diagnostic> {
+        if self.peek() == Some('0')
+            && let Some(radix) = match self.peek_next() {
+                Some('x') => Some(16),
+                Some('b') => Some(2),
+                Some('o') => Some(8),
+                _ => None,
+            }
+        {
             self.bump();
+            self.bump();
+            let digits = self.digits(radix, start)?;
+            if digits.is_empty() {
+                return self.error(start, "進数の接頭辞の後に数字がありません");
+            }
+            let n = u64::from_str_radix(&digits, radix)
+                .ok()
+                .filter(|n| *n <= MAX_EXACT)
+                .ok_or_else(|| Diagnostic::new(start, "2^53 を超える整数は正確に表せません"))?;
+            return Ok(n as f64);
         }
+        let mut s = self.digits(10, start)?;
         if self.peek() == Some('.') && self.peek_next().is_some_and(|c| c.is_ascii_digit()) {
             s.push('.');
             self.bump();
-            while let Some(c) = self.peek().filter(|c| c.is_ascii_digit()) {
-                s.push(c);
+            s.push_str(&self.digits(10, start)?);
+        }
+        if matches!(self.peek(), Some('e' | 'E')) {
+            let sign = self.peek_next().filter(|c| matches!(c, '+' | '-'));
+            let after = if sign.is_some() { 2 } else { 1 };
+            if self
+                .chars
+                .get(self.pos + after)
+                .is_some_and(char::is_ascii_digit)
+            {
                 self.bump();
+                s.push('e');
+                if let Some(sign) = sign {
+                    self.bump();
+                    s.push(sign);
+                }
+                s.push_str(&self.digits(10, start)?);
             }
         }
-        s.parse().expect("数字と . だけなので必ず数値になる")
+        match s.parse::<f64>() {
+            Ok(n) if n.is_finite() => Ok(n),
+            _ => self.error(start, "数値が大きすぎます"),
+        }
+    }
+
+    /// `radix` 進数の数字の並び。桁区切りの `_` は数字の間だけに置ける（読み捨てる）
+    fn digits(&mut self, radix: u32, start: Span) -> Result<String, Diagnostic> {
+        let mut s = String::new();
+        let mut last_underscore = false;
+        while let Some(c) = self.peek() {
+            if c == '_' {
+                // 先頭と連続は不可。直後が数字でなければ末尾の `_`
+                let next_is_digit = self.peek_next().is_some_and(|n| n.is_digit(radix));
+                if s.is_empty() || last_underscore || !next_is_digit {
+                    return self.error(start, "桁区切りの `_` は数字と数字の間にだけ書けます");
+                }
+                last_underscore = true;
+                self.bump();
+            } else if c.is_digit(radix) {
+                last_underscore = false;
+                s.push(c);
+                self.bump();
+            } else {
+                break;
+            }
+        }
+        Ok(s)
     }
 
     /// 開きの `"` を読んだ後に呼ぶ
