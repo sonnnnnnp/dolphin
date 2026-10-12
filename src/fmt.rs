@@ -438,6 +438,16 @@ mod tests {
     }
 
     #[test]
+    fn conditional_expression() {
+        assert_eq!(
+            fmt("@s:=if @n>0(\"a\")else if @n<0(\"b\")else(\"c\")
+"),
+            "@s := if @n > 0 ( \"a\" ) else if @n < 0 ( \"b\" ) else ( \"c\" )
+"
+        );
+    }
+
+    #[test]
     fn line_endings_are_kept() {
         assert_eq!(fmt("@x=1\r\n@y=2\r\n"), "@x = 1\r\n@y = 2\r\n");
     }

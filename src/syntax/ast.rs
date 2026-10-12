@@ -95,6 +95,12 @@ pub enum ExprKind {
     FuncRef(String),
     /// `[@a, @b] ( … )`。作られた場所のスコープを捕まえる
     Lambda(Rc<FuncDef>),
+    /// `if 条件 ( 式 ) else ( 式 )`。式として値を持つ条件分岐（design.md 5.19）
+    If {
+        cond: Box<Expr>,
+        then_expr: Box<Expr>,
+        else_expr: Box<Expr>,
+    },
     /// `expr?`。値がエラー値なら、いまの関数からそのエラーを返す
     Try(Box<Expr>),
     /// `callee[args]`。関数値を呼ぶ（`@f[1]`）
@@ -256,6 +262,11 @@ impl fmt::Display for Expr {
             }
             ExprKind::FuncRef(name) => write!(f, "(ref {name})"),
             ExprKind::Try(inner) => write!(f, "(? {inner})"),
+            ExprKind::If {
+                cond,
+                then_expr,
+                else_expr,
+            } => write!(f, "(if {cond} {then_expr} {else_expr})"),
             ExprKind::Lambda(def) => {
                 write!(f, "(fn (")?;
                 write_seq(f, def.params.iter().map(|p| format!("@{p}")))?;

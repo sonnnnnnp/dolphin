@@ -427,6 +427,17 @@ impl<'a> Interpreter<'a> {
                 })?
             }
             ExprKind::FuncRef(name) => self.func_value(name, span)?,
+            ExprKind::If {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                if self.eval_cond(cond)? {
+                    self.eval(then_expr)?
+                } else {
+                    self.eval(else_expr)?
+                }
+            }
             ExprKind::Try(inner) => match self.eval(inner)? {
                 Value::Error(e) if self.in_func => {
                     // いまの関数からエラーを返す。呼び出し（call_def）が受け取る

@@ -388,6 +388,16 @@ impl<'t> Parser<'t> {
         }
     }
 
+    /// `( 式 )`。式の前後の改行は読み飛ばす
+    fn paren_expr(&mut self) -> PResult<Expr> {
+        self.expect(&TokenKind::LParen)?;
+        self.skip_newlines();
+        let expr = self.expression()?;
+        self.skip_newlines();
+        self.expect(&TokenKind::RParen)?;
+        Ok(expr)
+    }
+
     fn primary(&mut self) -> PResult<Expr> {
         let token = self.peek();
         let kind = match &token.kind {
@@ -410,6 +420,29 @@ impl<'t> Parser<'t> {
                 };
                 return Ok(Expr {
                     kind,
+                    span: token.span,
+                });
+            }
+            // cond_expr = "if" expression "(" expression ")" "else" ( "(" expression ")" | cond_expr )
+            TokenKind::If => {
+                self.advance();
+                let cond = self.expression()?;
+                let then_expr = self.paren_expr()?;
+                if !self.at(&TokenKind::Else) {
+                    return Err(self.unexpected("式の `if` の `else`"));
+                }
+                self.advance();
+                let else_expr = if self.at(&TokenKind::If) {
+                    self.primary()?
+                } else {
+                    self.paren_expr()?
+                };
+                return Ok(Expr {
+                    kind: ExprKind::If {
+                        cond: Box::new(cond),
+                        then_expr: Box::new(then_expr),
+                        else_expr: Box::new(else_expr),
+                    },
                     span: token.span,
                 });
             }

@@ -1,0 +1,16 @@
+// 条件式（design.md 5.19）
+sign[@n] (
+    # if @n > 0 ( "正" ) else if @n < 0 ( "負" ) else ( "零" )
+)
+log[sign[5], sign[-5], sign[0]]
+@x := if true ( 1 + 1 ) else ( 1 / 0 )
+log[@x]
+@items := {1, 2, 3}
+log[if arr_len[@items] == 1 ( "item" ) else ( "items" )]
+@long := if @x == 2 (
+    "複数行でも書ける"
+) else (
+    "else"
+)
+log[@long]
+log[if false ( 1 / 0 ) else ( "ok" )]

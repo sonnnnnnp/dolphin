@@ -1,0 +1,4 @@
+cond_expr_no_else.dol:1:20: エラー: 式の `if` の `else`が必要です（改行がありました）
+  |
+1 | @x := if true ( 1 )
+  |                    ^
