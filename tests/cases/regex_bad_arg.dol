@@ -1,0 +1,2 @@
+@re := import["std:regex"]
+log[@re.find[1, "a"]]

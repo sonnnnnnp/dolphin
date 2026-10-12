@@ -1,6 +1,6 @@
 [package]
 name = "dolphin"
-version = "0.27.0"
+version = "0.28.0"
 edition = "2024"
 
 # コア言語（lib）は外部クレートに依存しない。CLI の便利機能だけ feature で足す
@@ -8,15 +8,18 @@ edition = "2024"
 # ハッシュ・HMAC・乱数（std:crypto）。暗号は自前で書かず、既存の実装を使う
 md-5 = { version = "0.11", optional = true }
 ring = { version = "0.17", optional = true }
+regex = { version = "1", optional = true }
 rustyline = { version = "18.0.1", optional = true }
 # HTTP クライアント（std:http）。TLS は rustls
 ureq = { version = "3.4", optional = true }
 
 [features]
-default = ["repl", "http", "crypto"]
+default = ["repl", "http", "crypto", "regex"]
 # REPL の行編集（矢印キー・履歴）。wasm 版などでは外す
 repl = ["dep:rustyline"]
 # HTTP クライアント（`import["std:http"]`）。外すと TLS などの依存がビルドに入らない
 http = ["dep:ureq"]
 # ハッシュ・HMAC・乱数（`import["std:crypto"]`）
 crypto = ["dep:ring", "dep:md-5"]
+# 正規表現（`import["std:regex"]`）
+regex = ["dep:regex"]

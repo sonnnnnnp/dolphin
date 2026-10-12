@@ -99,6 +99,7 @@ dolphin/
 │     ├─ bytes.rs        バイト列（str_to_bytes / bytes_* ）
 │     ├─ encoding.rs     std:encoding（base64 / hex / URL。自前）
 │     ├─ crypto.rs       std:crypto（feature = "crypto"。ring + md-5）
+│     ├─ regex.rs        std:regex（feature = "regex"。regex クレート）
 │     ├─ path.rs         std:path
 │     ├─ os.rs           std:os（args / env / exit / run など）
 │     ├─ time.rs         std:time（暦の計算は自前）

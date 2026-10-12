@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-10-12
+
+正規表現（[design.md 5.20](docs/design.md)）。F2 の最初。
+
+### 追加
+- `import["std:regex"]`（`regex` feature、既定で有効。外部クレート `regex` を使う）: `is_match` `find` `find_all` `replace` `replace_all` `split` `escape`
+- `find` / `find_all` は一致マップ（`text` `start` `end` `groups` `named`）を返す。位置は文字単位。`replace` / `replace_all` の置き換えは文字列（`$1` `${name}`）か、一致マップを受け取る関数
+- パターンの間違いはエラー値（種類 `parse`）。同じパターンは内部で使い回す
+
 ## [0.27.0] - 2026-10-12
 
 ビット演算（[design.md 5.19](docs/design.md)）。整数型は作らない。

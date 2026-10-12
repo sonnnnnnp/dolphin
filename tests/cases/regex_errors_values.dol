@@ -1,0 +1,3 @@
+@re := import["std:regex"]
+log[err_kind[@re.is_match["(", "x"]], err_kind[@re.find["[", "x"]]]
+log[is_error[@re.find_all["a{9999999}", "a"]]]

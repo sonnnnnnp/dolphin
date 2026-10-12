@@ -1,0 +1,4 @@
+regex_fn_not_string.dol:2:5: エラー: regex.replace_all の関数は文字列を返す必要があります（数値が返りました）
+  |
+2 | log[@re.replace_all["a", "aa", [@m] ( # 1 )]]
+  |     ^

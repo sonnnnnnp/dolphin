@@ -997,6 +997,7 @@ impl<'a> Interpreter<'a> {
             let missing_feature = match name {
                 "std:http" if !cfg!(feature = "http") => Some("http"),
                 "std:crypto" if !cfg!(feature = "crypto") => Some("crypto"),
+                "std:regex" if !cfg!(feature = "regex") => Some("regex"),
                 _ => None,
             };
             if let Some(feature) = missing_feature {

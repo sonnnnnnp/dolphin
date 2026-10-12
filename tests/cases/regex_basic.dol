@@ -1,0 +1,34 @@
+// std:regex（design.md 5.20）
+@re := import["std:regex"]
+log[@re.is_match["^\\d+$", "12345"], @re.is_match["^\\d+$", "12a45"], @re.is_match["(?i)dolphin", "I like DOLPHINS"]]
+
+@m := @re.find[r"(\d+)-(\d+)", "tel 03-1234 end"]
+log[@m.text, @m.start, @m.end, @m.groups]
+log[@re.find["x", "abc"] == nil]
+
+// 位置は文字単位
+@j := @re.find["イルカ(\\w+)", "こんにちは、イルカです！イルカ"]
+log[@j.text, @j.start, @j.end, @j.groups]
+
+// 名前つきグループと参加しなかったグループ
+@d := @re.find[r"(?P<y>\d{4})-(?P<m>\d{2})(-(?P<d>\d{2}))?", "on 2026-10"]
+log[@d.named.y, @d.named.m, @d.named.d, @d.groups]
+
+log[arr_map[@re.find_all[r"\d+", "a1 b22 c333"], [@x] ( # @x.text )]]
+log[arr_map[@re.find_all["a", "ばanaあna"], [@x] ( # @x.start )]]
+log[@re.find_all["z", "abc"]]
+
+// 置き換え
+log[@re.replace[r"\s+", "a  b   c", "_"], @re.replace_all[r"\s+", "a  b   c", " "]]
+log[@re.replace_all[r"(\w+)@(\w+)", "ann\@x bob\@y", "$2:$1"], @re.replace_all["(?P<w>b)", "abab", "[${w}]"]]
+log[@re.replace_all[r"\d+", "a1 b22", "$$"]]
+log[@re.replace_all[r"\d+", "a1 b22 c333", [@m] ( # "<@{to_num[@m.text] * 2}>" )]]
+log[@re.replace[r"\d+", "a1 b22", [@m] ( # "#" )]]
+
+// 分割とエスケープ
+log[@re.split[r"\s*,\s*", "a , b,c ,  d"], @re.split["x", "abc"]]
+@lit := "1+1=2 (really?)"
+log[@re.escape[@lit], @re.is_match[@re.escape[@lit], "yes: " + @lit]]
+
+// 空の一致
+log[@re.replace_all["x*", "abc", "-"], @re.split["", "abc"]]

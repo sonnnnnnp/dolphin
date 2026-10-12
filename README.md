@@ -136,6 +136,7 @@ count: 3
 | [v0.25.0](https://github.com/sonnnnnnp/dolphin/tree/v0.25.0) | 文字列の式展開 `"@{a + b}"` と生の文字列 `r"…"` | [v0.24.0...v0.25.0](https://github.com/sonnnnnnp/dolphin/compare/v0.24.0...v0.25.0) |
 | [v0.26.0](https://github.com/sonnnnnnp/dolphin/tree/v0.26.0) | 分割代入（`{@a, @b} := …`） | [v0.25.0...v0.26.0](https://github.com/sonnnnnnp/dolphin/compare/v0.25.0...v0.26.0) |
 | [v0.27.0](https://github.com/sonnnnnnp/dolphin/tree/v0.27.0) | ビット演算 `std:bits` | [v0.26.0...v0.27.0](https://github.com/sonnnnnnp/dolphin/compare/v0.26.0...v0.27.0) |
+| [v0.28.0](https://github.com/sonnnnnnp/dolphin/tree/v0.28.0) | `std:regex`（正規表現） | [v0.27.0...v0.28.0](https://github.com/sonnnnnnp/dolphin/compare/v0.27.0...v0.28.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

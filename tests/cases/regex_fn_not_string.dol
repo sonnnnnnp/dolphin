@@ -1,0 +1,2 @@
+@re := import["std:regex"]
+log[@re.replace_all["a", "aa", [@m] ( # 1 )]]

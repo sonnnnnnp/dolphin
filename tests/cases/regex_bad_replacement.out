@@ -1,0 +1,4 @@
+regex_bad_replacement.dol:2:5: エラー: regex.replace の 3 番目の引数は文字列か関数です（数値が渡されました）
+  |
+2 | log[@re.replace["a", "a", 5]]
+  |     ^

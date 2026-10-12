@@ -22,6 +22,8 @@ pub mod map;
 pub mod math;
 pub mod os;
 pub mod path;
+#[cfg(feature = "regex")]
+pub mod regex;
 pub mod string;
 pub mod time;
 pub mod types;
@@ -53,6 +55,8 @@ pub fn register(interp: &mut Interpreter<'_>) {
     #[cfg(feature = "crypto")]
     crypto::register(interp);
     path::register(interp);
+    #[cfg(feature = "regex")]
+    regex::register(interp);
     os::register(interp);
     time::register(interp);
 }
