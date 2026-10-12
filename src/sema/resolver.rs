@@ -26,16 +26,18 @@ pub enum Callee {
     /// 組み込み関数。引数の数は実行時に検査する
     Native,
     /// 以前の入力で定義した関数（REPL）
-    /// 渡せる引数の数は `min` 個以上 `max` 個以下
-    User { min: usize, max: usize },
+    /// 渡せる引数の数は `min` 個以上 `max` 個以下（可変長引数なら上限なし）
+    User { min: usize, max: Option<usize> },
 }
 
 /// 引数の数が合わないときのメッセージ。`label` は「`f`」のような関数の呼び名
-pub fn arity_message(label: &str, min: usize, max: usize, got: usize) -> String {
-    if min == max {
-        format!("{label} の引数は {min} 個です（{got} 個渡されました）")
-    } else {
-        format!("{label} の引数は {min} 個以上 {max} 個以下です（{got} 個渡されました）")
+pub fn arity_message(label: &str, min: usize, max: Option<usize>, got: usize) -> String {
+    match max {
+        Some(max) if min == max => format!("{label} の引数は {min} 個です（{got} 個渡されました）"),
+        Some(max) => {
+            format!("{label} の引数は {min} 個以上 {max} 個以下です（{got} 個渡されました）")
+        }
+        None => format!("{label} の引数は {min} 個以上です（{got} 個渡されました）"),
     }
 }
 
@@ -105,7 +107,7 @@ struct Ctx<'a> {
 
 struct Resolver<'a> {
     /// 関数名 → 引数の数
-    functions: HashMap<&'a str, (usize, usize)>,
+    functions: HashMap<&'a str, (usize, Option<usize>)>,
     /// トップレベルで宣言される変数すべて（関数の中から見える）
     hoisted: HashSet<&'a str>,
     lookup: &'a dyn Fn(&str) -> Option<Callee>,
@@ -139,6 +141,16 @@ impl<'a> Resolver<'a> {
                 ));
             }
         }
+        if let Some(rest) = &def.rest {
+            let scope = ctx.scopes.last_mut().expect("push したばかり");
+            if !scope.insert(rest.as_str()) {
+                ctx.scopes.pop();
+                return Err(Diagnostic::new(
+                    def.span,
+                    format!("引数 `@{rest}` が重複しています"),
+                ));
+            }
+        }
         // `break` / `continue` は関数の外側の `while` には効かない
         let result = self.stmts(&def.body, ctx, false);
         ctx.scopes.pop();
@@ -147,7 +159,11 @@ impl<'a> Resolver<'a> {
 
     /// 呼び出せる関数か。組み込み関数と以前の入力で定義した関数を含む。
     /// 戻り値は引数の数（組み込み関数は実行時に検査するので None）
-    fn callee_arity(&self, name: &str, span: Span) -> Result<Option<(usize, usize)>, Diagnostic> {
+    fn callee_arity(
+        &self,
+        name: &str,
+        span: Span,
+    ) -> Result<Option<(usize, Option<usize>)>, Diagnostic> {
         match self.functions.get(name) {
             Some(&n) => Ok(Some(n)),
             None => match (self.lookup)(name) {
@@ -278,7 +294,7 @@ impl<'a> Resolver<'a> {
                 };
                 self.func_body(def, &mut inner)
             }
-            ExprKind::Try(inner) => self.expr(inner, ctx),
+            ExprKind::Try(inner) | ExprKind::Spread(inner) => self.expr(inner, ctx),
             ExprKind::If {
                 cond,
                 then_expr,
@@ -295,8 +311,11 @@ impl<'a> Resolver<'a> {
             ExprKind::Call { name, args } => {
                 let arity = self.callee_arity(name, expr.span)?;
                 // 組み込み関数（arity が None）の引数の数は実行時に検査する
+                // `...` で展開する引数があれば、数は実行時に検査する
+                let spread = args.iter().any(|a| matches!(a.kind, ExprKind::Spread(_)));
                 if let Some((min, max)) = arity
-                    && !(min..=max).contains(&args.len())
+                    && !spread
+                    && (args.len() < min || max.is_some_and(|max| args.len() > max))
                 {
                     return Err(Diagnostic::new(
                         expr.span,

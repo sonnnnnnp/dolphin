@@ -167,11 +167,12 @@ impl<'t> Parser<'t> {
             let name = name.clone();
             self.advance();
             self.advance();
-            let params = self.params()?;
+            let (params, rest) = self.params()?;
             let body = self.block()?;
             let def = FuncDef {
                 name,
                 params,
+                rest,
                 body,
                 span,
             };
@@ -474,11 +475,12 @@ impl<'t> Parser<'t> {
             // lambda = "[" [ params ] "]" block
             TokenKind::LBracket => {
                 self.advance();
-                let params = self.params()?;
+                let (params, rest) = self.params()?;
                 let body = self.block()?;
                 let def = FuncDef {
                     name: String::new(),
                     params,
+                    rest,
                     body,
                     span: token.span,
                 };
@@ -507,14 +509,30 @@ impl<'t> Parser<'t> {
         })
     }
 
-    /// params = param { "," param }、param = VAR [ "=" expression ]。開き括弧の後に呼ぶ。
-    /// `]` まで読み進める。既定値のある引数は、ない引数より後ろにだけ書ける
-    fn params(&mut self) -> PResult<Vec<Param>> {
+    /// params = [ param { "," param } ] [ "," ] [ "..." VAR ]、param = VAR [ "=" expression ]。
+    /// 開き括弧の後に呼ぶ。`]` まで読み進める。既定値のある引数は、ない引数より後ろにだけ書ける。
+    /// `...@rest` は最後にだけ書ける
+    fn params(&mut self) -> PResult<(Vec<Param>, Option<String>)> {
         let mut params: Vec<Param> = Vec::new();
         if self.eat(&TokenKind::RBracket) {
-            return Ok(params);
+            return Ok((params, None));
         }
         loop {
+            if self.eat(&TokenKind::Ellipsis) {
+                let TokenKind::Var(name) = &self.peek().kind else {
+                    return Err(self.unexpected("変数（`@rest`）"));
+                };
+                let rest = name.clone();
+                self.advance();
+                if !self.at(&TokenKind::RBracket) {
+                    return Err(Diagnostic::new(
+                        self.peek().span,
+                        "`...@名前` は引数の最後にだけ書けます",
+                    ));
+                }
+                self.advance();
+                return Ok((params, Some(rest)));
+            }
             let TokenKind::Var(name) = &self.peek().kind else {
                 return Err(self.unexpected("変数（`@x`）"));
             };
@@ -533,7 +551,7 @@ impl<'t> Parser<'t> {
             };
             params.push(Param { name, default });
             if self.eat(&TokenKind::RBracket) {
-                return Ok(params);
+                return Ok((params, None));
             }
             if !self.eat(&TokenKind::Comma) {
                 return Err(self.unexpected("`,` か `]`"));
@@ -552,7 +570,10 @@ impl<'t> Parser<'t> {
         } else if self.eat(&TokenKind::RBrace) {
             ExprKind::Array(Vec::new())
         } else {
-            let first = self.expression()?;
+            let first = self.arg_expr()?;
+            if matches!(first.kind, ExprKind::Spread(_)) && self.at(&TokenKind::Colon) {
+                return Err(Diagnostic::new(first.span, "マップには `...` を使えません"));
+            }
             if self.eat(&TokenKind::Colon) {
                 let mut entries = vec![(first, self.expression()?)];
                 while !self.eat(&TokenKind::RBrace) {
@@ -570,7 +591,7 @@ impl<'t> Parser<'t> {
                     if !self.eat(&TokenKind::Comma) {
                         return Err(self.unexpected("`,` か `}`"));
                     }
-                    items.push(self.expression()?);
+                    items.push(self.arg_expr()?);
                 }
                 ExprKind::Array(items)
             }
@@ -578,7 +599,20 @@ impl<'t> Parser<'t> {
         Ok(Expr { kind, span })
     }
 
-    /// args = expression { "," expression }
+    /// 引数・配列の要素 1 つ。`...式` は展開
+    fn arg_expr(&mut self) -> PResult<Expr> {
+        let span = self.peek().span;
+        if self.eat(&TokenKind::Ellipsis) {
+            let inner = self.expression()?;
+            return Ok(Expr {
+                kind: ExprKind::Spread(Box::new(inner)),
+                span,
+            });
+        }
+        self.expression()
+    }
+
+    /// args = arg { "," arg }、arg = [ "..." ] expression
     /// 開き括弧の後に呼ぶ。閉じ括弧 `end` まで読み進める
     fn args(&mut self, end: &TokenKind) -> PResult<Vec<Expr>> {
         let mut args = Vec::new();
@@ -586,7 +620,7 @@ impl<'t> Parser<'t> {
             return Ok(args);
         }
         loop {
-            args.push(self.expression()?);
+            args.push(self.arg_expr()?);
             if self.eat(end) {
                 return Ok(args);
             }

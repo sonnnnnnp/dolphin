@@ -81,6 +81,8 @@ enum Class {
     Binary,
     /// 前に値がない `-`
     Neg,
+    /// `...`（展開と可変長引数）。後ろに空白を入れない
+    Spread,
     Comment,
     Newline,
 }
@@ -168,6 +170,10 @@ fn scan(src: &str) -> Vec<Tok> {
                     _ => Class::Word,
                 };
                 push(&mut toks, class, word);
+            }
+            '.' if chars.get(i + 1) == Some(&'.') && chars.get(i + 2) == Some(&'.') => {
+                push(&mut toks, Class::Spread, "...".into());
+                i += 3;
             }
             _ => {
                 let two: String = chars[i..(i + 2).min(chars.len())].iter().collect();
@@ -257,7 +263,7 @@ fn gap(prev: &Tok, next: &Tok) -> bool {
     if matches!(next.class, Close | Comma | Colon | Dot | Question) {
         return false;
     }
-    if matches!(prev.class, Open | Dot | Bang | Neg) {
+    if matches!(prev.class, Open | Dot | Bang | Neg | Spread) {
         return false;
     }
     if matches!(prev.class, Comma | Colon | Binary | Hash | Keyword) {
@@ -443,6 +449,22 @@ mod tests {
             fmt("@s:=if @n>0(\"a\")else if @n<0(\"b\")else(\"c\")
 "),
             "@s := if @n > 0 ( \"a\" ) else if @n < 0 ( \"b\" ) else ( \"c\" )
+"
+        );
+    }
+
+    #[test]
+    fn spread_and_rest() {
+        assert_eq!(
+            fmt("f[@a,...@r](
+# {...@r,... @a}
+)
+log[ ...@x,1,...{2}]
+"),
+            "f[@a, ...@r] (
+    # {...@r, ...@a}
+)
+log[...@x, 1, ...{2}]
 "
         );
     }

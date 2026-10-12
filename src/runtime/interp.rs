@@ -384,13 +384,7 @@ impl<'a> Interpreter<'a> {
                 Some(value) => value.clone(),
                 None => return Err(undefined(var, span)),
             },
-            ExprKind::Array(items) => {
-                let values = items
-                    .iter()
-                    .map(|item| self.eval(item))
-                    .collect::<RResult<Vec<_>>>()?;
-                gc::new_array(values)
-            }
+            ExprKind::Array(items) => gc::new_array(self.eval_args(items)?),
             ExprKind::Map(entries) => {
                 let mut map = Map::default();
                 for (key, value) in entries {
@@ -438,6 +432,8 @@ impl<'a> Interpreter<'a> {
                     self.eval(else_expr)?
                 }
             }
+            // 引数と配列リテラルの外では、`...` は構文解析で弾かれる
+            ExprKind::Spread(_) => unreachable!("`...` は引数と配列の中にだけ現れる"),
             ExprKind::Try(inner) => match self.eval(inner)? {
                 Value::Error(e) if self.in_func => {
                     // いまの関数からエラーを返す。呼び出し（call_def）が受け取る
@@ -457,10 +453,7 @@ impl<'a> Interpreter<'a> {
             })),
             ExprKind::CallValue { callee, args } => {
                 let f = self.eval(callee)?;
-                let args = args
-                    .iter()
-                    .map(|arg| self.eval(arg))
-                    .collect::<RResult<Vec<_>>>()?;
+                let args = self.eval_args(args)?;
                 self.call_function(&f, args, span, callee.span)?
             }
             ExprKind::MemberCall { target, name, args } => {
@@ -470,18 +463,12 @@ impl<'a> Interpreter<'a> {
                     Value::Map(_) => {
                         let f =
                             index_get(&base, &Value::Str(name.as_str().into()), target.span, span)?;
-                        let args = args
-                            .iter()
-                            .map(|arg| self.eval(arg))
-                            .collect::<RResult<Vec<_>>>()?;
+                        let args = self.eval_args(args)?;
                         return self.call_function(&f, args, span, span);
                     }
                     base => self.as_module(base, target.span)?,
                 };
-                let args = args
-                    .iter()
-                    .map(|arg| self.eval(arg))
-                    .collect::<RResult<Vec<_>>>()?;
+                let args = self.eval_args(args)?;
                 let def = module.functions.borrow().get(name).cloned();
                 match (def, module.natives.get(name.as_str())) {
                     (Some(def), _) => self.call_user(&module, &def, args, span)?,
@@ -572,11 +559,32 @@ impl<'a> Interpreter<'a> {
 
     // ---- 関数呼び出し ----
 
+    /// 引数や配列の要素を評価する。`...式` は、配列の要素を並べる（design.md 5.19）
+    fn eval_args(&mut self, exprs: &[Expr]) -> RResult<Vec<Value>> {
+        let mut values = Vec::with_capacity(exprs.len());
+        for expr in exprs {
+            if let ExprKind::Spread(inner) = &expr.kind {
+                match self.eval(inner)? {
+                    Value::Array(items) => values.extend(items.borrow().iter().cloned()),
+                    other => {
+                        return Err(RuntimeError::new(
+                            inner.span,
+                            format!(
+                                "`...` で展開できるのは配列だけです（{}でした）",
+                                other.type_name()
+                            ),
+                        ));
+                    }
+                }
+            } else {
+                values.push(self.eval(expr)?);
+            }
+        }
+        Ok(values)
+    }
+
     fn call(&mut self, name: &str, args: &[Expr], span: Span) -> RResult<Value> {
-        let args = args
-            .iter()
-            .map(|arg| self.eval(arg))
-            .collect::<RResult<Vec<_>>>()?;
+        let args = self.eval_args(args)?;
 
         let def = self.current.functions.borrow().get(name).cloned();
         if let Some(def) = def {
@@ -716,7 +724,7 @@ impl<'a> Interpreter<'a> {
         span: Span,
     ) -> RResult<Value> {
         let name = func_label(def);
-        if !(def.min_args()..=def.max_args()).contains(&args.len()) {
+        if args.len() < def.min_args() || def.max_args().is_some_and(|max| args.len() > max) {
             return Err(RuntimeError::new(
                 span,
                 resolver::arity_message(
@@ -739,9 +747,14 @@ impl<'a> Interpreter<'a> {
         gc::maybe_collect();
         // 関数のスコープは、そのファイルのトップレベルのスコープの内側に作る
         let env = Env::new(Some(Rc::clone(parent)));
-        let given = args.len();
+        let given = args.len().min(def.params.len());
+        let mut args = args;
+        let extra = args.split_off(given);
         for (param, value) in def.params.iter().zip(args) {
             env.declare(&param.name, value);
+        }
+        if let Some(rest) = &def.rest {
+            env.declare(rest, gc::new_array(extra));
         }
         self.frames.push(Frame {
             func_name: name.to_string(),

@@ -64,6 +64,8 @@ pub struct FuncDef {
     /// 無名関数は空文字列
     pub name: String,
     pub params: Vec<Param>,
+    /// `...@rest`。残りの引数を配列で受け取る（design.md 5.19）
+    pub rest: Option<String>,
     pub body: Block,
     pub span: Span,
 }
@@ -81,9 +83,9 @@ impl FuncDef {
         self.params.iter().filter(|p| p.default.is_none()).count()
     }
 
-    /// 渡せる引数の数の上限
-    pub fn max_args(&self) -> usize {
-        self.params.len()
+    /// 渡せる引数の数の上限。可変長引数があれば None
+    pub fn max_args(&self) -> Option<usize> {
+        self.rest.is_none().then_some(self.params.len())
     }
 }
 
@@ -114,6 +116,8 @@ pub enum ExprKind {
     FuncRef(String),
     /// `[@a, @b] ( … )`。作られた場所のスコープを捕まえる
     Lambda(Rc<FuncDef>),
+    /// `...式`。呼び出しの引数と配列リテラルの中で、配列の要素を並べる
+    Spread(Box<Expr>),
     /// `if 条件 ( 式 ) else ( 式 )`。式として値を持つ条件分岐（design.md 5.19）
     If {
         cond: Box<Expr>,
@@ -203,7 +207,13 @@ impl fmt::Display for Stmt {
         match &self.kind {
             StmtKind::FuncDef(def) => {
                 write!(f, "(def {} (", def.name)?;
-                write_seq(f, def.params.iter().map(ToString::to_string))?;
+                write_seq(
+                    f,
+                    def.params
+                        .iter()
+                        .map(ToString::to_string)
+                        .chain(def.rest.iter().map(|r| format!("(... @{r})"))),
+                )?;
                 write!(f, ") {})", BlockDisplay(&def.body))
             }
             StmtKind::If {
@@ -281,6 +291,7 @@ impl fmt::Display for Expr {
             }
             ExprKind::FuncRef(name) => write!(f, "(ref {name})"),
             ExprKind::Try(inner) => write!(f, "(? {inner})"),
+            ExprKind::Spread(inner) => write!(f, "(... {inner})"),
             ExprKind::If {
                 cond,
                 then_expr,
@@ -288,7 +299,13 @@ impl fmt::Display for Expr {
             } => write!(f, "(if {cond} {then_expr} {else_expr})"),
             ExprKind::Lambda(def) => {
                 write!(f, "(fn (")?;
-                write_seq(f, def.params.iter().map(ToString::to_string))?;
+                write_seq(
+                    f,
+                    def.params
+                        .iter()
+                        .map(ToString::to_string)
+                        .chain(def.rest.iter().map(|r| format!("(... @{r})"))),
+                )?;
                 write!(f, ") {})", BlockDisplay(&def.body))
             }
             ExprKind::CallValue { callee, args } => {

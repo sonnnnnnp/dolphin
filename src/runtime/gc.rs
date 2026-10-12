@@ -290,6 +290,7 @@ mod tests {
         let def = Rc::new(FuncDef {
             name: String::new(),
             params: Vec::new(),
+            rest: None,
             body: Vec::new(),
             span: Span { line: 1, col: 1 },
         });

@@ -1,0 +1,35 @@
+// 可変長引数と展開（design.md 5.19）
+sum[...@nums] (
+    @total := 0
+    for @n in @nums (
+        @total = @total + @n
+    )
+    # @total
+)
+log[sum[], sum[1], sum[1, 2, 3]]
+
+head_and_rest[@head, @mid = "既定", ...@rest] (
+    # {@head, @mid, @rest}
+)
+log[head_and_rest[1], head_and_rest[1, 2], head_and_rest[1, 2, 3, 4]]
+
+// 展開: 呼び出しの引数と配列リテラル
+@xs := {10, 20}
+@ys := {30}
+log[sum[...@xs], sum[0, ...@xs, ...@ys, 40], {0, ...@xs, 99, ...@ys, ...{}}]
+log[...@xs, "と", ...@ys]
+log[arr_len[{...@xs, ...@xs}], max[...@xs]]
+
+// 無名関数・関数値・マップの関数
+@count := [...@all] ( # arr_len[@all] )
+log[@count[], @count[1, 2], @count[...@xs, ...@ys]]
+@m := {"f": [@a, ...@r] ( # {@a, @r} )}
+log[@m.f[1, 2, 3], @m.f[...{7, 8}]]
+@alias := sum
+log[@alias[5, 5], arr_map[{1, 2, 3}, [@x, ...@unused] ( # @x * 2 )]]
+
+// 展開は元の配列を変えず、コピーする
+@orig := {1, 2}
+@copy := {...@orig}
+arr_push[@copy, 3]
+log[@orig, @copy]

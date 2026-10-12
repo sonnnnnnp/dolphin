@@ -275,6 +275,7 @@ mod tests {
             Rc::new(FuncDef {
                 name: name.into(),
                 params: Vec::new(),
+                rest: None,
                 body: Vec::new(),
                 span: Span { line: 1, col: 1 },
             })

@@ -42,6 +42,8 @@ pub enum TokenKind {
     Comma,
     Colon,
     Dot,
+    /// `...`（展開と可変長引数）
+    Ellipsis,
     /// `?`（エラーを呼び出し元へ伝える）
     Question,
     Assign,
@@ -97,6 +99,7 @@ impl fmt::Display for TokenKind {
             Comma => "`,`",
             Colon => "`:`",
             Dot => "`.`",
+            Ellipsis => "`...`",
             Question => "`?`",
             Assign => "`=`",
             Declare => "`:=`",
@@ -432,6 +435,11 @@ impl Lexer {
             ',' => Comma,
             ':' if self.eat('=') => Declare,
             ':' => Colon,
+            '.' if self.peek() == Some('.') && self.peek_next() == Some('.') => {
+                self.bump();
+                self.bump();
+                Ellipsis
+            }
             '.' => Dot,
             '?' => Question,
             '#' => Hash,
