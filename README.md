@@ -128,6 +128,7 @@ count: 3
 | [v0.17.0](https://github.com/sonnnnnnp/dolphin/tree/v0.17.0) | `assert` `assert_eq` `dbg`、`dolphin check`、`dolphin test` | [v0.16.0...v0.17.0](https://github.com/sonnnnnnp/dolphin/compare/v0.16.0...v0.17.0) |
 | [v0.18.0](https://github.com/sonnnnnnp/dolphin/tree/v0.18.0) | `dolphin fmt` | [v0.17.0...v0.18.0](https://github.com/sonnnnnnp/dolphin/compare/v0.17.0...v0.18.0) |
 | [v0.19.0](https://github.com/sonnnnnnp/dolphin/tree/v0.19.0) | 数値リテラル（`0xFF` `1_000` `1e9`） | [v0.18.0...v0.19.0](https://github.com/sonnnnnnp/dolphin/compare/v0.18.0...v0.19.0) |
+| [v0.20.0](https://github.com/sonnnnnnp/dolphin/tree/v0.20.0) | 組み込み関数を隠す定義 | [v0.19.0...v0.20.0](https://github.com/sonnnnnnp/dolphin/compare/v0.19.0...v0.20.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

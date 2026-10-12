@@ -1,0 +1,4 @@
+// shadow_builtin.dol から import される。ここでは組み込みの str_len がそのまま使える
+len3[] (
+    # str_len["abc"]
+)

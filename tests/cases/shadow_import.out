@@ -1,0 +1,4 @@
+shadow_import.dol:1:1: エラー: `import` と同じ名前の関数は定義できません
+  |
+1 | import[@x] (
+  | ^

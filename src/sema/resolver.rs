@@ -42,13 +42,12 @@ pub fn resolve(
     for stmt in &program.stmts {
         match &stmt.kind {
             StmtKind::FuncDef(def) => {
-                if lookup(&def.name) == Some(Callee::Native) {
+                // 組み込み関数と同じ名前の関数は、そのファイルの中で組み込み関数を隠す。
+                // `import` だけは隠せない（評価器が直接扱うため）
+                if def.name == "import" {
                     return Err(Diagnostic::new(
                         def.span,
-                        format!(
-                            "組み込み関数 `{}` と同じ名前の関数は定義できません",
-                            def.name
-                        ),
+                        "`import` と同じ名前の関数は定義できません",
                     ));
                 }
                 if functions
@@ -379,9 +378,10 @@ add[@a, @b] (
 
     #[test]
     fn shadowing_native() {
+        assert_eq!(check("log[@x] (\n)\nlog[1]"), Ok(()));
         assert_eq!(
-            check("log[@x] (\n)"),
-            Err("組み込み関数 `log` と同じ名前の関数は定義できません".into())
+            check("import[@x] (\n)"),
+            Err("`import` と同じ名前の関数は定義できません".into())
         );
     }
 

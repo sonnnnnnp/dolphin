@@ -1,0 +1,7 @@
+// 組み込み関数と同じ名前の関数は、そのファイルの中で組み込み関数を隠す（design.md 5.19）
+str_len[@s] (
+    # 42
+)
+@m := import["shadow_mod.dol"]
+log[str_len["abc"], arr_map[{"a", "bb"}, str_len], @m.len3[]]
+log[str_upper["x"]]
