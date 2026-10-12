@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use super::async_::{spawn_blocking, split_callback};
 use super::path::to_slash;
 use super::{error_value, expect_args, int_arg, new_array, new_map, str_arg, type_error};
 use crate::runtime::interp::Interpreter;
@@ -26,6 +27,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
             ("os.temp_dir", temp_dir),
             ("os.exe", exe),
             ("os.run", run),
+            ("os.run_async", run_async),
         ],
     );
 }
@@ -239,15 +241,33 @@ fn run_options(value: &Value) -> Result<RunOptions, String> {
 
 /// 外部コマンドを実行して、終わるまで待つ（シェルは通さない）
 fn run(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    let (command, arguments, options) = run_request("os.run", args)?;
+    // 子プロセスの出力が、こちらの出力と前後しないように
+    interp.out.flush().map_err(|e| e.to_string())?;
+    Ok(spawn_and_wait(&command, &arguments, options))
+}
+
+/// `os.run_async[command, args, f]` / `os.run_async[command, args, options, f]`（design.md 5.23）
+fn run_async(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    let (rest, callback) = split_callback("os.run_async", args)?;
+    let (command, arguments, options) = run_request("os.run_async", rest)?;
+    interp.out.flush().map_err(|e| e.to_string())?;
+    spawn_blocking(interp, callback, move || {
+        spawn_and_wait(&command, &arguments, options)
+    })
+}
+
+/// `run` の引数を検査して、(コマンド, 引数, オプション) にする
+fn run_request(name: &str, args: &[Value]) -> Result<(String, Vec<String>, RunOptions), String> {
     if !(2..=3).contains(&args.len()) {
         return Err(format!(
-            "os.run の引数は 2 個か 3 個です（{} 個渡されました）",
+            "{name} の引数は 2 個か 3 個です（{} 個渡されました）",
             args.len()
         ));
     }
-    let command = str_arg("os.run", args, 0)?;
+    let command = str_arg(name, args, 0)?;
     let Value::Array(list) = &args[1] else {
-        return Err(type_error("os.run", 1, "配列", &args[1]));
+        return Err(type_error(name, 1, "配列", &args[1]));
     };
     let mut arguments = Vec::new();
     for (i, item) in list.borrow().iter().enumerate() {
@@ -273,11 +293,9 @@ fn run(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         },
     };
     if command.is_empty() || command.contains('\0') {
-        return Err("os.run のコマンド名が正しくありません".into());
+        return Err(format!("{name} のコマンド名が正しくありません"));
     }
-    // 子プロセスの出力が、こちらの出力と前後しないように
-    interp.out.flush().map_err(|e| e.to_string())?;
-    Ok(spawn_and_wait(command, &arguments, options))
+    Ok((command.to_string(), arguments, options))
 }
 
 fn spawn_and_wait(command: &str, arguments: &[String], options: RunOptions) -> Value {

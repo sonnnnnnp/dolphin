@@ -10,6 +10,7 @@ use std::rc::Rc;
 
 use super::env::{Env, Frame};
 use super::error::{RuntimeError, TraceEntry};
+use super::events::Events;
 use super::gc;
 use super::map::Map;
 use super::module::Module;
@@ -91,6 +92,8 @@ pub struct Interpreter<'a> {
     std_consts: HashMap<&'static str, Vec<(&'static str, Const)>>,
     /// `?` が関数から返そうとしているエラー値（`RuntimeError::early_return` と組）
     returning: Option<Value>,
+    /// イベントループ（design.md 5.23）
+    pub events: Events,
 }
 
 impl<'a> Interpreter<'a> {
@@ -115,6 +118,7 @@ impl<'a> Interpreter<'a> {
             std_loaded: HashMap::new(),
             std_consts: HashMap::new(),
             returning: None,
+            events: Events::default(),
         }
     }
 

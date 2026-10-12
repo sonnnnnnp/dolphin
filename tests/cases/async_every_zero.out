@@ -1,0 +1,4 @@
+async_every_zero.dol:2:1: エラー: async.every の秒数は0 より大きい数です（0）
+  |
+2 | @async.every[0, [] ( log[1] )]
+  | ^

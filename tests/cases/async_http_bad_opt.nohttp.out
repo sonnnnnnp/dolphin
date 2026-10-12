@@ -1,0 +1,4 @@
+async_http_bad_opt.dol:1:10: エラー: この版には `std:http` が含まれていません（`http` feature を付けてビルドしてください）
+  |
+1 | @http := import["std:http"]
+  |          ^

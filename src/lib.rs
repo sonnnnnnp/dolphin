@@ -87,7 +87,13 @@ impl<'a> Session<'a> {
 
     /// `src` を実行する。値は返さない（ファイルの実行）
     pub fn run(&mut self, src: &str) -> Result<(), Diagnostic> {
-        self.exec(src, false).map(|_| ())
+        self.exec(src, false)?;
+        // 待っているもの（タイマー・非同期の関数）がある間は、イベントループを動かす（design.md 5.23）。
+        // Err は `os.exit`（終了コードは `exit_code` にある）
+        if self.interp.exit_code.is_none() && self.interp.events.has_pending() {
+            let _ = self.interp.run_event_loop();
+        }
+        Ok(())
     }
 
     fn exec(&mut self, src: &str, keep_last: bool) -> Result<Option<Value>, Diagnostic> {

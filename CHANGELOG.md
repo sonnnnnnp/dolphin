@@ -7,6 +7,18 @@
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-10-12
+
+非同期の関数（[design.md 5.23](docs/design.md)）。
+
+### 追加
+- イベントループ（`runtime/events.rs`）。補助スレッドで進めた処理の結果を、`Send` できるデータ（`runtime/data.rs` の `Data`）にしてインタプリタのスレッドのキューに届け、**コールバックを届いた順に 1 つずつ**呼ぶ。インタプリタは 1 スレッドのまま。スクリプトの最後に、待っているものがある間だけ自動で動く（REPL では動かさない）。コールバックのエラーは標準エラーに出して続ける
+- `import["std:async"]`（標準ライブラリだけ）: `after[seconds, f]` `every[seconds, f]` `cancel[id]` `run[]` `stop[]`
+- 非同期の関数（最後の引数がコールバック）: `http.request_async` `http.get_async` `http.post_async` `http.put_async` `http.delete_async` `os.run_async`。コールバックには、ブロッキング版が返す値（成功の値かエラー値）が 1 つ届く。戻り値は `cancel` に渡せる番号
+
+### 変更
+- `http.serve` は、このイベントループの上で動くようになった（タイマーや非同期の関数と一緒に使える。`async.stop[]` で戻る）。使い方は変わらない
+
 ## [0.30.0] - 2026-10-12
 
 WebSocket（[design.md 5.22](docs/design.md)）。

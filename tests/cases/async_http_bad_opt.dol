@@ -1,0 +1,2 @@
+@http := import["std:http"]
+log[@http.get_async["http://x", {"nope": 1}, [@r] ( log[@r] )]]

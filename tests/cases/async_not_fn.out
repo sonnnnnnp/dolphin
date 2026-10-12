@@ -1,0 +1,4 @@
+async_not_fn.dol:2:1: エラー: async.after の 2 番目の引数は関数です（数値が渡されました）
+  |
+2 | @async.after[1, 5]
+  | ^

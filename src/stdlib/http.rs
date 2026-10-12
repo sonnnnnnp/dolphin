@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use ureq::http;
 
+use super::async_::{spawn_blocking, split_callback};
 use super::json::to_json_string;
 use super::{error_value, expect_args, new_map, type_error};
 use crate::runtime::interp::Interpreter;
@@ -23,6 +24,19 @@ pub fn register(interp: &mut Interpreter<'_>) {
             ("http.post", post),
             ("http.put", put),
             ("http.delete", delete),
+            ("http.request_async", request_async),
+            ("http.get_async", |i, a| {
+                method_async(i, "http.get_async", "GET", a)
+            }),
+            ("http.post_async", |i, a| {
+                method_async(i, "http.post_async", "POST", a)
+            }),
+            ("http.put_async", |i, a| {
+                method_async(i, "http.put_async", "PUT", a)
+            }),
+            ("http.delete_async", |i, a| {
+                method_async(i, "http.delete_async", "DELETE", a)
+            }),
             ("http.serve", super::http_server::serve),
         ],
     );
@@ -34,23 +48,46 @@ const DEFAULT_TIMEOUT: f64 = 30.0;
 const DEFAULT_REDIRECTS: u32 = 5;
 
 fn request(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
-    expect_args("http.request", args, 1)?;
+    Ok(send(request_req("http.request", args)?))
+}
+
+/// `request[options]` の `options` を検査してリクエストにする
+fn request_req(name: &str, args: &[Value]) -> Result<Req, String> {
+    expect_args(name, args, 1)?;
     let Value::Map(options) = &args[0] else {
-        return Err(type_error("http.request", 0, "マップ", &args[0]));
+        return Err(type_error(name, 0, "マップ", &args[0]));
     };
     let options = options.borrow();
     let url = match options.get("url") {
         Some(Value::Str(url)) => url.to_string(),
-        Some(other) => return Err(option_type("http.request", "url", "文字列", other)),
-        None => return Err("http.request に `url` がありません".into()),
+        Some(other) => return Err(option_type(name, "url", "文字列", other)),
+        None => return Err(format!("{name} に `url` がありません")),
     };
     let method = match options.get("method") {
         Some(Value::Str(m)) => m.to_uppercase(),
-        Some(other) => return Err(option_type("http.request", "method", "文字列", other)),
+        Some(other) => return Err(option_type(name, "method", "文字列", other)),
         None => "GET".to_string(),
     };
-    let req = Req::from_options("http.request", url, method, &options, &["url", "method"])?;
-    Ok(send(req))
+    Req::from_options(name, url, method, &options, &["url", "method"])
+}
+
+// ---- 非同期版（design.md 5.23）。最後の引数がコールバック ----
+
+fn request_async(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    let (rest, callback) = split_callback("http.request_async", args)?;
+    let req = request_req("http.request_async", rest)?;
+    spawn_blocking(interp, callback, move || send(req))
+}
+
+fn method_async(
+    interp: &mut Interpreter<'_>,
+    name: &str,
+    method: &str,
+    args: &[Value],
+) -> Result<Value, String> {
+    let (rest, callback) = split_callback(name, args)?;
+    let req = method_req(name, method, rest)?;
+    spawn_blocking(interp, callback, move || send(req))
 }
 
 fn get(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
@@ -71,6 +108,10 @@ fn delete(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
 
 /// `get[url]` / `get[url, options]` の共通処理
 fn with_method(name: &str, method: &str, args: &[Value]) -> Result<Value, String> {
+    Ok(send(method_req(name, method, args)?))
+}
+
+fn method_req(name: &str, method: &str, args: &[Value]) -> Result<Req, String> {
     if !(1..=2).contains(&args.len()) {
         return Err(format!(
             "{name} の引数は 1 個か 2 個です（{} 個渡されました）",
@@ -90,8 +131,7 @@ fn with_method(name: &str, method: &str, args: &[Value]) -> Result<Value, String
         Some(other) => return Err(type_error(name, 1, "マップ", other)),
         None => &empty,
     };
-    let req = Req::from_options(name, url.to_string(), method.to_string(), options, &[])?;
-    Ok(send(req))
+    Req::from_options(name, url.to_string(), method.to_string(), options, &[])
 }
 
 /// 検査を終えたリクエスト

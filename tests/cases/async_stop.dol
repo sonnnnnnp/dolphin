@@ -1,0 +1,7 @@
+@async := import["std:async"]
+@async.after[0.05, [] (
+    log["stopping"]
+    @async.stop[]
+)]
+@async.after[5, [] ( log["never printed"] )]
+@async.every[1, [] ( log["never printed either"] )]

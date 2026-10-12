@@ -1,0 +1,8 @@
+start
+end of script, ticker id true
+first (0.05)
+second (0.12)
+ticker stopped after 3
+nested (0.14)
+errors don't stop the loop
+third (0.30)

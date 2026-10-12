@@ -1,0 +1,2 @@
+@async := import["std:async"]
+@async.after[1, 5]

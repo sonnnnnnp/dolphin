@@ -1,0 +1,4 @@
+async_http_no_cb.dol:2:5: エラー: http.get_async の最後の引数はコールバックの関数です（文字列が渡されました）
+  |
+2 | log[@http.get_async["http://x"]]
+  |     ^

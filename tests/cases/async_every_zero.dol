@@ -1,0 +1,2 @@
+@async := import["std:async"]
+@async.every[0, [] ( log[1] )]

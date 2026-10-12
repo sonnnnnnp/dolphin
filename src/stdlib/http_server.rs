@@ -5,6 +5,7 @@
 //! スレッドで 1 つずつ呼び、応答のデータ（`ResponseData`）を補助スレッドに返す。関数値や `Rc` は
 //! スレッドをまたがない（design.md 8.3）。HTTP の解析は自前で、外部クレートは使わない
 
+use std::any::Any;
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
@@ -22,6 +23,7 @@ use super::ws_proto::{
 use super::{error_value, expect_args, func_arg, new_map, type_error};
 use crate::diag::Diagnostic;
 use crate::runtime::error::RuntimeError;
+use crate::runtime::events::Event;
 use crate::runtime::handle::{Handle, HandleKind, WsOut};
 use crate::runtime::interp::Interpreter;
 use crate::runtime::map::Map;
@@ -60,6 +62,16 @@ struct Job {
 enum Reply {
     Response(ResponseData),
     Upgrade { id: u64, accept: String },
+}
+
+/// 補助スレッドから、イベントループへメッセージを送る口
+#[derive(Clone)]
+struct Jobs(Sender<Event>);
+
+impl Jobs {
+    fn send(&self, msg: Msg) -> Result<(), ()> {
+        self.0.send(Event::Ext(Box::new(msg))).map_err(|_| ())
+    }
 }
 
 /// 補助スレッドからインタプリタのスレッドへ届くもの
@@ -109,16 +121,17 @@ pub fn serve(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, Stri
             ));
         }
     };
-    let (jobs, queue) = mpsc::channel::<Msg>();
+    let jobs = Jobs(interp.events.sender());
     thread::spawn(move || accept_loop(&listener, &jobs, max_body));
 
+    // 補助スレッドからのメッセージは、イベントループ（design.md 5.23）に `Ext` で届く
     let mut sockets: HashMap<u64, WsEntry> = HashMap::new();
     let mut next_id = 1;
-    loop {
-        let Ok(msg) = queue.recv() else {
-            return Ok(error_value("network", "接続の受け付けが止まりました"));
+    let receive = move |interp: &mut Interpreter<'_>, payload: Box<dyn Any + Send>| {
+        let Ok(msg) = payload.downcast::<Msg>() else {
+            return Ok(());
         };
-        match msg {
+        match *msg {
             Msg::Request(job) => {
                 let reply = match handle(interp, &handler, job.req, &mut sockets, &mut next_id) {
                     Ok(reply) => reply,
@@ -136,7 +149,7 @@ pub fn serve(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, Stri
             }
             Msg::WsOpen { id, tx } => {
                 let Some(entry) = sockets.get_mut(&id) else {
-                    continue;
+                    return Ok(());
                 };
                 let conn = Handle::new(HandleKind::WsServer { tx });
                 entry.handle = Some(Rc::clone(&conn));
@@ -145,10 +158,10 @@ pub fn serve(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, Stri
             }
             Msg::WsMessage { id, message } => {
                 let Some(entry) = sockets.get(&id) else {
-                    continue;
+                    return Ok(());
                 };
                 let (Some(conn), Some(callback)) = (&entry.handle, entry.on_message.clone()) else {
-                    continue;
+                    return Ok(());
                 };
                 let value = match message {
                     WsIn::Text(s) => Value::Str(s.into()),
@@ -159,7 +172,7 @@ pub fn serve(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, Stri
             }
             Msg::WsClosed { id, code } => {
                 let Some(entry) = sockets.remove(&id) else {
-                    continue;
+                    return Ok(());
                 };
                 if let Some(conn) = &entry.handle {
                     let args = vec![Value::Handle(Rc::clone(conn)), Value::Num(f64::from(code))];
@@ -169,7 +182,15 @@ pub fn serve(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, Stri
                 }
             }
         }
-    }
+        Ok(())
+    };
+    interp
+        .events
+        .set_ext(Box::new(receive))
+        .map_err(|why| format!("http.serve: {why}"))?;
+    let result = interp.run_event_loop();
+    interp.events.clear_ext();
+    result.map(|()| Value::Nil)
 }
 
 /// WebSocket のコールバックを呼ぶ。エラーは標準エラーに出して続ける。`os.exit` だけは
@@ -488,7 +509,7 @@ fn valid_header(name: &str, value: &str) -> Result<(), String> {
 
 // ---- 補助スレッド: 接続 ----
 
-fn accept_loop(listener: &TcpListener, jobs: &Sender<Msg>, max_body: usize) {
+fn accept_loop(listener: &TcpListener, jobs: &Jobs, max_body: usize) {
     let active = Arc::new(AtomicUsize::new(0));
     for stream in listener.incoming() {
         let Ok(stream) = stream else {
@@ -534,7 +555,7 @@ struct Parsed {
     head_only: bool,
 }
 
-fn connection(stream: TcpStream, jobs: &Sender<Msg>, max_body: usize) -> io::Result<()> {
+fn connection(stream: TcpStream, jobs: &Jobs, max_body: usize) -> io::Result<()> {
     stream.set_read_timeout(Some(IDLE_TIMEOUT))?;
     stream.set_write_timeout(Some(IDLE_TIMEOUT))?;
     let remote = stream
@@ -584,7 +605,7 @@ fn connection(stream: TcpStream, jobs: &Sender<Msg>, max_body: usize) -> io::Res
 fn websocket(
     mut reader: BufReader<TcpStream>,
     writer: &mut TcpStream,
-    jobs: &Sender<Msg>,
+    jobs: &Jobs,
     id: u64,
     accept: &str,
 ) -> io::Result<()> {

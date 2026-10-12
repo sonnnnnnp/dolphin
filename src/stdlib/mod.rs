@@ -3,6 +3,7 @@
 //! 関数の一覧と仕様は design.md 5.5
 
 pub mod array;
+pub mod async_;
 pub mod bits;
 pub mod bytes;
 #[cfg(feature = "crypto")]
@@ -51,6 +52,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     math::register(interp);
     bits::register(interp);
     net::register(interp);
+    async_::register(interp);
     ws::register(interp);
     types::register(interp);
     gc::register(interp);

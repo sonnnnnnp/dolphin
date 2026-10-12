@@ -1,0 +1,33 @@
+// std:async のタイマー（design.md 5.23）。時刻の間隔は広くとって、順序だけを確かめる
+@async := import["std:async"]
+log["start"]
+
+@async.after[0.30, [] ( log["third (0.30)"] )]
+@async.after[0.05, [] ( log["first (0.05)"] )]
+@never := @async.after[0.10, [] ( log["キャンセルしたので出ない"] )]
+@async.cancel[@never]
+@async.cancel[@never]
+@async.cancel[99999]
+
+// every は cancel するまで続く。コールバックの中から自分を止められる
+@n := 0
+@ticker := nil
+@ticker = @async.every[0.04, [] (
+    @n = @n + 1
+    if @n == 3 (
+        @async.cancel[@ticker]
+        log["ticker stopped after @n"]
+    )
+)]
+
+// コールバックの中から、新しいタイマーを作れる
+@async.after[0.12, [] (
+    log["second (0.12)"]
+    @async.after[0.02, [] ( log["nested (0.14)"] )]
+)]
+
+// エラーになったコールバックは、報告されるだけで、ほかは続く
+@async.after[0.20, [] ( log[1 / 0] )]
+@async.after[0.25, [] ( log["errors don't stop the loop"] )]
+
+log["end of script, ticker id", @ticker > 0]

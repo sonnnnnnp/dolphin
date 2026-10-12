@@ -81,6 +81,8 @@ dolphin/
 │  │  ├─ map.rs          順序つきマップ
 │  │  ├─ gc.rs           循環回収器（配列・マップ・スコープ・関数値の登録簿と試行削除）
 │  │  ├─ handle.rs       ハンドル（TCP の接続・待ち受けなど、閉じる必要のある資源）
+│  │  ├─ data.rs         Data（スレッドをまたげる値。非同期の結果を運ぶ）
+│  │  ├─ events.rs       イベントループ（タイマー・非同期の結果・http.serve のメッセージ）
 │  │  ├─ module.rs       モジュール（import したファイル 1 つ分の `@` 変数と関数）
 │  │  ├─ env.rs          Env（スコープ 1 つ分の変数表。外側への参照を持つ）と Frame（呼び出し 1 回分）
 │  │  ├─ error.rs        RuntimeError（呼び出し履歴つき）
@@ -103,6 +105,7 @@ dolphin/
 │     ├─ regex.rs        std:regex（feature = "regex"。regex クレート）
 │     ├─ ws_proto.rs     WebSocket のフレーム・メッセージ・ハンドシェイク（RFC 6455。SHA-1 も自前）
 │     ├─ ws.rs           std:ws（クライアント。サーバー側の接続の send / close も受ける）
+│     ├─ async_.rs       std:async（タイマー、コールバック型の非同期の関数の共通処理）
 │     ├─ net.rs          std:net（TCP。ブロッキング、標準ライブラリだけ）
 │     ├─ path.rs         std:path
 │     ├─ os.rs           std:os（args / env / exit / run など）

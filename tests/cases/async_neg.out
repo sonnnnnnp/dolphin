@@ -1,0 +1,4 @@
+async_neg.dol:2:1: エラー: async.after の秒数は0 以上の数です（-1）
+  |
+2 | @async.after[-1, [] ( log[1] )]
+  | ^

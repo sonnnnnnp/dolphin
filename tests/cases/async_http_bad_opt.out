@@ -1,0 +1,4 @@
+async_http_bad_opt.dol:2:5: エラー: http.get_async に知らないオプション `nope` があります（使えるのは headers、query、body、json、timeout、redirects、as）
+  |
+2 | log[@http.get_async["http://x", {"nope": 1}, [@r] ( log[@r] )]]
+  |     ^
