@@ -101,6 +101,8 @@ dolphin/
 │     ├─ encoding.rs     std:encoding（base64 / hex / URL。自前）
 │     ├─ crypto.rs       std:crypto（feature = "crypto"。ring + md-5）
 │     ├─ regex.rs        std:regex（feature = "regex"。regex クレート）
+│     ├─ ws_proto.rs     WebSocket のフレーム・メッセージ・ハンドシェイク（RFC 6455。SHA-1 も自前）
+│     ├─ ws.rs           std:ws（クライアント。サーバー側の接続の send / close も受ける）
 │     ├─ net.rs          std:net（TCP。ブロッキング、標準ライブラリだけ）
 │     ├─ path.rs         std:path
 │     ├─ os.rs           std:os（args / env / exit / run など）

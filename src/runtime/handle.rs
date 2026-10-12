@@ -5,6 +5,16 @@ use std::fmt;
 use std::io::BufReader;
 use std::net::{TcpListener, TcpStream};
 use std::rc::Rc;
+use std::sync::mpsc::Sender;
+
+/// WebSocket のサーバー側の接続に送る指示（送信は補助スレッドが行う。design.md 5.22）
+#[derive(Debug)]
+pub enum WsOut {
+    Text(String),
+    Binary(Vec<u8>),
+    Pong(Vec<u8>),
+    Close(u16, String),
+}
 
 pub enum HandleKind {
     /// 読み込みはバッファ付き。書き込みは同じソケットの複製
@@ -13,6 +23,15 @@ pub enum HandleKind {
         writer: TcpStream,
     },
     TcpListener(TcpListener),
+    /// WebSocket のクライアント側の接続（`std:ws` の `connect`）
+    WsClient {
+        reader: BufReader<TcpStream>,
+        writer: TcpStream,
+    },
+    /// `http.serve` が WebSocket にした接続。送信は補助スレッドに頼む
+    WsServer {
+        tx: Sender<WsOut>,
+    },
     Closed,
 }
 
@@ -44,6 +63,11 @@ impl fmt::Display for Handle {
                 Ok(addr) => write!(f, "<tcp 待ち受け {addr}>"),
                 Err(_) => write!(f, "<tcp 待ち受け>"),
             },
+            HandleKind::WsClient { writer, .. } => match writer.peer_addr() {
+                Ok(addr) => write!(f, "<websocket 接続 {addr}>"),
+                Err(_) => write!(f, "<websocket 接続>"),
+            },
+            HandleKind::WsServer { .. } => write!(f, "<websocket サーバー側の接続>"),
             HandleKind::Closed => write!(f, "<tcp 閉じています>"),
         }
     }

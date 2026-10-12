@@ -138,6 +138,7 @@ count: 3
 | [v0.27.0](https://github.com/sonnnnnnp/dolphin/tree/v0.27.0) | ビット演算 `std:bits` | [v0.26.0...v0.27.0](https://github.com/sonnnnnnp/dolphin/compare/v0.26.0...v0.27.0) |
 | [v0.28.0](https://github.com/sonnnnnnp/dolphin/tree/v0.28.0) | `std:regex`（正規表現） | [v0.27.0...v0.28.0](https://github.com/sonnnnnnp/dolphin/compare/v0.27.0...v0.28.0) |
 | [v0.29.0](https://github.com/sonnnnnnp/dolphin/tree/v0.29.0) | TCP `std:net` と `handle` 型 | [v0.28.0...v0.29.0](https://github.com/sonnnnnnp/dolphin/compare/v0.28.0...v0.29.0) |
+| [v0.30.0](https://github.com/sonnnnnnp/dolphin/tree/v0.30.0) | WebSocket（`http.serve` の `websocket` と `std:ws`） | [v0.29.0...v0.30.0](https://github.com/sonnnnnnp/dolphin/compare/v0.29.0...v0.30.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

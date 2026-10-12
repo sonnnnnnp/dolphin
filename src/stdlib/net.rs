@@ -50,12 +50,12 @@ fn port_arg(name: &str, args: &[Value], i: usize) -> Result<u16, String> {
     u16::try_from(n).map_err(|_| format!("{name} のポートは 0〜65535 の整数です（{n}）"))
 }
 
-fn closed() -> Value {
+pub(super) fn closed() -> Value {
     error_value("closed", "ハンドルはすでに閉じています")
 }
 
 /// 通信の失敗をエラー値にする
-fn failure(what: &str, e: &io::Error) -> Value {
+pub(super) fn failure(what: &str, e: &io::Error) -> Value {
     let kind = match e.kind() {
         io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock => "timeout",
         _ => "network",
@@ -63,7 +63,7 @@ fn failure(what: &str, e: &io::Error) -> Value {
     error_value(kind, format!("{what}: {e}"))
 }
 
-fn seconds(name: &str, n: f64) -> Result<Duration, String> {
+pub(super) fn seconds(name: &str, n: f64) -> Result<Duration, String> {
     if n.is_finite() && n > 0.0 {
         Ok(Duration::from_secs_f64(n))
     } else {
@@ -194,7 +194,7 @@ fn accept(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
             Err(e) => failure("接続を受け付けられません", &e),
         }),
         HandleKind::Closed => Ok(closed()),
-        HandleKind::TcpConn { .. } => {
+        HandleKind::TcpConn { .. } | HandleKind::WsClient { .. } | HandleKind::WsServer { .. } => {
             Err("net.accept に渡せるのは待ち受けのハンドルです（接続でした）".into())
         }
     }
@@ -215,6 +215,9 @@ fn with_conn(
         HandleKind::Closed => Ok(closed()),
         HandleKind::TcpListener(_) => Err(format!(
             "{name} に渡せるのは接続のハンドルです（待ち受けでした）"
+        )),
+        HandleKind::WsClient { .. } | HandleKind::WsServer { .. } => Err(format!(
+            "{name} に渡せるのは TCP の接続のハンドルです（WebSocket でした）"
         )),
     }
 }
@@ -337,8 +340,15 @@ fn local_addr(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> 
     expect_args("net.local_addr", args, 1)?;
     let handle = handle_arg("net.local_addr", args, 0)?;
     let addr = match &*handle.inner.borrow() {
-        HandleKind::TcpConn { writer, .. } => writer.local_addr(),
+        HandleKind::TcpConn { writer, .. } | HandleKind::WsClient { writer, .. } => {
+            writer.local_addr()
+        }
         HandleKind::TcpListener(listener) => listener.local_addr(),
+        HandleKind::WsServer { .. } => {
+            return Err(
+                "net.local_addr に渡せるのは TCP のハンドルです（WebSocket でした）".into(),
+            );
+        }
         HandleKind::Closed => return Ok(closed()),
     };
     Ok(addr.map_or_else(|e| failure("アドレスを取れません", &e), addr_map))

@@ -28,6 +28,8 @@ pub mod regex;
 pub mod string;
 pub mod time;
 pub mod types;
+pub mod ws;
+pub mod ws_proto;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -49,6 +51,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     math::register(interp);
     bits::register(interp);
     net::register(interp);
+    ws::register(interp);
     types::register(interp);
     gc::register(interp);
     debug::register(interp);

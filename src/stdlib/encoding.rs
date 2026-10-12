@@ -65,7 +65,7 @@ const STANDARD: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx
 const URL_SAFE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 /// `url` なら `-` `_` を使い、`=` の詰め物をしない
-fn base64_encode(bytes: &[u8], url: bool) -> String {
+pub(super) fn base64_encode(bytes: &[u8], url: bool) -> String {
     let table = if url { URL_SAFE } else { STANDARD };
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {

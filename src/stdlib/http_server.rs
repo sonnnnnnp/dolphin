@@ -5,18 +5,24 @@
 //! スレッドで 1 つずつ呼び、応答のデータ（`ResponseData`）を補助スレッドに返す。関数値や `Rc` は
 //! スレッドをまたがない（design.md 8.3）。HTTP の解析は自前で、外部クレートは使わない
 
+use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::Duration;
 
 use super::json::to_json_string;
+use super::ws_proto::{
+    self, Message, OP_BINARY, OP_CLOSE, OP_PONG, OP_TEXT, accept_key, close_payload,
+};
 use super::{error_value, expect_args, func_arg, new_map, type_error};
 use crate::diag::Diagnostic;
 use crate::runtime::error::RuntimeError;
+use crate::runtime::handle::{Handle, HandleKind, WsOut};
 use crate::runtime::interp::Interpreter;
 use crate::runtime::map::Map;
 use crate::runtime::value::Value;
@@ -47,7 +53,44 @@ struct ResponseData {
 
 struct Job {
     req: RequestData,
-    reply: Sender<ResponseData>,
+    reply: Sender<Reply>,
+}
+
+/// ハンドラの結果。応答を返すか、WebSocket に切り替える（design.md 5.22）
+enum Reply {
+    Response(ResponseData),
+    Upgrade { id: u64, accept: String },
+}
+
+/// 補助スレッドからインタプリタのスレッドへ届くもの
+enum Msg {
+    Request(Job),
+    WsOpen {
+        id: u64,
+        tx: Sender<WsOut>,
+    },
+    WsMessage {
+        id: u64,
+        message: WsIn,
+    },
+    /// 接続が終わった。`code` は終了コード
+    WsClosed {
+        id: u64,
+        code: u16,
+    },
+}
+
+enum WsIn {
+    Text(String),
+    Binary(Vec<u8>),
+}
+
+/// WebSocket にした接続のコールバック（インタプリタのスレッドだけが持つ）
+struct WsEntry {
+    on_open: Option<Value>,
+    on_message: Option<Value>,
+    on_close: Option<Value>,
+    handle: Option<Rc<Handle>>,
 }
 
 // ---- serve（インタプリタのスレッド） ----
@@ -66,27 +109,89 @@ pub fn serve(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, Stri
             ));
         }
     };
-    let (jobs, queue) = mpsc::channel::<Job>();
+    let (jobs, queue) = mpsc::channel::<Msg>();
     thread::spawn(move || accept_loop(&listener, &jobs, max_body));
 
+    let mut sockets: HashMap<u64, WsEntry> = HashMap::new();
+    let mut next_id = 1;
     loop {
-        let Ok(job) = queue.recv() else {
+        let Ok(msg) = queue.recv() else {
             return Ok(error_value("network", "接続の受け付けが止まりました"));
         };
-        let response = match handle(interp, &handler, job.req) {
-            Ok(response) => response,
-            Err(message) => {
-                // `os.exit` はサーバーごと止める
-                if interp.exit_code.is_some() {
-                    return Err(message);
-                }
-                eprintln!("{message}");
-                internal_error()
+        match msg {
+            Msg::Request(job) => {
+                let reply = match handle(interp, &handler, job.req, &mut sockets, &mut next_id) {
+                    Ok(reply) => reply,
+                    Err(message) => {
+                        // `os.exit` はサーバーごと止める
+                        if interp.exit_code.is_some() {
+                            return Err(message);
+                        }
+                        eprintln!("{message}");
+                        Reply::Response(internal_error())
+                    }
+                };
+                // 相手がもう切れていても気にしない
+                let _ = job.reply.send(reply);
             }
-        };
-        // 相手がもう切れていても気にしない
-        let _ = job.reply.send(response);
+            Msg::WsOpen { id, tx } => {
+                let Some(entry) = sockets.get_mut(&id) else {
+                    continue;
+                };
+                let conn = Handle::new(HandleKind::WsServer { tx });
+                entry.handle = Some(Rc::clone(&conn));
+                let callback = entry.on_open.clone();
+                run_callback(interp, callback, vec![Value::Handle(conn)])?;
+            }
+            Msg::WsMessage { id, message } => {
+                let Some(entry) = sockets.get(&id) else {
+                    continue;
+                };
+                let (Some(conn), Some(callback)) = (&entry.handle, entry.on_message.clone()) else {
+                    continue;
+                };
+                let value = match message {
+                    WsIn::Text(s) => Value::Str(s.into()),
+                    WsIn::Binary(b) => Value::bytes(b),
+                };
+                let conn = Value::Handle(Rc::clone(conn));
+                run_callback(interp, Some(callback), vec![conn, value])?;
+            }
+            Msg::WsClosed { id, code } => {
+                let Some(entry) = sockets.remove(&id) else {
+                    continue;
+                };
+                if let Some(conn) = &entry.handle {
+                    let args = vec![Value::Handle(Rc::clone(conn)), Value::Num(f64::from(code))];
+                    let result = run_callback(interp, entry.on_close.clone(), args);
+                    conn.close();
+                    result?;
+                }
+            }
+        }
     }
+}
+
+/// WebSocket のコールバックを呼ぶ。エラーは標準エラーに出して続ける。`os.exit` だけは
+/// サーバーごと止める（`Err` を返す）
+fn run_callback(
+    interp: &mut Interpreter<'_>,
+    callback: Option<Value>,
+    args: Vec<Value>,
+) -> Result<(), String> {
+    let Some(callback) = callback else {
+        return Ok(());
+    };
+    if let Err(message) = interp.call_value(&callback, args) {
+        if interp.exit_code.is_some() {
+            return Err(message);
+        }
+        match interp.take_native_error() {
+            Some(e) => eprintln!("{}", describe(e)),
+            None => eprintln!("http.serve: WebSocket のコールバックでエラー: {message}"),
+        }
+    }
+    Ok(())
 }
 
 /// `serve[port, handler]` か `serve[options, handler]` の `(host, port, max_body)`
@@ -135,20 +240,109 @@ fn option_type(key: &str, expected: &str, got: &Value) -> String {
     )
 }
 
-/// ハンドラを呼んで、応答のデータにする。失敗は標準エラーに出すメッセージ
+/// ハンドラを呼んで、応答のデータにする（WebSocket に切り替えるなら、そのコールバックを登録する）。
+/// 失敗は標準エラーに出すメッセージ
 fn handle(
     interp: &mut Interpreter<'_>,
     handler: &Value,
     req: RequestData,
-) -> Result<ResponseData, String> {
+    sockets: &mut HashMap<u64, WsEntry>,
+    next_id: &mut u64,
+) -> Result<Reply, String> {
+    let upgrade = upgrade_key(&req);
     let value = interp
         .call_value(handler, vec![request_value(req)])
         .map_err(|message| match interp.take_native_error() {
             Some(e) => describe(e),
             None => format!("http.serve: ハンドラでエラー: {message}"),
         })?;
+    if let Value::Map(map) = &value
+        && map.borrow().contains_key("websocket")
+    {
+        let entry = ws_entry(&map.borrow())
+            .map_err(|m| format!("http.serve: ハンドラの戻り値が正しくありません: {m}"))?;
+        let key = match upgrade {
+            Ok(key) => key,
+            Err(why) => {
+                // WebSocket の接続要求でないリクエストには、400 を返す
+                eprintln!("http.serve: WebSocket にできないリクエストです（{why}）");
+                return Ok(Reply::Response(ResponseData {
+                    status: 400,
+                    headers: vec![("content-type".into(), TEXT.into())],
+                    body: b"Bad Request".to_vec(),
+                }));
+            }
+        };
+        let id = *next_id;
+        *next_id += 1;
+        sockets.insert(id, entry);
+        return Ok(Reply::Upgrade {
+            id,
+            accept: accept_key(&key),
+        });
+    }
     response_data(&value)
+        .map(Reply::Response)
         .map_err(|m| format!("http.serve: ハンドラの戻り値が正しくありません: {m}"))
+}
+
+/// WebSocket の接続要求なら、`Sec-WebSocket-Key`。違えば理由
+fn upgrade_key(req: &RequestData) -> Result<String, &'static str> {
+    let header = |name: &str| {
+        req.headers
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v.to_ascii_lowercase())
+    };
+    if req.method != "GET" {
+        return Err("GET ではありません");
+    }
+    if !header("upgrade").is_some_and(|v| v.split(',').any(|t| t.trim() == "websocket")) {
+        return Err("Upgrade: websocket がありません");
+    }
+    if !header("connection").is_some_and(|v| v.split(',').any(|t| t.trim() == "upgrade")) {
+        return Err("Connection: Upgrade がありません");
+    }
+    if header("sec-websocket-version").as_deref() != Some("13") {
+        return Err("Sec-WebSocket-Version が 13 ではありません");
+    }
+    match req.headers.iter().find(|(n, _)| n == "sec-websocket-key") {
+        Some((_, key)) if key.trim().len() == 24 => Ok(key.trim().to_string()),
+        _ => Err("Sec-WebSocket-Key が正しくありません"),
+    }
+}
+
+/// `{"websocket": {"on_open": f, "on_message": f, "on_close": f}}` のコールバックを取り出す
+fn ws_entry(map: &Map) -> Result<WsEntry, String> {
+    if map.len() != 1 {
+        return Err("`websocket` は `status` `headers` `body` `json` と同時に使えません".into());
+    }
+    let Some(Value::Map(callbacks)) = map.get("websocket") else {
+        return Err("`websocket` はマップです".into());
+    };
+    let callbacks = callbacks.borrow();
+    let mut entry = WsEntry {
+        on_open: None,
+        on_message: None,
+        on_close: None,
+        handle: None,
+    };
+    for (key, value) in callbacks.iter() {
+        if !matches!(value, Value::Func(_) | Value::Native(_)) {
+            return Err(format!(
+                "`websocket` の `{key}` は関数です（{}でした）",
+                value.type_name()
+            ));
+        }
+        let slot = match &**key {
+            "on_open" => &mut entry.on_open,
+            "on_message" => &mut entry.on_message,
+            "on_close" => &mut entry.on_close,
+            _ => return Err(format!("`websocket` の知らないキー `{key}` があります")),
+        };
+        *slot = Some(value.clone());
+    }
+    Ok(entry)
 }
 
 fn describe(e: RuntimeError) -> String {
@@ -294,7 +488,7 @@ fn valid_header(name: &str, value: &str) -> Result<(), String> {
 
 // ---- 補助スレッド: 接続 ----
 
-fn accept_loop(listener: &TcpListener, jobs: &Sender<Job>, max_body: usize) {
+fn accept_loop(listener: &TcpListener, jobs: &Sender<Msg>, max_body: usize) {
     let active = Arc::new(AtomicUsize::new(0));
     for stream in listener.incoming() {
         let Ok(stream) = stream else {
@@ -340,7 +534,7 @@ struct Parsed {
     head_only: bool,
 }
 
-fn connection(stream: TcpStream, jobs: &Sender<Job>, max_body: usize) -> io::Result<()> {
+fn connection(stream: TcpStream, jobs: &Sender<Msg>, max_body: usize) -> io::Result<()> {
     stream.set_read_timeout(Some(IDLE_TIMEOUT))?;
     stream.set_write_timeout(Some(IDLE_TIMEOUT))?;
     let remote = stream
@@ -367,17 +561,109 @@ fn connection(stream: TcpStream, jobs: &Sender<Job>, max_body: usize) -> io::Res
             req: parsed.req,
             reply,
         };
-        if jobs.send(job).is_err() {
+        if jobs.send(Msg::Request(job)).is_err() {
             return Ok(());
         }
-        let Ok(response) = answer.recv() else {
-            return Ok(());
+        let response = match answer.recv() {
+            Ok(Reply::Response(response)) => response,
+            Ok(Reply::Upgrade { id, accept }) => {
+                return websocket(reader, &mut writer, jobs, id, &accept);
+            }
+            Err(_) => return Ok(()),
         };
         write_response(&mut writer, &response, parsed.head_only, parsed.keep_alive)?;
         if !parsed.keep_alive {
             return Ok(());
         }
     }
+}
+
+// ---- WebSocket（補助スレッド側） ----
+
+/// 101 を返して、以降は WebSocket のフレームを読む。書き込みは別のスレッドが受け持つ
+fn websocket(
+    mut reader: BufReader<TcpStream>,
+    writer: &mut TcpStream,
+    jobs: &Sender<Msg>,
+    id: u64,
+    accept: &str,
+) -> io::Result<()> {
+    write!(
+        writer,
+        "HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: {accept}\r\n\r\n"
+    )?;
+    writer.flush()?;
+    // WebSocket の間は、時間切れなし
+    reader.get_ref().set_read_timeout(None)?;
+    writer.set_write_timeout(None)?;
+
+    let (tx, rx) = mpsc::channel::<WsOut>();
+    let socket = writer.try_clone()?;
+    let writer_thread = thread::spawn(move || ws_writer(socket, &rx));
+    if jobs.send(Msg::WsOpen { id, tx: tx.clone() }).is_err() {
+        return Ok(());
+    }
+    let code = loop {
+        let pong = |payload: &[u8]| {
+            tx.send(WsOut::Pong(payload.to_vec()))
+                .map_err(|_| io::Error::other("接続が閉じています"))
+        };
+        let message = match ws_proto::read_message(&mut reader, true, pong) {
+            Ok(message) => message,
+            Err(e) => {
+                let code = e.close_code();
+                // 通信の失敗のときは、相手に伝えられない
+                if !matches!(e, ws_proto::ProtoError::Io(_)) {
+                    let _ = tx.send(WsOut::Close(code, String::new()));
+                }
+                break code;
+            }
+        };
+        let message = match message {
+            Message::Text(s) => WsIn::Text(s),
+            Message::Binary(b) => WsIn::Binary(b),
+            Message::Close(close) => {
+                let _ = tx.send(WsOut::Close(1000, String::new()));
+                break close.map_or(1005, |(code, _)| code);
+            }
+        };
+        if jobs.send(Msg::WsMessage { id, message }).is_err() {
+            return Ok(());
+        }
+    };
+    let _ = jobs.send(Msg::WsClosed { id, code });
+    drop(tx);
+    let _ = writer_thread.join();
+    Ok(())
+}
+
+/// 送信専用のスレッド。close を送ったあとは、相手が閉じるのを少し待ってから切る
+fn ws_writer(mut stream: TcpStream, rx: &Receiver<WsOut>) {
+    while let Ok(out) = rx.recv() {
+        let result = match &out {
+            WsOut::Text(s) => ws_proto::write_frame(&mut stream, OP_TEXT, s.as_bytes(), None),
+            WsOut::Binary(b) => ws_proto::write_frame(&mut stream, OP_BINARY, b, None),
+            WsOut::Pong(p) => ws_proto::write_frame(&mut stream, OP_PONG, p, None),
+            WsOut::Close(code, reason) => {
+                let _ = ws_proto::write_frame(
+                    &mut stream,
+                    OP_CLOSE,
+                    &close_payload(*code, reason),
+                    None,
+                );
+                // 送り手がすべていなくなる（読み込み側が終わる）まで、5 秒だけ待つ
+                while !matches!(
+                    rx.recv_timeout(Duration::from_secs(5)),
+                    Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected)
+                ) {}
+                break;
+            }
+        };
+        if result.is_err() {
+            break;
+        }
+    }
+    let _ = stream.shutdown(Shutdown::Both);
 }
 
 /// 1 行（末尾の改行を除く）。`remaining` は、request line とヘッダーに残っている大きさ

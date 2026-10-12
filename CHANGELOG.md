@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-10-12
+
+WebSocket（[design.md 5.22](docs/design.md)）。
+
+### 追加
+- `http.serve` のハンドラが `{"websocket": {"on_open": f, "on_message": f, "on_close": f}}` を返すと、その接続を WebSocket にする。コールバックは HTTP のハンドラと同じインタプリタのスレッドで 1 つずつ呼び（`on_message` はテキストなら文字列、バイナリならバイト列）、フレームの解析と送信は補助スレッドが行う。WebSocket の接続要求でないリクエストには `400` を返し、コールバックのエラーは標準エラーに出して続ける
+- `import["std:ws"]`（標準ライブラリだけ）: `connect`（`ws://` のクライアント。`headers` と `timeout` を渡せる）`send` `recv` `close` `set_timeout`。サーバー側の接続のハンドルにも `send` `close` が使える。失敗はエラー値（種類 `timeout` `closed` `network` `protocol` `too_large` `parse`）
+- RFC 6455 のフレーム（マスク、断片化、ping/pong、close、16 MB の上限、UTF-8 の検査）と、SHA-1・`Sec-WebSocket-Accept` の計算を自前で実装した（`stdlib/ws_proto.rs`）。`wss://` と permessage-deflate は未対応
+
 ## [0.29.0] - 2026-10-12
 
 TCP（[design.md 5.21](docs/design.md)）。
