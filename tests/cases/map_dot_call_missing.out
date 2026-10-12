@@ -1,0 +1,4 @@
+map_dot_call_missing.dol:2:1: エラー: キー "f" がありません
+  |
+2 | @m.f[1]
+  | ^

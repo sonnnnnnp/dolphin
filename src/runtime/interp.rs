@@ -320,9 +320,11 @@ impl<'a> Interpreter<'a> {
                     None => return Err(undefined(target, stmt.span)),
                 };
                 for index in outer {
+                    reject_module(&container, stmt.span)?;
                     let key = self.eval(index)?;
                     container = index_get(&container, &key, stmt.span, index.span)?;
                 }
+                reject_module(&container, stmt.span)?;
                 let key = self.eval(last)?;
                 let value = self.eval(value)?;
                 index_set(&container, &key, value, stmt.span, last.span)?;
@@ -399,7 +401,12 @@ impl<'a> Interpreter<'a> {
                 gc::new_map(map)
             }
             ExprKind::Member { target, name } => {
-                let module = self.eval_module(target)?;
+                let base = self.eval(target)?;
+                // マップなら `@m{"name"}` と同じ（design.md 5.19）
+                if let Value::Map(_) = base {
+                    return index_get(&base, &Value::Str(name.as_str().into()), target.span, span);
+                }
+                let module = self.as_module(base, target.span)?;
                 // 変数がなければ、同じ名前の関数を関数値として返す（design.md 5.8）
                 let value = module.globals.get_own(name).or_else(|| {
                     if let Some(native) = module.natives.get(name.as_str()) {
@@ -446,7 +453,20 @@ impl<'a> Interpreter<'a> {
                 self.call_function(&f, args, span, callee.span)?
             }
             ExprKind::MemberCall { target, name, args } => {
-                let module = self.eval_module(target)?;
+                let base = self.eval(target)?;
+                let module = match base {
+                    // マップの値の関数を呼ぶ（`@m.handler[1]`）
+                    Value::Map(_) => {
+                        let f =
+                            index_get(&base, &Value::Str(name.as_str().into()), target.span, span)?;
+                        let args = args
+                            .iter()
+                            .map(|arg| self.eval(arg))
+                            .collect::<RResult<Vec<_>>>()?;
+                        return self.call_function(&f, args, span, span);
+                    }
+                    base => self.as_module(base, target.span)?,
+                };
                 let args = args
                     .iter()
                     .map(|arg| self.eval(arg))
@@ -733,13 +753,13 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn eval_module(&mut self, target: &Expr) -> RResult<Rc<Module>> {
-        match self.eval(target)? {
+    fn as_module(&self, value: Value, span: Span) -> RResult<Rc<Module>> {
+        match value {
             Value::Module(module) => Ok(module),
             other => Err(RuntimeError::new(
-                target.span,
+                span,
                 format!(
-                    "`.` を使えるのはモジュールだけです（{}でした）",
+                    "`.` を使えるのはモジュールかマップだけです（{}でした）",
                     other.type_name()
                 ),
             )),
@@ -962,6 +982,17 @@ fn index_get(container: &Value, key: &Value, target_span: Span, key_span: Span) 
             Ok(Value::Num(f64::from(bytes[i])))
         }
         other => Err(not_container(other, target_span)),
+    }
+}
+
+/// モジュールの変数は、外から書き換えられない（`@u.x = 1`）
+fn reject_module(container: &Value, span: Span) -> RResult<()> {
+    match container {
+        Value::Module(_) => Err(RuntimeError::new(
+            span,
+            "モジュールの変数は外から書き換えられません（書き換えたいときは、そのファイルに setter 関数を書いてください）",
+        )),
+        _ => Ok(()),
     }
 }
 

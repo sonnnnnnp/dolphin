@@ -1,0 +1,4 @@
+map_dot_missing.dol:2:5: エラー: キー "b" がありません
+  |
+2 | log[@m.b]
+  |     ^

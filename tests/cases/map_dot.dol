@@ -1,0 +1,13 @@
+// @m.key（design.md 5.19）
+@cfg := {"name": "dolphin", "db": {"host": "h", "port": 5432}, "tags": {{"id": 1}, {"id": 2}}}
+log[@cfg.name, @cfg.db.port, @cfg.tags{1}.id]
+@cfg.db.port = @cfg.db.port + 1
+@cfg.name = "イルカ"
+@cfg.tags{0}.id = 10
+@cfg.added = true
+log[@cfg]
+@m := {"inc": [@n] ( # @n + 1 ), "name": "m"}
+log[@m.inc[41], @m.name == @m{"name"}]
+add[@a, @b] ( # @a + @b )
+@mod := import["shadow_mod.dol"]
+log[@mod.len3[]]

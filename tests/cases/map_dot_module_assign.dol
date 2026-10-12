@@ -1,0 +1,2 @@
+@m := import["shadow_mod.dol"]
+@m.x = 1

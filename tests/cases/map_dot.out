@@ -1,0 +1,4 @@
+dolphin 5432 2
+{"name": "イルカ", "db": {"host": "h", "port": 5433}, "tags": {{"id": 10}, {"id": 2}}, "added": true}
+42 true
+3

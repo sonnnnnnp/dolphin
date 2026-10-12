@@ -5,7 +5,7 @@
 use std::rc::Rc;
 
 use super::ast::{BinaryOp, Block, Expr, ExprKind, FuncDef, Program, Stmt, StmtKind, UnaryOp, Var};
-use super::lexer::{Token, TokenKind};
+use super::lexer::{StrPart, Token, TokenKind};
 use super::span::Span;
 use crate::diag::Diagnostic;
 
@@ -553,17 +553,18 @@ fn binary(op: BinaryOp, lhs: Expr, rhs: Expr, span: Span) -> Expr {
 /// 代入の左辺を (変数, 添字を外側から順に並べたもの) に分解する
 fn assign_target(expr: Expr) -> PResult<(Var, Vec<Expr>)> {
     let invalid = || Diagnostic::new(expr.span, "代入できるのは変数か配列の要素だけです");
-    let module_var = || {
-        Diagnostic::new(
-            expr.span,
-            "モジュールの変数は外から書き換えられません（書き換えたいときは、そのファイルに setter 関数を書いてください）",
-        )
-    };
     let mut indices = Vec::new();
     let mut current = expr.kind;
     loop {
         match current {
-            ExprKind::Member { .. } => return Err(module_var()),
+            // `@m.key = v` は `@m{"key"} = v`。モジュールかどうかは実行時に分かる
+            ExprKind::Member { target, name } => {
+                indices.push(Expr {
+                    kind: ExprKind::Str(vec![StrPart::Text(name)]),
+                    span: target.span,
+                });
+                current = target.kind;
+            }
             ExprKind::Var(var) => {
                 indices.reverse();
                 return Ok((var, indices));
@@ -677,15 +678,11 @@ else (
             error("@u.").message,
             "名前が必要です（ファイルの終わりがありました）"
         );
-        assert!(
-            error("@u.count = 1")
-                .message
-                .contains("外から書き換えられません")
-        );
-        assert!(
-            error("@u.items{0} = 1")
-                .message
-                .contains("外から書き換えられません")
+        // `@m.key = v` は `@m{"key"} = v`（モジュールかどうかは実行時に分かる）
+        assert_eq!(ast("@u.count = 1"), "(= ({} @u \"count\") 1)\n");
+        assert_eq!(
+            ast("@u.items{0}.x = 1"),
+            "(= ({} ({} ({} @u \"items\") 0) \"x\") 1)\n"
         );
         // 関数定義は名前空間つきでは書けない
         assert!(parse(&tokenize("@u.f[@a] (\n)").unwrap()).is_err());
