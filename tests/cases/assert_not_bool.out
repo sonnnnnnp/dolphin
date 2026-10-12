@@ -1,0 +1,4 @@
+assert_not_bool.dol:1:1: エラー: assert の 1 番目の引数は真偽値です（数値が渡されました）
+  |
+1 | assert[1]
+  | ^

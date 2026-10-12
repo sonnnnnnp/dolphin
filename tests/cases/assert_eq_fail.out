@@ -1,0 +1,6 @@
+assert_eq_fail.dol:1:1: エラー: assert_eq に失敗しました
+  左: {1, "a"}
+  右: {1, "b"}
+  |
+1 | assert_eq[{1, "a"}, {1, "b"}]
+  | ^

@@ -1,0 +1,4 @@
+assert_fail_plain.dol:1:1: エラー: assert に失敗しました
+  |
+1 | assert[false]
+  | ^

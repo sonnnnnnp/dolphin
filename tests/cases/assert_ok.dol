@@ -1,0 +1,8 @@
+// assert / assert_eq / dbg（design.md 5.17）
+assert[1 + 1 == 2]
+assert[true, "メッセージつき"]
+assert_eq[{1, {2, 3}}, {1, {2, 3}}]
+assert_eq[{"a": 1, "b": 2}, {"b": 2, "a": 1}]
+assert_eq["x", "x", "文字列"]
+log[dbg[42] + 1]
+log[assert[true]]

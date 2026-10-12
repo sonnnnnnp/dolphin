@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-12
+
+開発の道具（[design.md 5.17](docs/design.md)）。`dolphin fmt` は v0.18.0 に分けた。
+
+### 追加
+- `assert[cond]` `assert[cond, message]`、`assert_eq[actual, expected]` `assert_eq[actual, expected, message]`: 失敗は実行時エラー（`?` では拾えない）。`assert_eq` は両方の値を表示する
+- `dbg[value]`: 値を標準エラーに `[dbg] 値` で出し、そのまま返す
+- `dolphin check <file>...`: 実行せずに構文と Resolver の検査だけをする。問題があれば終了コード 1
+- `dolphin test [path...]`: ディレクトリ内の `*_test.dol`（ファイルは直接も可）の、引数 0 個で `test_` で始まる関数を定義の順に実行し、`ok` / `FAIL` と件数を出す。失敗したファイルは `log` の出力も出す。失敗か、テストが 1 つもなければ終了コード 1
+- `Session::check`、`Session::user_functions`、`dolphin::testrun`
+
 ## [0.16.0] - 2026-10-12
 
 HTTP サーバー（[design.md 5.16](docs/design.md)）。

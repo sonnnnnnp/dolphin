@@ -209,3 +209,81 @@ log[type_of[@r{"stdout"}], bytes_to_str[@r{"stdout"}], type_of[@r{"stderr"}], by
 "
     );
 }
+
+#[test]
+fn check_reports_errors_without_running() {
+    let good = script("check_good.dol", "log[\"実行されない\"]\n");
+    let output = dolphin().arg("check").arg(&good).output().unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(stdout(&output), "");
+
+    let bad = script("check_bad.dol", "log[\"x\"]\nundefined_fn[1]\n");
+    let output = dolphin()
+        .arg("check")
+        .arg(&good)
+        .arg(&bad)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("未定義の関数 `undefined_fn`"));
+    assert_eq!(stdout(&output), "");
+
+    assert_eq!(
+        dolphin().arg("check").output().unwrap().status.code(),
+        Some(2)
+    );
+}
+
+#[test]
+fn test_runs_test_functions() {
+    let dir = std::env::temp_dir().join("dolphin-test-runner");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join("sub")).unwrap();
+    fs::write(
+        dir.join("a_test.dol"),
+        "@base := 10\nhelper[] ( # 1 )\ntest_add[] (\n    assert_eq[@base + helper[], 11]\n)\ntest_with_arg[@x] (\n    assert[false]\n)\nnot_a_test[] (\n    assert[false]\n)\ntest_log[] (\n    log[\"出力\"]\n)\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("sub").join("b_test.dol"),
+        "test_fail[] (\n    assert_eq[1, 2]\n)\ntest_after[] (\n    assert[true]\n)\nlog[\"本体の出力\"]\n",
+    )
+    .unwrap();
+    // `_test.dol` で終わらないファイルは、ディレクトリを渡したときは見ない
+    fs::write(dir.join("other.dol"), "assert[false]\n").unwrap();
+
+    let output = dolphin().arg("test").arg(&dir).output().unwrap();
+    let out = stdout(&output);
+    assert_eq!(output.status.code(), Some(1), "{out}");
+    assert!(out.contains("  ok   test_add\n"), "{out}");
+    assert!(out.contains("  ok   test_log\n"), "{out}");
+    assert!(out.contains("  FAIL test_fail\n"), "{out}");
+    assert!(out.contains("  ok   test_after\n"), "{out}");
+    assert!(
+        !out.contains("test_with_arg") && !out.contains("not_a_test"),
+        "{out}"
+    );
+    assert!(out.contains("assert_eq に失敗しました"), "{out}");
+    // 出力は、失敗したファイルのぶんだけ出る
+    assert!(
+        out.contains("本体の出力") && !out.contains("  出力\n"),
+        "{out}"
+    );
+    assert!(out.ends_with("3 件成功、1 件失敗\n"), "{out}");
+
+    // 成功するファイルだけなら 0
+    let output = dolphin()
+        .arg("test")
+        .arg(dir.join("a_test.dol"))
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0), "{}", stdout(&output));
+    assert!(stdout(&output).ends_with("2 件成功、0 件失敗\n"));
+
+    // テストのないディレクトリは失敗
+    let empty = dir.join("empty");
+    fs::create_dir_all(&empty).unwrap();
+    let output = dolphin().arg("test").arg(&empty).output().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stdout(&output).contains("テストが見つかりません"));
+}

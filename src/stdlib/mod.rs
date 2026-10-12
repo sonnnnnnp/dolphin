@@ -6,6 +6,7 @@ pub mod array;
 pub mod bytes;
 #[cfg(feature = "crypto")]
 pub mod crypto;
+pub mod debug;
 pub mod encoding;
 pub mod error;
 pub mod fs;
@@ -44,6 +45,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     math::register(interp);
     types::register(interp);
     gc::register(interp);
+    debug::register(interp);
     bytes::register(interp);
     encoding::register(interp);
     #[cfg(feature = "crypto")]

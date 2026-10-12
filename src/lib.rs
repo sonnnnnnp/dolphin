@@ -8,6 +8,7 @@ pub mod runtime;
 pub mod sema;
 pub mod stdlib;
 pub mod syntax;
+pub mod testrun;
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -65,6 +66,22 @@ impl<'a> Session<'a> {
     /// `src` を実行する。最後の文が式なら、その値を返す（REPL で表示するため）
     pub fn eval(&mut self, src: &str) -> Result<Option<Value>, Diagnostic> {
         self.exec(src, true)
+    }
+
+    /// 実行せずに、構文と Resolver の検査だけを行う（`dolphin check`）
+    pub fn check(&mut self, src: &str) -> Result<(), Diagnostic> {
+        let tokens = syntax::lexer::tokenize(src)?;
+        let program = syntax::parser::parse(&tokens)?;
+        sema::resolver::resolve(
+            &program,
+            |name| self.interp.callee(name),
+            |name| self.interp.has_global(name),
+        )
+    }
+
+    /// 名前つきの関数を定義の順に（名前、引数の数）で返す（`dolphin test`）
+    pub fn user_functions(&self) -> Vec<(String, usize)> {
+        self.interp.user_functions()
     }
 
     /// `src` を実行する。値は返さない（ファイルの実行）

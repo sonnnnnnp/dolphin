@@ -161,6 +161,19 @@ impl<'a> Interpreter<'a> {
         (name == "import" || self.natives.contains_key(name)).then_some(Callee::Native)
     }
 
+    /// 実行中のファイルの名前つきの関数を、定義の順に（名前、引数の数）で返す
+    pub fn user_functions(&self) -> Vec<(String, usize)> {
+        let mut defs: Vec<_> = self
+            .current
+            .functions
+            .borrow()
+            .values()
+            .map(|def| (def.span, def.name.clone(), def.params.len()))
+            .collect();
+        defs.sort_by_key(|(span, _, _)| (span.line, span.col));
+        defs.into_iter().map(|(_, name, n)| (name, n)).collect()
+    }
+
     /// Resolver に渡す、前の入力（REPL）で宣言したトップレベルの変数があるか
     pub fn has_global(&self, name: &str) -> bool {
         self.current.globals.get_own(name).is_some()

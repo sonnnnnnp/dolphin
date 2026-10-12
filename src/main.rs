@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{env, fs, io, process, thread};
 
 use dolphin::syntax::{lexer, parser};
@@ -33,12 +33,22 @@ fn run_cli() -> i32 {
     if args.is_empty() {
         return start_repl();
     }
+    match args[0].as_str() {
+        "check" => return check(&args[1..]),
+        "test" => {
+            let paths: Vec<_> = args[1..].iter().map(PathBuf::from).collect();
+            return dolphin::testrun::run(&paths, &mut io::stdout());
+        }
+        _ => {}
+    }
     let (mode, path, script_args) = match args.as_slice() {
         [flag, path] if flag == "--tokens" => (Mode::Tokens, path, &[][..]),
         [flag, path] if flag == "--ast" => (Mode::Ast, path, &[][..]),
         [flag, ..] if flag.starts_with("--") => {
             eprintln!("使い方: dolphin [--tokens | --ast] <file.dol>");
             eprintln!("        dolphin <file.dol> [引数...]");
+            eprintln!("        dolphin check <file.dol>...  （実行せずに検査）");
+            eprintln!("        dolphin test [パス...]       （*_test.dol の test_ 関数を実行）");
             eprintln!("        dolphin              （引数なしで対話モード）");
             return 2;
         }
@@ -80,6 +90,33 @@ fn run_cli() -> i32 {
             1
         }
     }
+}
+
+/// `dolphin check`: 実行せずに構文と Resolver の検査をする。問題があれば 1
+fn check(paths: &[String]) -> i32 {
+    if paths.is_empty() {
+        eprintln!("使い方: dolphin check <file.dol>...");
+        return 2;
+    }
+    let mut code = 0;
+    for path in paths {
+        let src = match fs::read_to_string(path) {
+            Ok(src) => src,
+            Err(e) => {
+                eprintln!("{path}: {e}");
+                code = 1;
+                continue;
+            }
+        };
+        let dir = Path::new(path).parent().unwrap_or(Path::new(""));
+        let mut out = io::sink();
+        if let Err(diag) = dolphin::Session::with_base_dir(&mut out, dir.to_path_buf()).check(&src)
+        {
+            eprint!("{}", diag.render(path, &src));
+            code = 1;
+        }
+    }
+    code
 }
 
 #[cfg(feature = "repl")]

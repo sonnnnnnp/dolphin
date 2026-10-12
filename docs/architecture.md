@@ -66,6 +66,7 @@ dolphin/
 │  ├─ main.rs            CLI の入口（引数の解析、実行、--tokens / --ast）
 │  ├─ repl.rs            対話モード（feature = "repl"、rustyline を使う）
 │  ├─ lib.rs             公開 API（run_source、Session）。CLI・テスト・将来の wasm 版から使う
+│  ├─ testrun.rs        `dolphin test`（*_test.dol を集めて test_ 関数を実行）
 │  ├─ diag.rs            Diagnostic（エラー表示）
 │  ├─ syntax/
 │  │  ├─ span.rs         位置情報（行・列）
@@ -92,6 +93,7 @@ dolphin/
 │     ├─ math.rs         abs, floor, …, random（乱数は xorshift64* を自前で実装）
 │     ├─ types.rs        type_of
 │     ├─ gc.rs           gc_collect
+│     ├─ debug.rs        assert, assert_eq, dbg
 │     ├─ bytes.rs        バイト列（str_to_bytes / bytes_* ）
 │     ├─ encoding.rs     std:encoding（base64 / hex / URL。自前）
 │     ├─ crypto.rs       std:crypto（feature = "crypto"。ring + md-5）
