@@ -10,6 +10,7 @@ pub mod sema;
 pub mod stdlib;
 pub mod syntax;
 pub mod testrun;
+pub mod ui;
 
 use std::io::Write;
 use std::path::PathBuf;

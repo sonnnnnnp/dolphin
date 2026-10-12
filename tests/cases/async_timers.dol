@@ -2,9 +2,9 @@
 @async := import["std:async"]
 log["start"]
 
-@async.after[0.30, [] ( log["third (0.30)"] )]
-@async.after[0.05, [] ( log["first (0.05)"] )]
-@never := @async.after[0.10, [] ( log["キャンセルしたので出ない"] )]
+@async.after[0.80, [] ( log["third (0.80)"] )]
+@async.after[0.10, [] ( log["first (0.10)"] )]
+@never := @async.after[0.20, [] ( log["キャンセルしたので出ない"] )]
 @async.cancel[@never]
 @async.cancel[@never]
 @async.cancel[99999]
@@ -12,7 +12,7 @@ log["start"]
 // every は cancel するまで続く。コールバックの中から自分を止められる
 @n := 0
 @ticker := nil
-@ticker = @async.every[0.04, [] (
+@ticker = @async.every[0.15, [] (
     @n = @n + 1
     if @n == 3 (
         @async.cancel[@ticker]
@@ -21,13 +21,13 @@ log["start"]
 )]
 
 // コールバックの中から、新しいタイマーを作れる
-@async.after[0.12, [] (
-    log["second (0.12)"]
-    @async.after[0.02, [] ( log["nested (0.14)"] )]
+@async.after[0.25, [] (
+    log["second (0.25)"]
+    @async.after[0.10, [] ( log["nested (0.35)"] )]
 )]
 
 // エラーになったコールバックは、報告されるだけで、ほかは続く
-@async.after[0.20, [] ( log[1 / 0] )]
-@async.after[0.25, [] ( log["errors don't stop the loop"] )]
+@async.after[0.55, [] ( log[1 / 0] )]
+@async.after[0.65, [] ( log["errors don't stop the loop"] )]
 
 log["end of script, ticker id", @ticker > 0]

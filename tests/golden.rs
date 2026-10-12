@@ -21,6 +21,10 @@ fn golden() {
         if name.starts_with("crypto") && !cfg!(feature = "crypto") {
             continue;
         }
+        // `ui` feature を付けた版では、あるモジュールの一覧が変わる
+        if name == "std_missing.dol" && cfg!(feature = "ui") {
+            continue;
+        }
         // `regex` feature を外した版では、std:regex を使うケースは動かさない
         if name.starts_with("regex") && !cfg!(feature = "regex") {
             continue;

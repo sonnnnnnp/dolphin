@@ -1,6 +1,6 @@
 [package]
 name = "dolphin"
-version = "0.31.0"
+version = "0.32.0"
 edition = "2024"
 
 # コア言語（lib）は外部クレートに依存しない。CLI の便利機能だけ feature で足す
@@ -10,6 +10,8 @@ md-5 = { version = "0.11", optional = true }
 ring = { version = "0.17", optional = true }
 regex = { version = "1", optional = true }
 rustyline = { version = "18.0.1", optional = true }
+# GUI（`import["std:ui"]`）。OpenGL（glow）で描く
+eframe = { version = "0.36", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 # HTTP クライアント（std:http）。TLS は rustls
 ureq = { version = "3.4", optional = true }
 
@@ -23,3 +25,5 @@ http = ["dep:ureq"]
 crypto = ["dep:ring", "dep:md-5"]
 # 正規表現（`import["std:regex"]`）
 regex = ["dep:regex"]
+# GUI（`import["std:ui"]`）。依存が多くビルドが重いので、既定では無効（`--features ui`）
+ui = ["dep:eframe"]

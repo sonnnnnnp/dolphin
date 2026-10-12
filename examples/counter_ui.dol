@@ -1,0 +1,39 @@
+// ウィンドウを開く小さなアプリ（`cargo run --features ui -- examples/counter_ui.dol`）
+@ui := import["std:ui"]
+@async := import["std:async"]
+
+@count := 0
+@name := ""
+@dark := false
+@level := 50
+@fruits := {"りんご", "みかん", "ぶどう"}
+@fruit := 0
+
+view[] (
+    # @ui.column[{
+        @ui.text["カウンター", {"size": 28, "bold": true}],
+        @ui.text["回数: @count", {"size": 20, "color": if @count >= 10 ( "#d03030" ) else ( "#2060c0" )}],
+        @ui.row[{
+            @ui.button["増やす", [] ( @count = @count + 1 )],
+            @ui.button["減らす", [] ( @count = @count - 1 ), {"enabled": @count > 0}],
+            @ui.button["リセット", [] ( @count = 0 )]
+        }],
+        @ui.progress[@count / 10],
+        @ui.separator[],
+        @ui.text_input[@name, [@v] ( @name = @v ), {"hint": "名前を入力"}],
+        if @name != "" ( @ui.text["こんにちは、@{@name}さん"] ) else ( nil ),
+        @ui.checkbox["暗い色にする（まだ見た目は変わりません）", @dark, [@b] ( @dark = @b )],
+        @ui.slider[@level, 0, 100, [@x] ( @level = @x )],
+        @ui.text["音量: @{round[@level]}"],
+        @ui.select[@fruits, @fruit, [@i] ( @fruit = @i )],
+        @ui.text["好きな果物: @{@fruits{@fruit}}"]
+    }]
+)
+
+// 状態を操作以外（タイマー）で変えたら、ui.refresh[] で画面を更新する
+@async.every[1, [] (
+    @level = (@level + 1) % 101
+    @ui.refresh[]
+)]
+
+@ui.run[view, {"title": "Dolphin のカウンター", "width": 420, "height": 480}]

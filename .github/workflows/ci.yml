@@ -20,3 +20,6 @@ jobs:
       # 依存を外した版（コア言語と標準ライブラリだけ）も動くこと
       - run: cargo clippy --all-targets --no-default-features -- -D warnings
       - run: cargo test --no-default-features
+      # GUI（ui feature）も、ビルドと、GUI なしでできるテストが通ること
+      - run: cargo clippy --all-targets --features ui -- -D warnings
+      - run: cargo test --features ui

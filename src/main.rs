@@ -19,12 +19,14 @@ enum Mode {
 const STACK_SIZE: usize = 256 * 1024 * 1024;
 
 fn main() {
+    // GUI（`std:ui`）はメインスレッドで動かす必要があるので、メインスレッドはウィンドウを開く依頼を待ち受け、
+    // スクリプトはインタプリタ専用のスレッドで動かす
+    let host = dolphin::ui::host::install();
     let cli = thread::Builder::new()
         .stack_size(STACK_SIZE)
         .spawn(run_cli)
         .expect("スレッドを作れませんでした");
-    // パニックした場合、メッセージはすでに表示されている
-    process::exit(cli.join().unwrap_or(101));
+    process::exit(dolphin::ui::host::run(host, cli));
 }
 
 /// 終了コードを返す

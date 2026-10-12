@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-10-12
+
+`ui`（[design.md 5.24](docs/design.md)）。G（表示とアプリ）の最初。
+
+### 追加
+- `import["std:ui"]`（`ui` feature。**既定では無効**で、`cargo build --features ui`）: `ui.run[view, options]` でウィンドウを開き、操作のたびに `view`（画面を返す関数）を呼び直す宣言的 UI。部品は `text` `button` `text_input` `checkbox` `slider` `select` `progress` `column` `row` `group` `scroll` `separator` `space`。ほかに `ui.refresh[]`（タイマーなどで状態を変えたときに画面を更新）と `ui.quit[]`
+- GUI は egui（eframe、OpenGL）で、メインスレッドで動く。インタプリタは専用スレッドのままで、画面は `Send` できる木にして GUI に送り、操作はイベントループ（5.23）にメッセージで届く。部品の番号は画面の中の順番で決まるので、構造が同じ画面なら同じ部品に同じ番号がつく
+- 日本語は、システムのフォント（游ゴシック・メイリオ・ヒラギノ・Noto Sans CJK・IPA など）を探して読み込む。`ui.run` の `font` でファイルも指定できる
+- `examples/counter_ui.dol`
+- 画面の木への変換とコールバックの往復を、GUI なしで確かめる単体テスト（描画は手で確かめる）
+
+### 変更
+- `dolphin` コマンドのメインスレッドが、インタプリタのスレッドが終わるまで、ウィンドウを開く依頼を待ち受けるようになった（`dolphin::ui::host`）
+
 ## [0.31.0] - 2026-10-12
 
 非同期の関数（[design.md 5.23](docs/design.md)）。

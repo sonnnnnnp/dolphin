@@ -140,6 +140,7 @@ count: 3
 | [v0.29.0](https://github.com/sonnnnnnp/dolphin/tree/v0.29.0) | TCP `std:net` と `handle` 型 | [v0.28.0...v0.29.0](https://github.com/sonnnnnnp/dolphin/compare/v0.28.0...v0.29.0) |
 | [v0.30.0](https://github.com/sonnnnnnp/dolphin/tree/v0.30.0) | WebSocket（`http.serve` の `websocket` と `std:ws`） | [v0.29.0...v0.30.0](https://github.com/sonnnnnnp/dolphin/compare/v0.29.0...v0.30.0) |
 | [v0.31.0](https://github.com/sonnnnnnp/dolphin/tree/v0.31.0) | 非同期の関数（`std:async`、`http.get_async` など） | [v0.30.0...v0.31.0](https://github.com/sonnnnnnp/dolphin/compare/v0.30.0...v0.31.0) |
+| [v0.32.0](https://github.com/sonnnnnnp/dolphin/tree/v0.32.0) | `std:ui`（ウィンドウと宣言的 UI。`--features ui`） | [v0.31.0...v0.32.0](https://github.com/sonnnnnnp/dolphin/compare/v0.31.0...v0.32.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 
@@ -167,7 +168,7 @@ runtime_error.dol:5:12: エラー: 添字 5 は範囲外です（要素は 2 個
 | Resolver | 実行前に、未定義の関数・引数の数・宣言されていない変数などを検査する |
 | Interpreter | AST を tree-walking で評価する |
 
-全体像は [docs/architecture.md](docs/architecture.md) にまとめています。コア言語は外部クレートに依存しません（HTTP の TLS は、既定で有効な `http` feature の `ureq` を、ハッシュ・HMAC・乱数は `crypto` feature の `ring` と `md-5` を使います）。
+全体像は [docs/architecture.md](docs/architecture.md) にまとめています。コア言語は外部クレートに依存しません（HTTP の TLS は、既定で有効な `http` feature の `ureq` を、ハッシュ・HMAC・乱数は `crypto` feature の `ring` と `md-5` を、正規表現は `regex` feature の `regex` を使います）。GUI（`std:ui`）は依存が多いので、`ui` feature（`cargo build --features ui`）を付けたときだけ含まれます。
 
 ## ビルド・実行方法
 

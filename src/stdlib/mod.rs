@@ -53,6 +53,8 @@ pub fn register(interp: &mut Interpreter<'_>) {
     bits::register(interp);
     net::register(interp);
     async_::register(interp);
+    #[cfg(feature = "ui")]
+    crate::ui::register(interp);
     ws::register(interp);
     types::register(interp);
     gc::register(interp);
@@ -70,7 +72,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
 
 // ---- 引数の検査（エラーはメッセージだけ返し、位置は Interpreter が付ける） ----
 
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), String> {
+pub(crate) fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), String> {
     if args.len() == n {
         Ok(())
     } else {
@@ -82,7 +84,7 @@ fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), String> {
 }
 
 /// `i` 番目（0 始まり）の引数の型が違う
-fn type_error(name: &str, i: usize, expected: &str, got: &Value) -> String {
+pub(crate) fn type_error(name: &str, i: usize, expected: &str, got: &Value) -> String {
     format!(
         "{name} の {} 番目の引数は{expected}です（{}が渡されました）",
         i + 1,
@@ -90,7 +92,7 @@ fn type_error(name: &str, i: usize, expected: &str, got: &Value) -> String {
     )
 }
 
-fn num_arg(name: &str, args: &[Value], i: usize) -> Result<f64, String> {
+pub(crate) fn num_arg(name: &str, args: &[Value], i: usize) -> Result<f64, String> {
     match &args[i] {
         Value::Num(n) => Ok(*n),
         other => Err(type_error(name, i, "数値", other)),
@@ -109,7 +111,7 @@ fn int_arg(name: &str, args: &[Value], i: usize) -> Result<i64, String> {
     }
 }
 
-fn str_arg<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v str, String> {
+pub(crate) fn str_arg<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v str, String> {
     match &args[i] {
         Value::Str(s) => Ok(s),
         other => Err(type_error(name, i, "文字列", other)),
@@ -147,7 +149,7 @@ fn array_arg<'v>(
     }
 }
 
-fn func_arg<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v Value, String> {
+pub(crate) fn func_arg<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v Value, String> {
     match &args[i] {
         f @ (Value::Func(_) | Value::Native(_)) => Ok(f),
         other => Err(type_error(name, i, "関数", other)),
@@ -167,7 +169,7 @@ fn error_value(kind: &str, message: impl Into<String>) -> Value {
     Value::error(kind, message.into())
 }
 
-fn new_map(map: Map) -> Value {
+pub(crate) fn new_map(map: Map) -> Value {
     crate::runtime::gc::new_map(map)
 }
 

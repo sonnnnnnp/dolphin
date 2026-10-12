@@ -80,7 +80,7 @@ impl Events {
     /// `Ext` の受け手を登録する。すでにあれば Err
     pub fn set_ext(&mut self, handler: ExtHandler) -> Result<(), &'static str> {
         if self.ext_active {
-            return Err("すでに別のサーバーが動いています");
+            return Err("すでに http.serve か ui.run が動いています");
         }
         self.ext = Some(handler);
         self.ext_active = true;

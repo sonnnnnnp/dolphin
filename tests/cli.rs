@@ -340,3 +340,17 @@ fn fmt_rewrites_checks_and_prints() {
         Some(2)
     );
 }
+
+/// `ui` feature を外した版では、`std:ui` の import が案内つきのエラーになる
+#[cfg(not(feature = "ui"))]
+#[test]
+fn ui_is_not_included_without_the_feature() {
+    let path = script("ui_missing.dol", "@ui := import[\"std:ui\"]\n");
+    let output = dolphin().arg(&path).output().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr(&output).contains("`ui` feature"),
+        "{}",
+        stderr(&output)
+    );
+}
