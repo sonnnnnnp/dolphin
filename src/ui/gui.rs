@@ -230,7 +230,7 @@ const SYSTEM_FONTS: &[&str] = &[
     "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
 ];
 
-fn setup_fonts(ctx: &egui::Context, option: Option<&str>) {
+pub(super) fn setup_fonts(ctx: &egui::Context, option: Option<&str>) {
     let candidates = option.into_iter().chain(SYSTEM_FONTS.iter().copied());
     let Some(bytes) = candidates
         .into_iter()

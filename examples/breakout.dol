@@ -1,0 +1,125 @@
+// ブロック崩し（`cargo run --features ui -- examples/breakout.dol`）
+// ← → か マウスでバーを動かす。スペースで始める・やり直す
+@canvas := import["std:canvas"]
+
+@W := 480
+@H := 360
+@paddle_w := 70
+@bricks := {}
+@px := 205
+@bx := 240
+@by := 300
+@vx := 0
+@vy := 0
+@score := 0
+@lives := 3
+@state := "ready"
+
+reset_bricks[] (
+    @bricks = {}
+    for @row in range[0, 5] (
+        for @col in range[0, 8] (
+            arr_push[@bricks, {"x": 12 + @col * 56, "y": 40 + @row * 22, "alive": true, "row": @row}]
+        )
+    )
+)
+
+new_game[] (
+    reset_bricks[]
+    @score = 0
+    @lives = 3
+    serve[]
+)
+
+serve[] (
+    @px = 205
+    @bx = 240
+    @by = 300
+    @vx = 0
+    @vy = 0
+    @state = "ready"
+)
+
+update[@dt] (
+    if @canvas.key_down["left"] ( @px = @px - 320 * @dt )
+    if @canvas.key_down["right"] ( @px = @px + 320 * @dt )
+    @m := @canvas.mouse[]
+    if @m.inside && @m.left ( @px = @m.x - @paddle_w / 2 )
+    @px = max[0, min[@W - @paddle_w, @px]]
+
+    if @state == "ready" (
+        @bx = @px + @paddle_w / 2
+        if @canvas.key_pressed["space"] (
+            if arr_len[@bricks] == 0 ( new_game[] )
+            @vx = 150
+            @vy = -220
+            @state = "play"
+        )
+        # nil
+    )
+    if @state == "over" (
+        if @canvas.key_pressed["space"] ( new_game[] )
+        # nil
+    )
+
+    @bx = @bx + @vx * @dt
+    @by = @by + @vy * @dt
+    if @bx < 6 (
+        @bx = 6
+        @vx = abs[@vx]
+    )
+    if @bx > @W - 6 (
+        @bx = @W - 6
+        @vx = -abs[@vx]
+    )
+    if @by < 6 (
+        @by = 6
+        @vy = abs[@vy]
+    )
+
+    // バー
+    if @vy > 0 && @by > 330 && @by < 346 && @bx > @px - 4 && @bx < @px + @paddle_w + 4 (
+        @vy = -abs[@vy]
+        @vx = (@bx - (@px + @paddle_w / 2)) * 5
+    )
+    // ブロック
+    for @b in @bricks (
+        if @b.alive && @bx > @b.x && @bx < @b.x + 52 && @by > @b.y && @by < @b.y + 18 (
+            @b.alive = false
+            @vy = -@vy
+            @score = @score + 10
+        )
+    )
+    @bricks = arr_filter[@bricks, [@b] ( # @b.alive )]
+    // 落とした
+    if @by > @H + 10 (
+        @lives = @lives - 1
+        if @lives <= 0 ( @state = "over" ) else ( serve[] )
+    )
+)
+
+draw[] (
+    @colors := {"#ff5577", "#ffaa44", "#ffdd55", "#66cc88", "#5599ff"}
+    for @b in @bricks (
+        @canvas.rect[@b.x, @b.y, 52, 18, @colors{@b.row}]
+    )
+    @canvas.rect[@px, 336, @paddle_w, 10, "#ffffff"]
+    @canvas.circle[@bx, @by, 6, "#ffee88"]
+    @canvas.text[10, 8, "スコア @score   残り @lives", "#ffffff", 16]
+    if @state == "ready" (
+        @canvas.text[150, 200, "スペースで始める", "#aaccff", 22]
+    )
+    if @state == "over" (
+        @canvas.text[170, 200, "ゲームオーバー", "#ff8888", 24]
+        @canvas.text[130, 232, "スペースでやり直す", "#ffffff", 18]
+    )
+    if arr_len[@bricks] == 0 (
+        @canvas.text[150, 200, "クリア！ スペースで次へ", "#ffee88", 22]
+    )
+)
+
+reset_bricks[]
+@canvas.run[{
+    "title": "ブロック崩し", "width": @W, "height": @H, "background": "#101828",
+    "update": update, "draw": draw
+}]

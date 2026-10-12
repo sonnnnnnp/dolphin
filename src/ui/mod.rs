@@ -4,9 +4,12 @@
 //! メインスレッドで動き、操作はイベントループ（5.23）にメッセージで届く。関数値は GUI に
 //! 持ち出さず、番号で呼ぶ。この `mod.rs` は描画に依存せず、`gui.rs`（`ui` feature）だけが egui を使う
 
+pub mod canvas;
 pub mod host;
 mod widgets;
 
+#[cfg(feature = "ui")]
+mod canvas_gui;
 #[cfg(feature = "ui")]
 mod gui;
 
@@ -25,7 +28,11 @@ use crate::runtime::interp::Interpreter;
 use crate::runtime::value::Value;
 use crate::stdlib::{expect_args, func_arg, type_error};
 
-pub use widgets::register;
+/// `std:ui` と `std:canvas` を登録する
+pub fn register(interp: &mut Interpreter<'_>) {
+    widgets::register(interp);
+    canvas::register(interp);
+}
 
 /// 画面の部品（GUI に送る。`Send`）
 #[derive(Debug, Clone, PartialEq)]
@@ -124,8 +131,6 @@ struct State {
 
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
-    /// 一度でも `ui.run` を呼んだか（1 プロセスに 1 回）
-    static USED: RefCell<bool> = const { RefCell::new(false) };
 }
 
 fn wake(repaint: &Repaint) {
@@ -155,8 +160,10 @@ pub(crate) fn run(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value,
             font: None,
         },
     };
-    if USED.with(|used| std::mem::replace(&mut *used.borrow_mut(), true)) {
-        return Err("ui.run は 1 つのプログラムで 1 回だけ呼べます".into());
+    if !host::claim() {
+        return Err(
+            "ウィンドウは、1 つのプログラムで 1 回だけ開けます（`ui.run` か `canvas.run`）".into(),
+        );
     }
     let Some(host) = host::sender() else {
         return Err("ui.run は `dolphin` コマンドの中でだけ使えます".into());
@@ -183,7 +190,7 @@ pub(crate) fn run(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value,
     });
     // 最初の画面を作ってから、ウィンドウを開く依頼を出す
     render(interp);
-    if host.send(request).is_err() {
+    if host.send(host::HostRequest::Ui(request)).is_err() {
         STATE.with(|state| *state.borrow_mut() = None);
         return Err("ウィンドウを開けません（GUI が動いていません）".into());
     }
@@ -278,7 +285,7 @@ fn report(interp: &mut Interpreter<'_>, message: &str) {
     }
 }
 
-fn describe_error(e: RuntimeError) -> String {
+pub(super) fn describe_error(e: RuntimeError) -> String {
     let diag = Diagnostic::from(e);
     let mut text = format!(
         "ui: エラー: {}:{}: {}",

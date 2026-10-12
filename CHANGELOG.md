@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-10-12
+
+`canvas`（[design.md 5.25](docs/design.md)）。G の続き。`ui` feature に含む。
+
+### 追加
+- `import["std:canvas"]`: `canvas.run[options]` でウィンドウを開き、フレームごとに `update[dt]` と `draw[]` を呼ぶ。`options` は `draw`（必須）`update` `title` `width` `height`（論理的な画面の大きさ。ウィンドウに合わせて縦横比を保って拡大・縮小）`background` `fps`（上限。既定 60）`font`
+- 描画（`draw` の中）: `clear` `rect` `circle` `line` `polygon` `text`。色は `"#rrggbb"` か `"#rrggbbaa"`、`{"stroke": 太さ}` で線だけ描く
+- 入力・画面の情報: `key_down` `key_pressed` `key_released`（小文字のキー名。知らない名前は実行時エラー）`mouse[]`（座標・ボタン・ホイール）`size[]` `quit[]`
+- インタプリタが追いつかなければ前のフレームを描いたまま待つ（フレームを溜めない）。`update` / `draw` のエラーは標準エラーに出して続け、同じメッセージは 1 回だけ出す。`async` のタイマーなどと一緒に使える
+- `examples/breakout.dol`（ブロック崩し）
+- 命令の組み立て・入力の関数・フレームの往復・オプションの検査を、GUI なしで確かめる単体テスト
+
+### 変更
+- ウィンドウを開けるのは、`ui.run` と `canvas.run` を合わせて 1 回だけ（ホストの `claim`）
+
 ## [0.32.0] - 2026-10-12
 
 `ui`（[design.md 5.24](docs/design.md)）。G（表示とアプリ）の最初。
