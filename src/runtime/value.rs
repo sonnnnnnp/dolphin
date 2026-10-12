@@ -5,6 +5,7 @@ use std::fmt;
 use std::rc::Rc;
 
 use super::env::Env;
+use super::gc;
 use super::interp::NativeFn;
 use super::map::Map;
 use super::module::Module;
@@ -58,6 +59,15 @@ pub struct Closure {
     pub def: Rc<FuncDef>,
     pub env: Rc<Env>,
     pub module: Rc<Module>,
+}
+
+impl Closure {
+    /// 循環回収器に登録して、`Rc` にする
+    pub fn register(closure: Closure) -> Rc<Closure> {
+        let rc = Rc::new(closure);
+        gc::register_closure(&rc);
+        rc
+    }
 }
 
 /// `env` が自分自身を指しうるので、名前だけ出す
@@ -270,7 +280,7 @@ mod tests {
             })
         };
         let make = |def: &Rc<FuncDef>| {
-            Value::Func(Rc::new(Closure {
+            Value::Func(Closure::register(Closure {
                 def: Rc::clone(def),
                 env: Rc::clone(&module.globals),
                 module: Rc::clone(&module),

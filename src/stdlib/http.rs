@@ -3,15 +3,13 @@
 //! `ureq`（rustls）を使う、ブロッキングの HTTP クライアント。`http` feature で有効になる。
 //! 通信の失敗はエラー値、`404` などは普通のレスポンスとして返す
 
-use std::cell::RefCell;
 use std::io;
-use std::rc::Rc;
 use std::time::Duration;
 
 use ureq::http;
 
 use super::json::to_json_string;
-use super::{error_value, expect_args, type_error};
+use super::{error_value, expect_args, new_map, type_error};
 use crate::runtime::interp::Interpreter;
 use crate::runtime::map::Map;
 use crate::runtime::value::Value;
@@ -328,9 +326,9 @@ fn read_response(
     let mut map = Map::default();
     map.insert("status".into(), Value::Num(f64::from(status)));
     map.insert("ok".into(), Value::Bool((200..300).contains(&status)));
-    map.insert("headers".into(), Value::Map(Rc::new(RefCell::new(headers))));
+    map.insert("headers".into(), new_map(headers));
     map.insert("body".into(), body);
-    Ok(Value::Map(Rc::new(RefCell::new(map))))
+    Ok(new_map(map))
 }
 
 /// `ureq` のエラーを、種類つきのエラー値にする

@@ -1,6 +1,5 @@
 //! AST の tree-walking 評価器
 
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fs;
@@ -11,6 +10,7 @@ use std::rc::Rc;
 
 use super::env::{Env, Frame};
 use super::error::{RuntimeError, TraceEntry};
+use super::gc;
 use super::map::Map;
 use super::module::Module;
 use super::value::{Closure, NativeRef, Value};
@@ -238,6 +238,7 @@ impl<'a> Interpreter<'a> {
             }
             StmtKind::While { cond, body } => {
                 while self.eval_cond(cond)? {
+                    gc::maybe_collect();
                     match self.exec_scoped(body)? {
                         Flow::Normal | Flow::Continue => {}
                         Flow::Break => break,
@@ -260,6 +261,7 @@ impl<'a> Interpreter<'a> {
                     }
                 };
                 for item in items {
+                    gc::maybe_collect();
                     // ループ変数と本体は、繰り返しごとに新しい同じスコープ
                     let inner = Env::new(Some(Rc::clone(&self.env)));
                     inner.declare(&var.0, item);
@@ -372,7 +374,7 @@ impl<'a> Interpreter<'a> {
                     .iter()
                     .map(|item| self.eval(item))
                     .collect::<RResult<Vec<_>>>()?;
-                Value::Array(Rc::new(RefCell::new(values)))
+                gc::new_array(values)
             }
             ExprKind::Map(entries) => {
                 let mut map = Map::default();
@@ -381,7 +383,7 @@ impl<'a> Interpreter<'a> {
                     let k = to_key(&k, key.span)?;
                     map.insert(k, self.eval(value)?);
                 }
-                Value::Map(Rc::new(RefCell::new(map)))
+                gc::new_map(map)
             }
             ExprKind::Member { target, name } => {
                 let module = self.eval_module(target)?;
@@ -391,7 +393,7 @@ impl<'a> Interpreter<'a> {
                         return Some(Value::Native(native.clone()));
                     }
                     let def = module.functions.borrow().get(name).cloned()?;
-                    Some(Value::Func(Rc::new(Closure {
+                    Some(Value::Func(Closure::register(Closure {
                         def,
                         env: Rc::clone(&module.globals),
                         module: Rc::clone(&module),
@@ -417,7 +419,7 @@ impl<'a> Interpreter<'a> {
                 Value::Error(e) => return Err(RuntimeError::new(span, &*e.message)),
                 value => value,
             },
-            ExprKind::Lambda(def) => Value::Func(Rc::new(Closure {
+            ExprKind::Lambda(def) => Value::Func(Closure::register(Closure {
                 def: Rc::clone(def),
                 env: Rc::clone(&self.env),
                 module: Rc::clone(&self.current),
@@ -616,7 +618,7 @@ impl<'a> Interpreter<'a> {
     fn func_value(&self, name: &str, span: Span) -> RResult<Value> {
         let def = self.current.functions.borrow().get(name).cloned();
         if let Some(def) = def {
-            return Ok(Value::Func(Rc::new(Closure {
+            return Ok(Value::Func(Closure::register(Closure {
                 def,
                 env: Rc::clone(&self.current.globals),
                 module: Rc::clone(&self.current),
@@ -674,6 +676,7 @@ impl<'a> Interpreter<'a> {
             ));
         }
 
+        gc::maybe_collect();
         // 関数のスコープは、そのファイルのトップレベルのスコープの内側に作る
         let env = Env::new(Some(Rc::clone(parent)));
         for (param, value) in def.params.iter().zip(args) {

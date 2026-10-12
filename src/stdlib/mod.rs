@@ -9,6 +9,7 @@ pub mod crypto;
 pub mod encoding;
 pub mod error;
 pub mod fs;
+pub mod gc;
 #[cfg(feature = "http")]
 pub mod http;
 pub mod io;
@@ -40,6 +41,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     map::register(interp);
     math::register(interp);
     types::register(interp);
+    gc::register(interp);
     bytes::register(interp);
     encoding::register(interp);
     #[cfg(feature = "crypto")]
@@ -149,9 +151,9 @@ fn error_value(kind: &str, message: impl Into<String>) -> Value {
 }
 
 fn new_map(map: Map) -> Value {
-    Value::Map(Rc::new(RefCell::new(map)))
+    crate::runtime::gc::new_map(map)
 }
 
 fn new_array(items: Vec<Value>) -> Value {
-    Value::Array(Rc::new(RefCell::new(items)))
+    crate::runtime::gc::new_array(items)
 }

@@ -77,6 +77,7 @@ dolphin/
 │  ├─ runtime/
 │  │  ├─ value.rs        値の型
 │  │  ├─ map.rs          順序つきマップ
+│  │  ├─ gc.rs           循環回収器（配列・マップ・スコープ・関数値の登録簿と試行削除）
 │  │  ├─ module.rs       モジュール（import したファイル 1 つ分の `@` 変数と関数）
 │  │  ├─ env.rs          Env（スコープ 1 つ分の変数表。外側への参照を持つ）と Frame（呼び出し 1 回分）
 │  │  ├─ error.rs        RuntimeError（呼び出し履歴つき）
@@ -90,6 +91,7 @@ dolphin/
 │     ├─ map.rs          map_len, map_keys, map_has, map_remove
 │     ├─ math.rs         abs, floor, …, random（乱数は xorshift64* を自前で実装）
 │     ├─ types.rs        type_of
+│     ├─ gc.rs           gc_collect
 │     ├─ bytes.rs        バイト列（str_to_bytes / bytes_* ）
 │     ├─ encoding.rs     std:encoding（base64 / hex / URL。自前）
 │     ├─ crypto.rs       std:crypto（feature = "crypto"。ring + md-5）

@@ -2,11 +2,10 @@
 //!
 //! 外部クレートは使わず、RFC 8259 に沿って自前で読み書きする
 
-use std::cell::RefCell;
 use std::fmt::Write as _;
 use std::rc::Rc;
 
-use super::{error_value, expect_args, new_array, str_arg};
+use super::{error_value, expect_args, new_array, new_map, str_arg};
 use crate::runtime::interp::Interpreter;
 use crate::runtime::map::Map;
 use crate::runtime::value::Value;
@@ -167,7 +166,7 @@ impl Parser<'_> {
         self.skip_ws();
         if self.peek() == Some(b'}') {
             self.pos += 1;
-            return Ok(Value::Map(Rc::new(RefCell::new(map))));
+            return Ok(new_map(map));
         }
         loop {
             self.skip_ws();
@@ -185,7 +184,7 @@ impl Parser<'_> {
                 Some(b',') => self.pos += 1,
                 Some(b'}') => {
                     self.pos += 1;
-                    return Ok(Value::Map(Rc::new(RefCell::new(map))));
+                    return Ok(new_map(map));
                 }
                 _ => return self.err("`,` か `}` が必要です"),
             }
@@ -438,6 +437,8 @@ fn write_string(out: &mut String, s: &str) {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+
     use super::*;
 
     fn roundtrip(src: &str) -> String {

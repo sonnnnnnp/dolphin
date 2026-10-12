@@ -1,0 +1,30 @@
+// 循環回収器（design.md 5.15）
+cycles[] (
+    @a := {1}
+    arr_push[@a, @a]
+    @m := {"self": 1}
+    @m{"self"} = @m
+    @f := nil
+    @f = [] ( # @f )
+    # 0
+)
+
+// 生きている循環は、回収されても壊れない
+@keep := {1, 2}
+arr_push[@keep, @keep]
+@fn := nil
+@fn = [] ( # @fn )
+
+cycles[]
+log[gc_collect[] > 0]
+log[gc_collect[]]
+log[arr_len[@keep], @keep{2}{0}, type_of[@fn[]]]
+
+// 大量に作っても、自動で回収されて動き続ける
+@i := 0
+while @i < 30000 (
+    cycles[]
+    @i = @i + 1
+)
+log[gc_collect[] < 30000 * 4]
+log[arr_len[@keep]]

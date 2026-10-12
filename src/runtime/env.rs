@@ -2,8 +2,10 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::mem;
 use std::rc::Rc;
 
+use super::gc;
 use super::value::Value;
 
 /// スコープ 1 つ分の変数表。外側のスコープへの参照を持ち、名前は内側から順に探す。
@@ -16,10 +18,28 @@ pub struct Env {
 
 impl Env {
     pub fn new(parent: Option<Rc<Env>>) -> Rc<Self> {
-        Rc::new(Self {
+        let env = Rc::new(Self {
             vars: RefCell::default(),
             parent,
-        })
+        });
+        gc::register_env(&env);
+        env
+    }
+
+    /// 循環回収器のために、持っている配列・マップ・関数値・外側のスコープのアドレスを順に渡す
+    pub fn for_each_child(&self, f: &mut dyn FnMut(usize)) {
+        if let Ok(vars) = self.vars.try_borrow() {
+            vars.values().for_each(|v| gc::value_child(v, f));
+        }
+        if let Some(parent) = &self.parent {
+            f(Rc::as_ptr(parent) as usize);
+        }
+    }
+
+    /// 変数をすべて捨てる（循環回収器が、ごみになったスコープの循環を壊すために使う）
+    pub fn clear(&self) {
+        let vars = mem::take(&mut *self.vars.borrow_mut());
+        drop(vars);
     }
 
     /// 内側から順に探す

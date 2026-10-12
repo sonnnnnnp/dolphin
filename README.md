@@ -123,6 +123,7 @@ count: 3
 | [v0.12.0](https://github.com/sonnnnnnp/dolphin/tree/v0.12.0) | `std:time`、`std:os`、`std:path`、ファイルの残り | [v0.11.0...v0.12.0](https://github.com/sonnnnnnp/dolphin/compare/v0.11.0...v0.12.0) |
 | [v0.13.0](https://github.com/sonnnnnnp/dolphin/tree/v0.13.0) | バイト列、`std:encoding`、`std:crypto` | [v0.12.0...v0.13.0](https://github.com/sonnnnnnp/dolphin/compare/v0.12.0...v0.13.0) |
 | [v0.14.0](https://github.com/sonnnnnnp/dolphin/tree/v0.14.0) | 例（`dolvc`、ライフゲーム、マンデルブロ）、`os.exe` | [v0.13.0...v0.14.0](https://github.com/sonnnnnnp/dolphin/compare/v0.13.0...v0.14.0) |
+| [v0.15.0](https://github.com/sonnnnnnp/dolphin/tree/v0.15.0) | 循環回収器、`gc_collect` | [v0.14.0...v0.15.0](https://github.com/sonnnnnnp/dolphin/compare/v0.14.0...v0.15.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

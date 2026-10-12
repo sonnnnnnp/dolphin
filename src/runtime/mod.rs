@@ -2,6 +2,7 @@
 
 pub mod env;
 pub mod error;
+pub mod gc;
 pub mod interp;
 pub mod map;
 pub mod module;
