@@ -1,0 +1,33 @@
+// std:time の暦の計算（design.md 5.30）
+@t := import["std:time"]
+
+log[@t.is_leap[2024], @t.is_leap[2100], @t.is_leap[2000], @t.is_leap[2026]]
+log[@t.days_in_month[2026, 1], @t.days_in_month[2026, 2], @t.days_in_month[2028, 2], @t.days_in_month[2026, 4]]
+
+// 月末に丸める。時刻は変えない
+@jan31 := @t.timestamp[{"year": 2026, "month": 1, "day": 31, "hour": 10, "minute": 30, "second": 15, "millisecond": 250}]?
+log[@t.iso[@t.add_months[@jan31, 1]?]]
+log[@t.iso[@t.add_months[@jan31, 2]?]]
+log[@t.iso[@t.add_months[@jan31, 13]?]]
+log[@t.iso[@t.add_months[@jan31, -2]?]]
+log[@t.iso[@t.add_months[@jan31, 0]?]]
+log[@t.iso[@t.add_months[@t.timestamp[{"year": 2028, "month": 1, "day": 31}]?, 1]?]]
+log[@t.iso[@t.add_months[@t.timestamp[{"year": 2028, "month": 2, "day": 29}]?, 12]?]]
+
+// 時差の暦で計算する（日本時間の 1/31 00:30 は UTC では 1/30 15:30）
+@jst := @t.timestamp[{"year": 2026, "month": 1, "day": 31, "hour": 0, "minute": 30}, 540]?
+log[@t.iso[@t.add_months[@jst, 1, 540]?, 540]]
+log[@t.iso[@t.add_months[@jst, 1]?]]
+
+// 範囲外はエラー値
+log[err_kind[@t.add_months[@jan31, 100000]]]
+log[err_kind[@t.add_months[@jan31, -100000]]]
+
+// start_of
+@ts := @t.timestamp[{"year": 2026, "month": 10, "day": 16, "hour": 13, "minute": 45, "second": 59, "millisecond": 500}]?
+for @u in {"year", "month", "day", "hour", "minute", "second"} (
+    log[@u, @t.iso[@t.start_of[@ts, @u]]]
+)
+// 日本時間の日の始まり（UTC では前日の 15:00）
+log[@t.iso[@t.start_of[@ts, "day", 540]]]
+log[@t.iso[@t.start_of[@ts, "day", 540], 540]]

@@ -1,0 +1,4 @@
+time_calendar_bad_month.dol:2:1: エラー: time.days_in_month の月は 1〜12 の整数です（13）
+  |
+2 | @t.days_in_month[2026, 13]
+  | ^

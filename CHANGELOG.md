@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-10-16
+
+日付の計算（[design.md 5.30](docs/design.md)）。「Python に比べて足りないもの」の 3 つめ。日付の分解・書式・読み取りは v0.12.0 の `std:time` にあったので、足りなかった暦の計算だけを足した。
+
+### 追加
+- `std:time` に `is_leap[year]` `days_in_month[year, month]` `add_months[ts, n, offset]`（日が月末を超えるなら月末にする。時刻は変えない。範囲外はエラー値 `parse`）`start_of[ts, unit, offset]`（`unit` は `"year"` `"month"` `"day"` `"hour"` `"minute"` `"second"`）
+- システムの時差は、OS の API が要るので、今回も扱わない（`offset` を自分で渡す）
+
 ## [0.37.0] - 2026-10-16
 
 CSV（[design.md 5.29](docs/design.md)）。「Python に比べて足りないもの」の 2 つめ。

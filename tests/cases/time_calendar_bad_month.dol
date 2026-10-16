@@ -1,0 +1,2 @@
+@t := import["std:time"]
+@t.days_in_month[2026, 13]

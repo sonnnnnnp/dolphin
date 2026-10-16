@@ -1,0 +1,4 @@
+time_calendar_bad_year.dol:2:1: エラー: time.is_leap の年は 1〜9999 の整数です（0）
+  |
+2 | @t.is_leap[0]
+  | ^

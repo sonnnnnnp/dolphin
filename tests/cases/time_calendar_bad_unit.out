@@ -1,0 +1,4 @@
+time_calendar_bad_unit.dol:2:1: エラー: time.start_of の単位は "year" "month" "day" "hour" "minute" "second" のどれかです（"week"）
+  |
+2 | @t.start_of[0, "week"]
+  | ^

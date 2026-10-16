@@ -1,0 +1,2 @@
+@t := import["std:time"]
+@t.is_leap[0]

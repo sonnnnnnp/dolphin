@@ -1,5 +1,5 @@
 //! `std:time`: now, monotonic, sleep, date, timestamp, format, parse, iso, parse_iso
-//! （design.md 5.13）
+//! （design.md 5.13）と、is_leap, days_in_month, add_months, start_of（5.30）
 //!
 //! 時刻は Unix 時刻（秒。小数）。暦はグレゴリオ暦で、年は 1〜9999、うるう秒は扱わない。
 //! 時差は「UTC からの分」で、省略は UTC。外部クレートは使わず、暦の計算は自前
@@ -26,6 +26,10 @@ pub fn register(interp: &mut Interpreter<'_>) {
             ("time.parse", parse),
             ("time.iso", iso),
             ("time.parse_iso", parse_iso),
+            ("time.is_leap", is_leap_fn),
+            ("time.days_in_month", days_in_month_fn),
+            ("time.add_months", add_months),
+            ("time.start_of", start_of),
         ],
     );
 }
@@ -682,6 +686,88 @@ fn expect(cursor: &mut Cursor<'_>, ch: char) -> Result<(), String> {
             cursor.preview()
         ))
     }
+}
+
+// ---- 日付の計算（design.md 5.30） ----
+
+/// `i` 番目の引数が年（1〜9999 の整数）
+fn year_arg(name: &str, args: &[Value], i: usize) -> Result<i64, String> {
+    let year = int_arg(name, args, i)?;
+    if (1..=9999).contains(&year) {
+        Ok(year)
+    } else {
+        Err(format!("{name} の年は 1〜9999 の整数です（{year}）"))
+    }
+}
+
+fn is_leap_fn(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    check_count("time.is_leap", args, 1, 1)?;
+    Ok(Value::Bool(is_leap(year_arg("time.is_leap", args, 0)?)))
+}
+
+fn days_in_month_fn(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    check_count("time.days_in_month", args, 2, 2)?;
+    let year = year_arg("time.days_in_month", args, 0)?;
+    let month = int_arg("time.days_in_month", args, 1)?;
+    if !(1..=12).contains(&month) {
+        return Err(format!(
+            "time.days_in_month の月は 1〜12 の整数です（{month}）"
+        ));
+    }
+    Ok(Value::Num(days_in_month(year, month) as f64))
+}
+
+/// `n` か月後。日が月末を超えるなら月末にして、時刻は変えない
+fn add_months(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    check_count("time.add_months", args, 2, 3)?;
+    let ts = num_arg("time.add_months", args, 0)?;
+    let n = int_arg("time.add_months", args, 1)?;
+    let offset = offset_arg("time.add_months", args, 2)?;
+    let c = civil_from_ts(ts, offset).map_err(|e| format!("time.add_months: {e}"))?;
+    let total = c.year * 12 + (c.month - 1) + n;
+    let (year, month) = (total.div_euclid(12), total.rem_euclid(12) + 1);
+    if !(1..=9999).contains(&year) {
+        return Ok(error_value(
+            "parse",
+            format!("{n} か月後は扱える範囲（1〜9999 年）を超えます"),
+        ));
+    }
+    let day = c.day.min(days_in_month(year, month));
+    Ok(
+        match ts_from_fields(
+            (year, month, day),
+            (c.hour, c.minute, c.second, c.millisecond),
+            offset,
+        ) {
+            Ok(ts) => Value::Num(ts),
+            Err(message) => error_value("parse", message),
+        },
+    )
+}
+
+/// `unit` の始まりの時刻
+fn start_of(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    check_count("time.start_of", args, 2, 3)?;
+    let ts = num_arg("time.start_of", args, 0)?;
+    let unit = str_arg("time.start_of", args, 1)?;
+    let offset = offset_arg("time.start_of", args, 2)?;
+    let c = civil_from_ts(ts, offset).map_err(|e| format!("time.start_of: {e}"))?;
+    let (date, time) = match unit {
+        "year" => ((c.year, 1, 1), (0, 0, 0, 0)),
+        "month" => ((c.year, c.month, 1), (0, 0, 0, 0)),
+        "day" => ((c.year, c.month, c.day), (0, 0, 0, 0)),
+        "hour" => ((c.year, c.month, c.day), (c.hour, 0, 0, 0)),
+        "minute" => ((c.year, c.month, c.day), (c.hour, c.minute, 0, 0)),
+        "second" => ((c.year, c.month, c.day), (c.hour, c.minute, c.second, 0)),
+        _ => {
+            return Err(format!(
+                "time.start_of の単位は \"year\" \"month\" \"day\" \"hour\" \"minute\" \"second\" のどれかです（{unit:?}）"
+            ));
+        }
+    };
+    ts_from_fields(date, time, offset)
+        .map(Value::Num)
+        .map_err(|e| format!("time.start_of: {e}"))
 }
 
 #[cfg(test)]
