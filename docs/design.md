@@ -1309,6 +1309,33 @@ log[@csv.stringify[@rows]]                   // "name,age\nalice,30\n\"b, c\",4\
 
 ---
 
+### 5.30 日付の計算（`std:time` の追加、v0.38.0、確定 2026-10-16）
+
+5.13 の `std:time` に、暦の計算を足す。日付の分解・書式・読み取り（`date` `timestamp` `format` `parse` `iso` `parse_iso`）は 5.13 にある。ここで足すのは、足し算に暦の知識がいる「月」の計算と、月末・うるう年・区切りの時刻。日・時間の足し算は、秒の足し算（`@ts + 86400 * n`）でよい（夏時間を扱わないため）。
+
+```
+@t := import["std:time"]
+@ts := @t.timestamp[{"year": 2026, "month": 1, "day": 31, "hour": 10}]?
+log[@t.iso[@t.add_months[@ts, 1]?]]           // "2026-02-28T10:00:00Z"（月末に丸める）
+log[@t.iso[@t.start_of[@ts, "month"]]]        // "2026-01-01T00:00:00Z"
+log[@t.is_leap[2028], @t.days_in_month[2028, 2]]   // true 29
+```
+
+| 関数 | 内容 |
+|---|---|
+| `is_leap[year]` | うるう年か（真偽値）。`year` は整数（1〜9999） |
+| `days_in_month[year, month]` | その月の日数。`year` は 1〜9999、`month` は 1〜12 の整数 |
+| `add_months[ts, n]` `add_months[ts, n, offset]` | `n` か月後（負なら前）の時刻。`n` は整数。`offset` の暦で計算し、日が月末を超えるなら月末にする（1/31 + 1 か月 = 2/28 か 2/29）。時刻（時分秒）は変えない。年は `add_months[ts, 12 * n]`。1〜9999 年を出るならエラー値（`parse`） |
+| `start_of[ts, unit]` `start_of[ts, unit, offset]` | `unit` の始まりの時刻。`unit` は `"year"` `"month"` `"day"` `"hour"` `"minute"` `"second"`。`offset` の暦で切り捨てる。知らない `unit` は実行時エラー |
+
+| 項目 | 内容 | 状態 |
+|---|---|---|
+| 範囲外の入力 | `ts` が 1〜9999 年の外、型の間違いは実行時エラー（`date` と同じ） | 確定 |
+| システムの時差 | 今回も扱わない。OS の API が要るので、必要になったときに足す（5.13） | 確定 |
+| ビルド | 標準ライブラリだけ。feature はなし | 確定 |
+
+---
+
 ## 6. 旧実装からの主な変更（案）
 
 | 旧実装 | 作り直し版 | 理由 |
