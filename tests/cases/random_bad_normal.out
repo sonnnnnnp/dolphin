@@ -1,0 +1,4 @@
+random_bad_normal.dol:2:1: エラー: random.normal の標準偏差は 0 以上です（-1）
+  |
+2 | @r.normal[0, -1]
+  | ^

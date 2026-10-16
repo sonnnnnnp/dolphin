@@ -1,0 +1,2 @@
+@r := import["std:random"]
+@r.normal[0, -1]

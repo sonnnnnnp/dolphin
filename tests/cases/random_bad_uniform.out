@@ -1,0 +1,4 @@
+random_bad_uniform.dol:2:1: エラー: random.uniform の範囲が逆です（2 > 1）
+  |
+2 | @r.uniform[2, 1]
+  | ^

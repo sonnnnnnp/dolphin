@@ -27,6 +27,7 @@ pub mod math;
 pub mod net;
 pub mod os;
 pub mod path;
+pub mod random;
 #[cfg(feature = "regex")]
 pub mod regex;
 #[cfg(feature = "sqlite")]
@@ -72,6 +73,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     crypto::register(interp);
     csv::register(interp);
     path::register(interp);
+    random::register(interp);
     #[cfg(feature = "regex")]
     regex::register(interp);
     #[cfg(feature = "sqlite")]

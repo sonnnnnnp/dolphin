@@ -1,0 +1,4 @@
+random_bad_choice.dol:2:1: エラー: random.choice に空の配列は渡せません
+  |
+2 | @r.choice[{}]
+  | ^

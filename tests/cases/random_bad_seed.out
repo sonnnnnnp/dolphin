@@ -1,0 +1,4 @@
+random_bad_seed.dol:2:1: エラー: random.seed の 1 番目の引数は整数です（1.5 が渡されました）
+  |
+2 | @r.seed[1.5]
+  | ^

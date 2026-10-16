@@ -1,0 +1,2 @@
+@r := import["std:random"]
+@r.uniform[2, 1]

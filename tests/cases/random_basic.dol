@@ -1,0 +1,70 @@
+// std:random（design.md 5.31）。値そのものではなく、性質を確かめる
+@r := import["std:random"]
+
+take[@n] (
+    @out := {}
+    for @i in range[0, @n] (
+        arr_push[@out, random[]]
+    )
+    # @out
+)
+
+// 同じ種なら同じ並び。違う種なら違う並び
+@r.seed[42]
+@a := take[5]
+@r.seed[42]
+@b := take[5]
+@r.seed[43]
+@c := take[5]
+log[@a == @b, @a == @c]
+
+// random_int や std:random も、種で再現できる
+sample_all[] (
+    # {random_int[1, 100], @r.choice[{1, 2, 3, 4, 5}], @r.uniform[0, 10], @r.normal[0, 1], @r.shuffle[{1, 2, 3, 4, 5}], @r.sample[{1, 2, 3, 4, 5}, 3]}
+)
+@r.seed[7]
+@x := sample_all[]
+@r.seed[7]
+@y := sample_all[]
+log[@x == @y]
+
+// 範囲
+@ok := true
+for @i in range[0, 500] (
+    @n := random_int[-3, 3]
+    @u := @r.uniform[1.5, 2.5]
+    if @n < -3 || @n > 3 || @n != floor[@n] || @u < 1.5 || @u > 2.5 (
+        @ok = false
+    )
+)
+log["範囲", @ok]
+log[random_int[5, 5], @r.uniform[2, 2], @r.normal[3, 0]]
+
+// 全部の値が出る（偏りなく選べているかの目安）
+@seen := {:}
+for @i in range[0, 300] (
+    @seen{@r.choice[{"a", "b", "c"}]} = true
+)
+log[map_len[@seen]]
+
+// shuffle は元の配列を変えず、同じ要素の並べ替え。sample は重ならない
+@src := {1, 2, 3, 4, 5, 6, 7, 8}
+@sh := @r.shuffle[@src]
+log[@src, arr_sort[@sh] == @src, arr_len[@sh]]
+@sm := @r.sample[@src, 5]
+@set := {:}
+for @v in @sm (
+    @set{"@v"} = true
+)
+log[arr_len[@sm], map_len[@set], arr_all[@sm, [@v] ( # arr_contains[@src, @v] )]]
+log[@r.sample[@src, 0], @r.sample[{}, 0], @r.shuffle[{}], @r.shuffle[{9}]]
+
+// 正規分布の目安（平均が 0 に近い）
+@r.seed[1]
+@sum := 0
+for @i in range[0, 2000] (
+    @sum = @sum + @r.normal[0, 1]
+)
+log[abs[@sum / 2000] < 0.1]
+@r.seed[]
+log[@r.choice[{"only"}]]

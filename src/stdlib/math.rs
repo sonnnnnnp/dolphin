@@ -188,7 +188,22 @@ fn seed() -> u64 {
     nanos | 1
 }
 
-fn next_u64() -> u64 {
+/// 乱数列の種を決める。`None` なら現在時刻から（`std:random` の `seed`）
+pub(super) fn reseed(seed_value: Option<i64>) {
+    let state = match seed_value {
+        None => seed(),
+        Some(n) => {
+            // splitmix64 で混ぜる。近い値の種でも、離れた状態になる
+            let mut z = (n as u64).wrapping_add(0x9E37_79B9_7F4A_7C15);
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        }
+    };
+    RNG_STATE.with(|cell| cell.set(if state == 0 { 1 } else { state }));
+}
+
+pub(super) fn next_u64() -> u64 {
     RNG_STATE.with(|state| {
         let mut x = state.get();
         x ^= x >> 12;
@@ -200,8 +215,19 @@ fn next_u64() -> u64 {
 }
 
 /// 0 以上 1 未満
-fn next_f64() -> f64 {
+pub(super) fn next_f64() -> f64 {
     (next_u64() >> 11) as f64 / (1u64 << 53) as f64
+}
+
+/// 0 以上 `n` 未満の整数（`n` > 0）。剰余の偏りが出ないよう、棄却法で選ぶ
+pub(super) fn below(n: u64) -> u64 {
+    let threshold = n.wrapping_neg() % n;
+    loop {
+        let r = next_u64();
+        if r >= threshold {
+            return r % n;
+        }
+    }
 }
 
 /// 0 以上 1 未満の数
@@ -218,6 +244,8 @@ fn random_int(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> 
     if min > max {
         return Err(format!("random_int の範囲が逆です（{min} > {max}）"));
     }
-    let span = (max - min + 1) as f64;
-    Ok(Value::Num((min + (next_f64() * span) as i64) as f64))
+    let span = i128::from(max) - i128::from(min) + 1;
+    // 範囲が u64 に収まらない（i64 の全体）ときは、64 ビットをそのまま使う
+    let offset = u64::try_from(span).map_or_else(|_| next_u64(), below);
+    Ok(Value::Num((i128::from(min) + i128::from(offset)) as f64))
 }

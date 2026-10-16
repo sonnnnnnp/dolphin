@@ -1,0 +1,2 @@
+@r := import["std:random"]
+@r.sample[{1, 2}, 3]

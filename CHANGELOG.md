@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-10-16
+
+乱数（[design.md 5.31](docs/design.md)）。「Python に比べて足りないもの」の 4 つめ。
+
+### 追加
+- `import["std:random"]`（標準ライブラリだけ。feature なし）: `seed[n]`（`random[]` `random_int[…]` と共通の乱数列の種を決めて、結果を再現できる。`seed[]` は時刻から決め直す）`choice[items]` `shuffle[items]`（新しい配列）`sample[items, k]`（重ならない `k` 個）`uniform[a, b]` `normal[mean, stddev]`（Box–Muller）。暗号用の乱数は引き続き `std:crypto` の `random_bytes`
+
+### 変更
+- `random_int[min, max]` を、剰余の偏りが出ない方式（棄却法）にした。`max - min + 1` が 64 ビットに収まらない範囲でも動く
+
 ## [0.38.0] - 2026-10-16
 
 日付の計算（[design.md 5.30](docs/design.md)）。「Python に比べて足りないもの」の 3 つめ。日付の分解・書式・読み取りは v0.12.0 の `std:time` にあったので、足りなかった暦の計算だけを足した。

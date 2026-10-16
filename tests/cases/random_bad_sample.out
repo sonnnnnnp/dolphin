@@ -1,0 +1,4 @@
+random_bad_sample.dol:2:1: エラー: random.sample の個数は 0〜2 の整数です（3）
+  |
+2 | @r.sample[{1, 2}, 3]
+  | ^
