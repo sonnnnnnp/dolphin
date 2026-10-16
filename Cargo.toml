@@ -1,6 +1,6 @@
 [package]
 name = "dolphin"
-version = "0.35.0"
+version = "0.36.0"
 edition = "2024"
 
 # コア言語（lib）は外部クレートに依存しない。CLI の便利機能だけ feature で足す
@@ -12,6 +12,8 @@ regex = { version = "1", optional = true }
 rustyline = { version = "18.0.1", optional = true }
 # 音の再生（`import["std:audio"]`）。Linux では ALSA の開発用ファイルが要る
 rodio = { version = "0.23", optional = true, default-features = false, features = ["playback", "wav", "flac", "mp3", "vorbis"] }
+# SQLite（`import["std:sqlite"]`）。ソースを同梱してビルドする（C コンパイラが要る）
+rusqlite = { version = "0.40", optional = true, features = ["bundled"] }
 # 画像のデコード（`std:canvas` の `image`）
 image = { version = "0.25", optional = true, default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp"] }
 # GUI（`import["std:ui"]`）。OpenGL（glow）で描く
@@ -33,3 +35,5 @@ regex = ["dep:regex"]
 ui = ["dep:eframe", "dep:image"]
 # 音の再生（`import["std:audio"]`）。既定では無効（`--features audio`）
 audio = ["dep:rodio"]
+# SQLite（`import["std:sqlite"]`）。ソースを同梱するのでビルドが長くなる。既定では無効（`--features sqlite`）
+sqlite = ["dep:rusqlite"]

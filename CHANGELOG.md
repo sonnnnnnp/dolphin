@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-10-16
+
+SQLite（[design.md 5.28](docs/design.md)）。「Python に比べて足りないもの」を埋める 1 つめ。
+
+### 追加
+- `import["std:sqlite"]`（`sqlite` feature。**既定では無効**で、`cargo build --features sqlite`。`rusqlite`（`bundled`）で SQLite のソースを同梱するので、利用者が SQLite を別に入れる必要はない。C コンパイラが要る）: `open[path, options]`（`read_only` `timeout`。`":memory:"` でメモリ上の DB）`close` `exec[c, sql, params]`（`{"changes", "last_id"}` を返す）`query[c, sql, params]`（行を、列名をキーにしたマップの配列で返す）`run_script[c, sql]`
+- `params` は配列（`?` に順番に）かマップ（`:name` `@name` `$name` に名前で）。`nil`・真偽値・数値・文字列・バイト列を渡せる。整数の数値は INTEGER、そうでなければ REAL
+- 失敗はエラー値（種類 `sql` `busy` `closed` `io`）。接続は `handle` 型で、参照されなくなれば自動で閉じる。トランザクションは `exec[c, "BEGIN"]` などの SQL で書く
+- CI に `--features sqlite` のビルドとテストを足した
+
 ## [0.35.0] - 2026-10-12
 
 音（[design.md 5.27](docs/design.md)）。G の最後。

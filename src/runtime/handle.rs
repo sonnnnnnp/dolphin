@@ -32,7 +32,19 @@ pub enum HandleKind {
     WsServer {
         tx: Sender<WsOut>,
     },
+    /// SQLite の接続（`std:sqlite`。design.md 5.28）
+    #[cfg(feature = "sqlite")]
+    Sqlite(SqliteConn),
+    #[cfg(feature = "sqlite")]
+    SqliteClosed,
     Closed,
+}
+
+#[cfg(feature = "sqlite")]
+pub struct SqliteConn {
+    pub conn: rusqlite::Connection,
+    /// 開いたときのパス（表示用。メモリ上なら `:memory:`）
+    pub path: String,
 }
 
 pub struct Handle {
@@ -47,7 +59,12 @@ impl Handle {
     }
 
     pub fn close(&self) {
-        *self.inner.borrow_mut() = HandleKind::Closed;
+        let mut inner = self.inner.borrow_mut();
+        *inner = match &*inner {
+            #[cfg(feature = "sqlite")]
+            HandleKind::Sqlite(_) | HandleKind::SqliteClosed => HandleKind::SqliteClosed,
+            _ => HandleKind::Closed,
+        };
     }
 }
 
@@ -68,6 +85,10 @@ impl fmt::Display for Handle {
                 Err(_) => write!(f, "<websocket 接続>"),
             },
             HandleKind::WsServer { .. } => write!(f, "<websocket サーバー側の接続>"),
+            #[cfg(feature = "sqlite")]
+            HandleKind::Sqlite(db) => write!(f, "<sqlite 接続 {}>", db.path),
+            #[cfg(feature = "sqlite")]
+            HandleKind::SqliteClosed => write!(f, "<sqlite 閉じています>"),
             HandleKind::Closed => write!(f, "<tcp 閉じています>"),
         }
     }

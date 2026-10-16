@@ -1,0 +1,4 @@
+sqlite_bad_option.dol:2:1: エラー: sqlite.open のオプション `mode` は知りません
+  |
+2 | @db.open[":memory:", {"mode": "ro"}]
+  | ^

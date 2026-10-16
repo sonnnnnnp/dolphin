@@ -28,3 +28,6 @@ jobs:
       # 音（audio feature）も、ビルドと、出力機器がなくてできるテストが通ること
       - run: cargo clippy --all-targets --features audio -- -D warnings
       - run: cargo test --features audio
+      # SQLite（sqlite feature）も、ビルドとテストが通ること
+      - run: cargo clippy --all-targets --features sqlite -- -D warnings
+      - run: cargo test --features sqlite

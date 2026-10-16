@@ -28,6 +28,8 @@ pub mod os;
 pub mod path;
 #[cfg(feature = "regex")]
 pub mod regex;
+#[cfg(feature = "sqlite")]
+pub mod sqlite;
 pub mod string;
 pub mod time;
 pub mod types;
@@ -70,6 +72,8 @@ pub fn register(interp: &mut Interpreter<'_>) {
     path::register(interp);
     #[cfg(feature = "regex")]
     regex::register(interp);
+    #[cfg(feature = "sqlite")]
+    sqlite::register(interp);
     os::register(interp);
     time::register(interp);
 }

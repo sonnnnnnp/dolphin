@@ -1,0 +1,15 @@
+handle <sqlite 接続 :memory:>
+1 1
+1 2
+3
+1 alice 1.5 nil nil
+bytes nil 2
+carol nil
+{{"name": "bob"}, {"name": "carol"}}
+{}
+{{"x": 1, "t": "integer"}, {"x": 0, "t": "integer"}, {"x": 3, "t": "integer"}, {"x": 0.25, "t": "real"}}
+{{"a": 2}}
+0
+3
+<sqlite 閉じています>
+true

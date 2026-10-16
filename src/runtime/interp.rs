@@ -1004,6 +1004,7 @@ impl<'a> Interpreter<'a> {
                 "std:regex" if !cfg!(feature = "regex") => Some("regex"),
                 "std:ui" if !cfg!(feature = "ui") => Some("ui"),
                 "std:audio" if !cfg!(feature = "audio") => Some("audio"),
+                "std:sqlite" if !cfg!(feature = "sqlite") => Some("sqlite"),
                 _ => None,
             };
             if let Some(feature) = missing_feature {

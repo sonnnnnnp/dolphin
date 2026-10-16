@@ -1,0 +1,3 @@
+@db := import["std:sqlite"]
+@c := @db.open[":memory:"]?
+@db.exec[@c, "SELECT ?", {{1, 2}}]

@@ -1,0 +1,2 @@
+@db := import["std:sqlite"]
+@db.open[":memory:", {"mode": "ro"}]

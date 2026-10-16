@@ -1,0 +1,43 @@
+// std:sqlite（design.md 5.28）
+@db := import["std:sqlite"]
+@c := @db.open[":memory:"]?
+log[type_of[@c], @c]
+@db.run_script[@c, "CREATE TABLE u (id INTEGER PRIMARY KEY, name TEXT, score REAL, data BLOB, note TEXT);
+CREATE TABLE t (x)"]?
+
+// exec は変更した行数と最後の id を返す
+@r := @db.exec[@c, "INSERT INTO u (name, score) VALUES (?, ?)", {"alice", 1.5}]?
+log[@r.changes, @r.last_id]
+@r2 := @db.exec[@c, "INSERT INTO u (name, score, data, note) VALUES (:n, :s, :d, :x)",
+    {"n": "bob", "s": 2, "d": str_to_bytes["hi"], "x": nil}]?
+log[@r2.changes, @r2.last_id]
+@db.exec[@c, r"INSERT INTO u (name) VALUES (@a)", {"a": "carol"}]?
+
+// query は列名をキーにしたマップの配列
+@rows := @db.query[@c, "SELECT * FROM u ORDER BY id"]?
+log[arr_len[@rows]]
+log[@rows{0}.id, @rows{0}.name, @rows{0}.score, @rows{0}.data, @rows{0}.note]
+log[type_of[@rows{1}.data], @rows{1}.note, @rows{1}.score]
+log[@rows{2}.name, @rows{2}.score]
+log[@db.query[@c, "SELECT name FROM u WHERE id > ?", {1}]?]
+log[@db.query[@c, "SELECT * FROM u WHERE id > 100"]?]
+
+// 型の対応: 真偽値は 1 / 0、整数と小数、2^53 を超える整数
+@db.exec[@c, "INSERT INTO t VALUES (?), (?), (?), (?)", {true, false, 3, 0.25}]?
+log[@db.query[@c, "SELECT x, typeof(x) AS t FROM t"]?]
+
+// 同じ名前の列は後のものが勝つ。結果の行がある文を exec しても行は捨てる
+log[@db.query[@c, "SELECT 1 AS a, 2 AS a"]?]
+log[@db.exec[@c, "SELECT * FROM u"]?.changes]
+
+// トランザクションは SQL で書く
+@db.exec[@c, "BEGIN"]?
+@db.exec[@c, "DELETE FROM u"]?
+@db.exec[@c, "ROLLBACK"]?
+log[arr_len[@db.query[@c, "SELECT * FROM u"]?]]
+
+// 閉じる。何度呼んでもよい
+@db.close[@c]
+@db.close[@c]
+log[@c]
+log[@c == @c]

@@ -1,7 +1,8 @@
 //! tests/cases/*.dol を実行し、出力を同名の *.out と比較する
 //! エラーになるケースは、エラー表示も含めて *.out に書く。
 //! `http` feature を外したときだけ出力が変わるケースは、`名前.nohttp.out` に書く。
-//! 名前が `crypto` で始まるケースは、`crypto` feature を外した版では動かさない（`regex` も同じ）
+//! 名前が `crypto` で始まるケースは、`crypto` feature を外した版では動かさない（`regex` も同じ）。
+//! 名前が `sqlite` で始まるケースは、`sqlite` feature を付けた版でだけ動かす
 
 use std::fs;
 use std::path::Path;
@@ -22,11 +23,17 @@ fn golden() {
             continue;
         }
         // `ui` `audio` feature を付けた版では、あるモジュールの一覧が変わる
-        if name == "std_missing.dol" && (cfg!(feature = "ui") || cfg!(feature = "audio")) {
+        if name == "std_missing.dol"
+            && (cfg!(feature = "ui") || cfg!(feature = "audio") || cfg!(feature = "sqlite"))
+        {
             continue;
         }
         // `regex` feature を外した版では、std:regex を使うケースは動かさない
         if name.starts_with("regex") && !cfg!(feature = "regex") {
+            continue;
+        }
+        // `sqlite` feature は既定では無効
+        if name.starts_with("sqlite") && !cfg!(feature = "sqlite") {
             continue;
         }
         let src = fs::read_to_string(&path).unwrap();

@@ -1,0 +1,25 @@
+@db := import["std:sqlite"]
+@c := @db.open[":memory:"]?
+@db.exec[@c, "CREATE TABLE u (id INTEGER PRIMARY KEY, name TEXT NOT NULL)"]?
+
+// 構文の間違い・制約違反・パラメータの数と名前は sql
+log[err_kind[@db.exec[@c, "SELEKT 1"]]]
+log[err_kind[@db.query[@c, "SELECT * FROM nothing"]]]
+log[err_kind[@db.exec[@c, "INSERT INTO u (name) VALUES (?)", {nil}]]]
+log[err_kind[@db.exec[@c, "INSERT INTO u (name) VALUES (?)"]]]
+log[err_kind[@db.exec[@c, "INSERT INTO u (name) VALUES (?)", {"a", "b"}]]]
+log[err_kind[@db.exec[@c, "INSERT INTO u (name) VALUES (:n)", {"m": "a"}]]]
+log[err_kind[@db.exec[@c, "INSERT INTO u (id, name) VALUES (:i, :n)", {"n": "a"}]]]
+log[err_kind[@db.exec[@c, "INSERT INTO u (name) VALUES ('x'); INSERT INTO u (name) VALUES ('y')"]]]
+log[err_kind[@db.run_script[@c, "INSERT INTO u (name) VALUES (NULL)"]]]
+log[arr_len[@db.query[@c, "SELECT * FROM u"]?]]
+
+// 開けないのは io
+log[err_kind[@db.open["no_such_dir_dolphin_test/a.db"]]]
+log[err_kind[@db.open["no_such_dir_dolphin_test/a.db", {"read_only": true, "timeout": 0}]]]
+
+// 閉じた接続は closed
+@db.close[@c]
+log[err_kind[@db.exec[@c, "SELECT 1"]]]
+log[err_kind[@db.query[@c, "SELECT 1"]]]
+log[err_kind[@db.run_script[@c, "SELECT 1"]]]
