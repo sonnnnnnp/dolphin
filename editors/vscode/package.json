@@ -1,0 +1,55 @@
+{
+  "name": "dolphin-lang",
+  "displayName": "Dolphin",
+  "description": "Dolphin 言語（.dol）のシンタックスハイライト",
+  "version": "0.1.1",
+  "publisher": "dolphin",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "dolphin",
+        "aliases": [
+          "Dolphin",
+          "dolphin"
+        ],
+        "extensions": [
+          ".dol"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "dolphin",
+        "scopeName": "source.dolphin",
+        "path": "./syntaxes/dolphin.tmLanguage.json"
+      }
+    ],
+    "configurationDefaults": {
+      "[dolphin]": {
+        "editor.tokenColorCustomizations": {
+          "textMateRules": [
+            {
+              "scope": "variable.other.readwrite.dolphin",
+              "settings": {
+                "foreground": "#4EA1E8"
+              }
+            },
+            {
+              "scope": "punctuation.definition.variable.dolphin",
+              "settings": {
+                "foreground": "#D19A66"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

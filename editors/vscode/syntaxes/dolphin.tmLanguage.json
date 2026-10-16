@@ -1,0 +1,239 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Dolphin",
+  "scopeName": "source.dolphin",
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#raw-string"
+    },
+    {
+      "include": "#string"
+    },
+    {
+      "include": "#number"
+    },
+    {
+      "include": "#function-definition"
+    },
+    {
+      "include": "#keyword"
+    },
+    {
+      "include": "#constant"
+    },
+    {
+      "include": "#variable"
+    },
+    {
+      "include": "#member-call"
+    },
+    {
+      "include": "#member"
+    },
+    {
+      "include": "#function-call"
+    },
+    {
+      "include": "#spread"
+    },
+    {
+      "include": "#return"
+    },
+    {
+      "include": "#operator"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.double-slash.dolphin",
+      "match": "//.*$"
+    },
+    "raw-string": {
+      "patterns": [
+        {
+          "name": "string.quoted.other.raw.dolphin",
+          "begin": "\\br(#*)\"",
+          "end": "\"\\1"
+        }
+      ]
+    },
+    "string": {
+      "name": "string.quoted.double.dolphin",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.dolphin",
+          "match": "\\\\[\"\\\\@ntr$]"
+        },
+        {
+          "name": "invalid.illegal.escape.dolphin",
+          "match": "\\\\."
+        },
+        {
+          "include": "#interpolation"
+        },
+        {
+          "match": "(@)([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.variable.dolphin"
+            },
+            "2": {
+              "name": "variable.other.readwrite.dolphin"
+            }
+          }
+        }
+      ]
+    },
+    "interpolation": {
+      "name": "meta.interpolation.dolphin",
+      "begin": "@\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.interpolation.begin.dolphin"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.interpolation.end.dolphin"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#nested-braces"
+        },
+        {
+          "include": "$self"
+        }
+      ]
+    },
+    "nested-braces": {
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#nested-braces"
+        },
+        {
+          "include": "$self"
+        }
+      ]
+    },
+    "number": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.dolphin",
+          "match": "\\b0x[0-9A-Fa-f](?:_?[0-9A-Fa-f])*\\b"
+        },
+        {
+          "name": "constant.numeric.binary.dolphin",
+          "match": "\\b0b[01](?:_?[01])*\\b"
+        },
+        {
+          "name": "constant.numeric.octal.dolphin",
+          "match": "\\b0o[0-7](?:_?[0-7])*\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.dolphin",
+          "match": "\\b[0-9](?:_?[0-9])*(?:\\.[0-9](?:_?[0-9])*)?(?:[eE][+-]?[0-9]+)?\\b"
+        }
+      ]
+    },
+    "keyword": {
+      "patterns": [
+        {
+          "name": "keyword.control.dolphin",
+          "match": "\\b(if|else|while|for|in|break|continue)\\b"
+        }
+      ]
+    },
+    "constant": {
+      "name": "constant.language.dolphin",
+      "match": "\\b(true|false|nil)\\b"
+    },
+    "variable": {
+      "match": "(@)([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.variable.dolphin"
+        },
+        "2": {
+          "name": "variable.other.readwrite.dolphin"
+        }
+      }
+    },
+    "function-definition": {
+      "comment": "名前[引数] ( の形（行頭）",
+      "match": "^\\s*([A-Za-z_][A-Za-z0-9_]*)(?=\\[[^\\]\\n]*\\]\\s*\\(\\s*(?://.*)?$)",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.dolphin"
+        }
+      }
+    },
+    "member-call": {
+      "comment": "@m.f[ のような、モジュール・マップの関数の呼び出し",
+      "match": "(\\.)([A-Za-z_][A-Za-z0-9_]*)(?=\\[)",
+      "captures": {
+        "1": {
+          "name": "punctuation.accessor.dolphin"
+        },
+        "2": {
+          "name": "support.function.dolphin"
+        }
+      }
+    },
+    "member": {
+      "match": "(\\.)([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": {
+          "name": "punctuation.accessor.dolphin"
+        },
+        "2": {
+          "name": "variable.other.property.dolphin"
+        }
+      }
+    },
+    "function-call": {
+      "match": "\\b([A-Za-z_][A-Za-z0-9_]*)(?=\\[)",
+      "captures": {
+        "1": {
+          "name": "support.function.dolphin"
+        }
+      }
+    },
+    "spread": {
+      "name": "keyword.operator.spread.dolphin",
+      "match": "\\.\\.\\."
+    },
+    "return": {
+      "name": "keyword.control.return.dolphin",
+      "match": "#"
+    },
+    "operator": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.dolphin",
+          "match": ":=|="
+        },
+        {
+          "name": "keyword.operator.comparison.dolphin",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.logical.dolphin",
+          "match": "&&|\\|\\||!|\\?"
+        },
+        {
+          "name": "keyword.operator.arithmetic.dolphin",
+          "match": "[+\\-*/%]"
+        }
+      ]
+    }
+  }
+}
