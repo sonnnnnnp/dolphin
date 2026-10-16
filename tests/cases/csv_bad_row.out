@@ -1,0 +1,4 @@
+csv_bad_row.dol:2:1: エラー: csv.stringify の行は、すべて配列か、すべてマップです（2 行目がマップ）
+  |
+2 | @csv.stringify[{{"a", "b"}, {"x": 1}}]
+  | ^

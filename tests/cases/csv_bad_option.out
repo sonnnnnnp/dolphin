@@ -1,0 +1,4 @@
+csv_bad_option.dol:2:1: エラー: csv.parse の `delimiter` は、`"` と改行以外の 1 文字です（",,"）
+  |
+2 | @csv.parse["a,b", {"delimiter": ",,"}]
+  | ^

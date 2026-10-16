@@ -1,0 +1,44 @@
+{{"a", "b", "c"}, {"1", "2", "3"}}
+{{"a", "b"}, {"x, y", "he said \"hi\""}}
+{{"line1\nline2", "z"}}
+{{"a", "b"}, {"c", "d"}}
+{{"a", "b"}}
+{}
+{{"a", "", "c"}, {"", ""}, {""}}
+{{"say \"hi\"", "ok"}}
+{{"a", "b", "c"}, {"1", "2", "3"}}
+{{"a", "b"}, {"1", "2"}}
+{{"name": "alice", "age": "30"}, {"name": "b, c", "age": "4"}, {"name": "d", "age": nil}}
+b, c nil
+{}
+{}
+{{"a": "2"}}
+a,b
+"x, y","he said ""hi"""
+"l1
+l2",
+
+1,2.5,true,,s
+
+
+a;b
+
+"a;b";c
+
+name,age
+alice,30
+"b, c",4
+
+alice,30
+"b, c",4
+
+age,missing,name
+30,,alice
+4,,"b, c"
+
+a
+1
+2
+
+
+true

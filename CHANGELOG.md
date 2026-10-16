@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-10-16
+
+CSV（[design.md 5.29](docs/design.md)）。「Python に比べて足りないもの」の 2 つめ。
+
+### 追加
+- `import["std:csv"]`（標準ライブラリだけ。feature なし）: `parse[text, options]`（文字列の配列の配列。`header: true` で 1 行目を見出しにしたマップの配列）`stringify[rows, options]`（配列かマップの行の配列を文字列に。マップは `columns` で列を選べる）。オプションは `delimiter`（TSV など）`header` `columns` `newline`
+- RFC 4180 に沿う: `"` で囲んだフィールド（中の `""`、区切り・改行）、`
+` と `
+`、先頭の BOM、空の行の読み飛ばし。失敗はエラー値（`parse`。行番号つき）
+
 ## [0.36.0] - 2026-10-16
 
 SQLite（[design.md 5.28](docs/design.md)）。「Python に比べて足りないもの」を埋める 1 つめ。

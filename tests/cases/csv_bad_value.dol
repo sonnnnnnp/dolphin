@@ -1,0 +1,2 @@
+@csv := import["std:csv"]
+@csv.stringify[{{"a", {1, 2}}}]

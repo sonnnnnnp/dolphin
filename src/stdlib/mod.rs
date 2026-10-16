@@ -10,6 +10,7 @@ pub mod bits;
 pub mod bytes;
 #[cfg(feature = "crypto")]
 pub mod crypto;
+pub mod csv;
 pub mod debug;
 pub mod encoding;
 pub mod error;
@@ -69,6 +70,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     encoding::register(interp);
     #[cfg(feature = "crypto")]
     crypto::register(interp);
+    csv::register(interp);
     path::register(interp);
     #[cfg(feature = "regex")]
     regex::register(interp);

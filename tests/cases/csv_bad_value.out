@@ -1,0 +1,4 @@
+csv_bad_value.dol:2:1: エラー: csv.stringify で書けるのは nil・真偽値・数値・文字列です（配列が渡されました）
+  |
+2 | @csv.stringify[{{"a", {1, 2}}}]
+  | ^

@@ -1,0 +1,2 @@
+@csv := import["std:csv"]
+@csv.parse["a,b", {"delimiter": ",,"}]

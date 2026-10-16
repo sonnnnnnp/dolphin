@@ -1,4 +1,4 @@
-std_missing.dol:1:7: エラー: 組み込みモジュール `std:nope` はありません（あるのは std:async、std:bits、std:crypto、std:encoding、std:http、std:json、std:math、std:net、std:os、std:path、std:regex、std:time、std:ws）
+std_missing.dol:1:7: エラー: 組み込みモジュール `std:nope` はありません（あるのは std:async、std:bits、std:crypto、std:csv、std:encoding、std:http、std:json、std:math、std:net、std:os、std:path、std:regex、std:time、std:ws）
   |
 1 | @x := import["std:nope"]
   |       ^

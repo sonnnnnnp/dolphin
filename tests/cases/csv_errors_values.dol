@@ -1,0 +1,6 @@
+@csv := import["std:csv"]
+log[err_kind[@csv.parse["a,\"b"]]]
+log[err_message[@csv.parse["a,b\nc,\"d\ne"]]]
+log[err_message[@csv.parse["\"a\"x,b"]]]
+log[err_message[@csv.parse["h1,h2\n1,2\n1,2,3\n", {"header": true}]]]
+log[is_error[@csv.parse["a,b\n1,2,3"]]]

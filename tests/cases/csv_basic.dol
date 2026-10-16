@@ -1,0 +1,38 @@
+// std:csv（design.md 5.29）
+@csv := import["std:csv"]
+
+// 配列の配列。引用符・"" ・区切りと改行を含むフィールド・CRLF・BOM・空の行
+log[@csv.parse["a,b,c\n1,2,3\n"]?]
+log[@csv.parse["a,b\r\n\"x, y\",\"he said \"\"hi\"\"\"\r\n"]?]
+log[@csv.parse["\"line1\nline2\",z"]?]
+log[@csv.parse["\n\na,b\n\n\nc,d"]?]
+log[@csv.parse[bytes_to_str[bytes_from_arr[{239, 187, 191}]]? + "a,b"]?]
+log[@csv.parse[""]?]
+log[@csv.parse["a,,c\n,\n\"\""]?]
+log[@csv.parse["say \"hi\",ok"]?]
+log[@csv.parse["a;b;c\n1;2;3", {"delimiter": ";"}]?]
+log[@csv.parse["a\tb\n1\t2", {"delimiter": "\t"}]?]
+
+// 見出し
+@rows := @csv.parse["name,age\nalice,30\n\"b, c\",4\nd\n", {"header": true}]?
+log[@rows]
+log[@rows{1}.name, @rows{2}.age]
+log[@csv.parse["only,header\n", {"header": true}]?]
+log[@csv.parse["", {"header": true}]?]
+log[@csv.parse["a,a\n1,2", {"header": true}]?]
+
+// 書く
+log[@csv.stringify[{{"a", "b"}, {"x, y", "he said \"hi\""}, {"l1\nl2", ""}}]]
+log[@csv.stringify[{{1, 2.5, true, nil, "s"}}]]
+log[@csv.stringify[{}]]
+log[@csv.stringify[{{"a", "b"}}, {"delimiter": ";", "newline": "\r\n"}]]
+log[@csv.stringify[{{"a;b", "c"}}, {"delimiter": ";"}]]
+@people := {{"name": "alice", "age": 30}, {"name": "b, c", "age": 4}}
+log[@csv.stringify[@people]]
+log[@csv.stringify[@people, {"header": false}]]
+log[@csv.stringify[@people, {"columns": {"age", "missing", "name"}}]]
+log[@csv.stringify[{{"a": 1}, {"a": 2, "extra": 3}, {"b": 9}}]]
+
+// 往復
+@text := "name,age\nalice,30\n\"b, c\",4\n"
+log[@csv.stringify[@csv.parse[@text, {"header": true}]?] == @text]
