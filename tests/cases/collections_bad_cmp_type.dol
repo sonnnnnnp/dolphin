@@ -1,0 +1,2 @@
+@c := import["std:collections"]
+@c.heapify[{2, 1}, 5]

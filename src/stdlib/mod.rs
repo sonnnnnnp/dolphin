@@ -8,6 +8,7 @@ pub mod async_;
 pub mod audio;
 pub mod bits;
 pub mod bytes;
+pub mod collections;
 #[cfg(feature = "crypto")]
 pub mod crypto;
 pub mod csv;
@@ -71,6 +72,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     encoding::register(interp);
     #[cfg(feature = "crypto")]
     crypto::register(interp);
+    collections::register(interp);
     csv::register(interp);
     path::register(interp);
     random::register(interp);

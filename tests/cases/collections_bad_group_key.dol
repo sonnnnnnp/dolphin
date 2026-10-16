@@ -1,0 +1,2 @@
+@c := import["std:collections"]
+@c.group_by[{1}, [@x] ( # @x )]

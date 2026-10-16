@@ -1,0 +1,4 @@
+collections_bad_pop_empty.dol:2:1: エラー: 空のヒープからは取り出せません
+  |
+2 | @c.heap_pop[{}]
+  | ^

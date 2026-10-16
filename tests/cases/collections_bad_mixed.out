@@ -1,0 +1,4 @@
+collections_bad_mixed.dol:2:1: エラー: collections.heap_push の要素は、すべて数値かすべて文字列である必要があります（文字列と数値を比べました。比較の関数を渡してください）
+  |
+2 | @c.heap_push[{1}, "a"]
+  | ^

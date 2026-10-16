@@ -148,6 +148,7 @@ count: 3
 | [v0.37.0](https://github.com/sonnnnnnp/dolphin/tree/v0.37.0) | CSV `std:csv` | [v0.36.0...v0.37.0](https://github.com/sonnnnnnp/dolphin/compare/v0.36.0...v0.37.0) |
 | [v0.38.0](https://github.com/sonnnnnnp/dolphin/tree/v0.38.0) | 日付の計算（`std:time` の `add_months` `start_of` など） | [v0.37.0...v0.38.0](https://github.com/sonnnnnnp/dolphin/compare/v0.37.0...v0.38.0) |
 | [v0.39.0](https://github.com/sonnnnnnp/dolphin/tree/v0.39.0) | 乱数 `std:random`（`seed` `choice` `shuffle` `sample` など） | [v0.38.0...v0.39.0](https://github.com/sonnnnnnp/dolphin/compare/v0.38.0...v0.39.0) |
+| [v0.40.0](https://github.com/sonnnnnnp/dolphin/tree/v0.40.0) | `std:collections`（ヒープ・`counts` `unique` `group_by` `chunk` `zip` `flatten`） | [v0.39.0...v0.40.0](https://github.com/sonnnnnnp/dolphin/compare/v0.39.0...v0.40.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

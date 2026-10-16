@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-10-16
+
+コレクションの道具（[design.md 5.32](docs/design.md)）。「Python に比べて足りないもの」の 5 つめ（これで 1 番の 5 つが揃った）。
+
+### 追加
+- `import["std:collections"]`（標準ライブラリだけ。feature なし）: ヒープ `heap_push` `heap_pop` `heap_peek` `heapify`（普通の配列をその場でヒープとして使う。順序は既定で数値同士・文字列同士、または `arr_sort_by` と同じ比較の関数）、`counts`（個数）`unique`（重複除去）`group_by`、`chunk` `zip` `flatten`
+- 比較の関数の中でヒープを書き換えても、落ちずにエラーになる（比べるたびに短く借り、借りたまま関数を呼ばない）
+- 集合型・`deque`・タプルは作らない（設計書 5.32 に理由）
+
 ## [0.39.0] - 2026-10-16
 
 乱数（[design.md 5.31](docs/design.md)）。「Python に比べて足りないもの」の 4 つめ。

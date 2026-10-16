@@ -1,0 +1,4 @@
+collections_bad_peek_empty.dol:2:1: エラー: 空のヒープは見られません
+  |
+2 | @c.heap_peek[{}]
+  | ^

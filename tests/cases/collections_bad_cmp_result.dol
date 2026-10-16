@@ -1,0 +1,2 @@
+@c := import["std:collections"]
+@c.heap_push[{1}, 2, [@x, @y] ( # "no" )]

@@ -1,0 +1,4 @@
+collections_bad_group_key.dol:2:1: エラー: collections.group_by の関数は文字列を返す必要があります（数値でした）
+  |
+2 | @c.group_by[{1}, [@x] ( # @x )]
+  | ^

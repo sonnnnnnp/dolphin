@@ -1,0 +1,4 @@
+collections_bad_cmp_result.dol:2:1: エラー: collections.heap_push の関数は数値を返す必要があります（文字列でした）
+  |
+2 | @c.heap_push[{1}, 2, [@x, @y] ( # "no" )]
+  | ^

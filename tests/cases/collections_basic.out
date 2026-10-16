@@ -1,0 +1,20 @@
+1 8
+{1, 2, 2, 3, 5, 7, 8, 9}
+apple fig pear
+{1, 2, 3, 4, 5, 6, 7, 8, 9}
+true
+urgent normal low
+10
+{{"item": "a", "count": 3}, {"item": "b", "count": 2}, {"item": "c", "count": 1}}
+{{"item": 1, "count": 2}, {"item": "1", "count": 1}, {"item": true, "count": 1}, {"item": nil, "count": 2}}
+{3, 1, 2}
+{{1, 2}, {2, 1}, {"k": 1}}
+{} {}
+z 3
+{"a": {"apple", "avocado"}, "b": {"banana", "blueberry"}, "c": {"cherry"}}
+{:}
+{{1, 2}, {3, 4}, {5}} {{1, 2}, {3, 4}} {} {{1, 2}}
+{{1, "a"}, {2, "b"}} {}
+{{0, "x"}, {1, "y"}, {2, "z"}}
+{1, 2, 3, {4}, "s"} {}
+{1, 1, 2}

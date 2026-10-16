@@ -1,0 +1,4 @@
+collections_bad_chunk.dol:2:1: エラー: collections.chunk の個数は 1 以上の整数です（0）
+  |
+2 | @c.chunk[{1, 2}, 0]
+  | ^

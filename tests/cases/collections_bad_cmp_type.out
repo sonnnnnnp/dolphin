@@ -1,0 +1,4 @@
+collections_bad_cmp_type.dol:2:1: エラー: collections.heapify の 2 番目の引数は関数です（数値が渡されました）
+  |
+2 | @c.heapify[{2, 1}, 5]
+  | ^

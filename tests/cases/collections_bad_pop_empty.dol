@@ -1,0 +1,2 @@
+@c := import["std:collections"]
+@c.heap_pop[{}]

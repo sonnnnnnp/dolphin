@@ -1,0 +1,2 @@
+@c := import["std:collections"]
+@c.chunk[{1, 2}, 0]

@@ -1,0 +1,85 @@
+// std:collections（design.md 5.32）
+@c := import["std:collections"]
+
+// ヒープ: 順不同に入れて、小さい順に出てくる
+@h := {}
+for @x in {5, 1, 9, 3, 7, 2, 8, 2} (
+    @c.heap_push[@h, @x]
+)
+log[@c.heap_peek[@h], arr_len[@h]]
+@out := {}
+while arr_len[@h] > 0 (
+    arr_push[@out, @c.heap_pop[@h]]
+)
+log[@out]
+
+// 文字列も並べられる
+@hs := {}
+for @s in {"pear", "apple", "fig"} (
+    @c.heap_push[@hs, @s]
+)
+log[@c.heap_pop[@hs], @c.heap_pop[@hs], @c.heap_pop[@hs]]
+
+// heapify してから取り出す
+@raw := {9, 4, 7, 1, 8, 2, 6, 3, 5}
+@c.heapify[@raw]
+@sorted := {}
+while arr_len[@raw] > 0 (
+    arr_push[@sorted, @c.heap_pop[@raw]]
+)
+log[@sorted]
+
+// たくさん入れても、取り出せば整列済み（arr_sort と同じ結果）
+@big := {}
+@src := {}
+@seed := 12345
+for @i in range[0, 500] (
+    @seed = (@seed * 1103515245 + 12345) % 2147483648
+    arr_push[@src, @seed % 1000]
+    @c.heap_push[@big, @seed % 1000]
+)
+@got := {}
+while arr_len[@big] > 0 (
+    arr_push[@got, @c.heap_pop[@big]]
+)
+log[@got == arr_sort[@src]]
+
+// 優先度つき: {優先度, 値}。cmp で優先度を比べる。降順（大きいほうが先）も cmp で
+by_priority[@x, @y] (
+    # @x{0} - @y{0}
+)
+@tasks := {}
+@c.heap_push[@tasks, {3, "low"}, by_priority]
+@c.heap_push[@tasks, {1, "urgent"}, by_priority]
+@c.heap_push[@tasks, {2, "normal"}, by_priority]
+log[@c.heap_pop[@tasks, by_priority]{1}, @c.heap_pop[@tasks, by_priority]{1}, @c.heap_pop[@tasks, by_priority]{1}]
+@maxh := {4, 10, 7}
+@c.heapify[@maxh, [@x, @y] ( # @y - @x )]
+log[@c.heap_pop[@maxh, [@x, @y] ( # @y - @x )]]
+
+// counts / unique: 配列やマップも中身で比べる
+log[@c.counts[{"a", "b", "a", "c", "a", "b"}]]
+log[@c.counts[{1, "1", 1, true, nil, nil}]]
+log[@c.unique[{3, 1, 3, 2, 1}]]
+log[@c.unique[{{1, 2}, {1, 2}, {2, 1}, {"k": 1}, {"k": 1}}]]
+log[@c.unique[{}], @c.counts[{}]]
+@top := arr_sort_by[@c.counts[{"x", "y", "y", "z", "z", "z"}], [@p, @q] ( # @q.count - @p.count )]
+log[@top{0}.item, @top{0}.count]
+
+// group_by
+@g := @c.group_by[{"apple", "avocado", "banana", "blueberry", "cherry"}, [@w] ( # str_sub[@w, 0, 1] )]
+log[@g]
+log[@c.group_by[{}, [@w] ( # "k" )]]
+
+// chunk / zip / flatten
+log[@c.chunk[{1, 2, 3, 4, 5}, 2], @c.chunk[{1, 2, 3, 4}, 2], @c.chunk[{}, 3], @c.chunk[{1, 2}, 5]]
+log[@c.zip[{1, 2, 3}, {"a", "b"}], @c.zip[{}, {1}]]
+log[@c.zip[range[0, 3], {"x", "y", "z"}]]
+log[@c.flatten[{1, {2, 3}, {}, {{4}}, "s"}], @c.flatten[{}]]
+
+// 元の配列は変わらない
+@orig := {1, 1, 2}
+@c.unique[@orig]
+@c.chunk[@orig, 2]
+@c.flatten[@orig]
+log[@orig]
