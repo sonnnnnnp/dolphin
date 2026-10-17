@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-10-18
+
+パッケージの `import`（[design.md 5.38](docs/design.md)）。別のリポジトリで配るライブラリ（yaylib の Dolphin 版など）を使うため。
+
+### 追加
+- `import["名前"]` `import["名前/モジュール"]`: `.` や `/` で始まらない名前は、`import` したファイルのあるディレクトリから上の階層の `dolphin_modules/` と、環境変数 `DOLPHIN_PATH` の各ディレクトリから探す。`dolphin_modules/名前/mod.dol`（または `dolphin_modules/名前.dol`）、`dolphin_modules/名前/モジュール.dol`。配るのは `git clone` や git submodule に任せ、バージョン管理やダウンロードは作らない
+- 言語サーバーの定義へ移動・ホバー・補完も、パッケージの中を探す
+
 ## [0.45.0] - 2026-10-18
 
 WebSocket のコールバック版クライアント（[design.md 5.37](docs/design.md)）。ブロッキングの `recv` だと、待っている間タイマーもほかの通信も止まるため。

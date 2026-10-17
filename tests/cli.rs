@@ -354,3 +354,30 @@ fn ui_is_not_included_without_the_feature() {
         stderr(&output)
     );
 }
+
+#[test]
+fn packages_are_found_through_dolphin_path() {
+    // tests/cases/dolphin_modules を、スクリプトから離れた場所のライブラリとして指す
+    let lib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("cases")
+        .join("dolphin_modules");
+    let path = script(
+        "via_dolphin_path.dol",
+        "@g := import[\"greet\"]\nlog[@g.hello[\"path\"]]\n",
+    );
+    let output = dolphin()
+        .arg(&path)
+        .env("DOLPHIN_PATH", &lib)
+        .output()
+        .unwrap();
+    assert_eq!(stdout(&output), "<Hello, path>\n", "{}", stderr(&output));
+
+    // 環境変数がなければ見つからない
+    let output = dolphin()
+        .arg(&path)
+        .env_remove("DOLPHIN_PATH")
+        .output()
+        .unwrap();
+    assert!(stderr(&output).contains("パッケージ `greet` が見つかりません"));
+}

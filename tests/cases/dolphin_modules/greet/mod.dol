@@ -1,0 +1,11 @@
+// パッケージ greet のエントリ（import["greet"]）
+@helper := import["./helper.dol"]
+@small := import["small"]
+
+hello[@name] (
+    # @helper.decorate["Hello, @name"]
+)
+
+twice_hello[@name] (
+    # @small.twice[@helper.decorate[@name]]
+)

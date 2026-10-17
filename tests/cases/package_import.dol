@@ -1,0 +1,11 @@
+// パッケージの import（design.md 5.38）
+@g := import["greet"]
+@e := import["greet/extra"]
+@s := import["small"]
+log[@g.hello["world"]]
+log[@g.twice_hello["ab"]]
+log[@e.shout["hi"]]
+log[@s.twice[4]]
+
+// 同じパッケージは 1 回だけ読み込まれる
+log[@g == import["greet"]]

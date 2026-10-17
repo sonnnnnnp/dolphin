@@ -1,0 +1,4 @@
+package_missing_file.dol:1:7: エラー: モジュール `greet/nope` が見つかりません（`dolphin_modules/greet/nope.dol` を、このファイルのあるディレクトリとその上の階層、環境変数 DOLPHIN_PATH から探しました）
+  |
+1 | @x := import["greet/nope"]
+  |       ^

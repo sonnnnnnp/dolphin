@@ -941,7 +941,8 @@ impl<'a> Interpreter<'a> {
         if rel.starts_with("std:") {
             return self.import_std(rel, span);
         }
-        let full = self.current.dir.join(&**rel);
+        let full = super::module::resolve_import(&self.current.dir, rel)
+            .map_err(|e| RuntimeError::new(span, e.to_string()))?;
         let shown = self.display_path(&full);
         let key = fs::canonicalize(&full).map_err(|e| {
             let reason = match e.kind() {

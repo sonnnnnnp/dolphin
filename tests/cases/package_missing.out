@@ -1,0 +1,4 @@
+package_missing.dol:1:7: エラー: パッケージ `nope_package` が見つかりません（`dolphin_modules/nope_package/mod.dol` か `dolphin_modules/nope_package.dol` を、このファイルのあるディレクトリとその上の階層、環境変数 DOLPHIN_PATH から探しました）
+  |
+1 | @x := import["nope_package"]
+  |       ^

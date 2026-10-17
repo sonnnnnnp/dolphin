@@ -391,7 +391,7 @@ impl Server {
             Target::Def(def) => Some((def.clone(), None, uri)),
             Target::Member { path, name } => {
                 let dir = uri_to_path(&uri)?.parent()?.to_path_buf();
-                let file = dir.join(path);
+                let file = crate::runtime::module::resolve_import(&dir, path).ok()?;
                 let text = std::fs::read_to_string(&file).ok()?;
                 let def = analyze(&text).ok()?.exports.get(name)?.clone();
                 Some((def, Some(file), uri))
@@ -799,6 +799,43 @@ log[f[]]
         );
         // `log` は組み込み関数なのでリネームできない
         assert!(out[5].path("error").is_some());
+    }
+
+    #[test]
+    fn definition_into_a_package() {
+        let root = std::env::temp_dir().join("dolphin-lsp-package-test");
+        let pkg = root.join("dolphin_modules").join("pkg");
+        std::fs::create_dir_all(&pkg).unwrap();
+        std::fs::write(
+            pkg.join("mod.dol"),
+            "// あいさつ
+hello[@n] (
+    # @n
+)
+",
+        )
+        .unwrap();
+        let main = root.join("main.dol");
+        let uri = path_to_uri(&main);
+        let src = "@p := import[\"pkg\"]
+log[@p.hello[1]]
+";
+        let mut input = open(&uri, src);
+        input += &call(1, "textDocument/definition", at(&uri, 1, 7));
+        input += &call(2, "textDocument/hover", at(&uri, 1, 7));
+        let (out, _) = run(input);
+        let target = out[1].path("result.uri").and_then(Json::as_str).unwrap();
+        assert!(target.ends_with("dolphin_modules/pkg/mod.dol"), "{target}");
+        assert_eq!(
+            out[1].path("result.range.start.line").unwrap().as_usize(),
+            Some(1)
+        );
+        let hover = out[2]
+            .path("result.contents.value")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        assert!(hover.contains("hello[@n]"), "{hover}");
     }
 
     #[test]

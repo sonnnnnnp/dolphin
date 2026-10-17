@@ -171,7 +171,8 @@ pub fn complete(
                 }
                 Some(path) => {
                     let exports = dir
-                        .and_then(|d| std::fs::read_to_string(d.join(&path)).ok())
+                        .and_then(|d| crate::runtime::module::resolve_import(d, &path).ok())
+                        .and_then(|file| std::fs::read_to_string(file).ok())
                         .and_then(|text| analyze(&text).ok())
                         .map(|a| a.exports);
                     if let Some(exports) = exports {
