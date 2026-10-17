@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-10-17
+
+`wss://`（[design.md 5.35](docs/design.md)）。yaylib のように、TLS でしか話せない WebSocket のサーバーにつなぐため。
+
+### 追加
+- `ws.connect` が `wss://host[:port]/path` を受ける（ポートの既定は 443）。TLS は rustls、ルート証明書は `std:http` と同じ webpki-roots。証明書とホスト名の検証は常に行う（期限切れなどは `network` のエラー値）。`send` `recv` `close` `set_timeout` は `ws://` と同じ
+- `tls` feature（既定で有効）。外した版では `wss://` が「この版には含まれていません」のエラー値になる
+
+### 変更
+- WebSocket の `Host` ヘッダーは、ポートが既定（80・443）なら付けない。IPv6 は `[::1]` の形で送る
+
 ## [0.42.0] - 2026-10-17
 
 言語サーバーの続き（[design.md 5.34](docs/design.md)）。

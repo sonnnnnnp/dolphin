@@ -1,6 +1,6 @@
 [package]
 name = "dolphin"
-version = "0.42.0"
+version = "0.43.0"
 edition = "2024"
 
 # コア言語（lib）は外部クレートに依存しない。CLI の便利機能だけ feature で足す
@@ -20,13 +20,18 @@ image = { version = "0.25", optional = true, default-features = false, features 
 eframe = { version = "0.36", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 # HTTP クライアント（std:http）。TLS は rustls
 ureq = { version = "3.4", optional = true }
+# WebSocket の TLS（`wss://`）。ルート証明書は std:http と同じ webpki-roots
+rustls = { version = "0.23", optional = true, default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = { version = "1", optional = true }
 
 [features]
-default = ["repl", "http", "crypto", "regex"]
+default = ["repl", "http", "crypto", "regex", "tls"]
 # REPL の行編集（矢印キー・履歴）。wasm 版などでは外す
 repl = ["dep:rustyline"]
 # HTTP クライアント（`import["std:http"]`）。外すと TLS などの依存がビルドに入らない
 http = ["dep:ureq"]
+# WebSocket の TLS（`wss://`）
+tls = ["dep:rustls", "dep:webpki-roots"]
 # ハッシュ・HMAC・乱数（`import["std:crypto"]`）
 crypto = ["dep:ring", "dep:md-5"]
 # 正規表現（`import["std:regex"]`）

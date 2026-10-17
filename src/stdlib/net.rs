@@ -348,9 +348,8 @@ fn local_addr(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> 
     expect_args("net.local_addr", args, 1)?;
     let handle = handle_arg("net.local_addr", args, 0)?;
     let addr = match &*handle.inner.borrow() {
-        HandleKind::TcpConn { writer, .. } | HandleKind::WsClient { writer, .. } => {
-            writer.local_addr()
-        }
+        HandleKind::TcpConn { writer, .. } => writer.local_addr(),
+        HandleKind::WsClient { writer, .. } => writer.local_addr(),
         HandleKind::TcpListener(listener) => listener.local_addr(),
         HandleKind::WsServer { .. } => {
             return Err(

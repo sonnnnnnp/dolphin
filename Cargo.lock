@@ -548,7 +548,7 @@ dependencies = [
 
 [[package]]
 name = "dolphin"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "eframe",
  "image",
@@ -557,8 +557,10 @@ dependencies = [
  "ring",
  "rodio",
  "rusqlite",
+ "rustls",
  "rustyline",
  "ureq",
+ "webpki-roots",
 ]
 
 [[package]]

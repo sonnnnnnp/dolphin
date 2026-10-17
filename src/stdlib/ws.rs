@@ -14,7 +14,7 @@ use super::ws_proto::{
     read_message, write_frame,
 };
 use super::{error_value, expect_args, int_arg, num_arg, str_arg, type_error};
-use crate::runtime::handle::{Handle, HandleKind, WsOut};
+use crate::runtime::handle::{Handle, HandleKind, WsConn, WsOut};
 use crate::runtime::interp::Interpreter;
 use crate::runtime::value::Value;
 
@@ -67,6 +67,8 @@ fn random_bytes<const N: usize>() -> [u8; N] {
 
 #[derive(Debug)]
 struct Url {
+    /// `wss://`（TLS）か
+    tls: bool,
     host: String,
     port: u16,
     /// パスとクエリ（`/` で始まる）
@@ -74,12 +76,12 @@ struct Url {
 }
 
 fn parse_url(url: &str) -> Result<Url, String> {
-    let rest = if let Some(rest) = url.strip_prefix("ws://") {
-        rest
-    } else if url.starts_with("wss://") {
-        return Err("wss:// は未対応です（ws:// だけ使えます）".into());
+    let (tls, rest) = if let Some(rest) = url.strip_prefix("ws://") {
+        (false, rest)
+    } else if let Some(rest) = url.strip_prefix("wss://") {
+        (true, rest)
     } else {
-        return Err("URL は ws:// で始まる必要があります".into());
+        return Err("URL は ws:// か wss:// で始まる必要があります".into());
     };
     let (authority, target) = match rest.find(['/', '?']) {
         Some(i) if rest.as_bytes()[i] == b'/' => (&rest[..i], rest[i..].to_string()),
@@ -92,13 +94,14 @@ fn parse_url(url: &str) -> Result<Url, String> {
             port.parse::<u16>()
                 .map_err(|_| format!("ポート `{port}` が正しくありません"))?,
         ),
-        _ => (authority, 80),
+        _ => (authority, if tls { 443 } else { 80 }),
     };
     let host = host.trim_start_matches('[').trim_end_matches(']');
     if host.is_empty() {
         return Err("URL にホストがありません".into());
     }
     Ok(Url {
+        tls,
         host: host.to_string(),
         port,
         target,
@@ -189,14 +192,30 @@ fn handshake(url: &Url, headers: &[(String, String)], timeout: Duration) -> Resu
     };
     let setup = |e: io::Error| io_error("接続を準備できません", &e);
     stream.set_nodelay(true).map_err(setup)?;
-    // ハンドシェイクの間だけ、読み書きに時間切れをつける
+    // ハンドシェイクの間だけ、読み書きに時間切れをつける（TLS のハンドシェイクもこの間に行う）
     stream.set_read_timeout(Some(timeout)).map_err(setup)?;
     stream.set_write_timeout(Some(timeout)).map_err(setup)?;
+    let stream = if url.tls {
+        tls_wrap(&url.host, stream)?
+    } else {
+        WsConn::Plain(stream)
+    };
 
     let key = base64_encode(&random_bytes::<16>(), false);
+    // `Host` は、ポートが既定なら付けない。IPv6 は `[::1]` の形
+    let host = if url.host.contains(':') {
+        format!("[{}]", url.host)
+    } else {
+        url.host.clone()
+    };
+    let host = if url.port == if url.tls { 443 } else { 80 } {
+        host
+    } else {
+        format!("{host}:{}", url.port)
+    };
     let mut request = format!(
-        "GET {} HTTP/1.1\r\nHost: {}:{}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n",
-        url.target, url.host, url.port
+        "GET {} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n",
+        url.target
     );
     for (name, value) in headers {
         request.push_str(&format!("{name}: {value}\r\n"));
@@ -248,9 +267,53 @@ fn handshake(url: &Url, headers: &[(String, String)], timeout: Duration) -> Resu
     })))
 }
 
+/// TCP の接続を TLS にする（証明書とホスト名は必ず検証する。design.md 5.35）。
+/// TLS のハンドシェイクは、最初の読み書きで行われる
+#[cfg(feature = "tls")]
+fn tls_wrap(host: &str, stream: TcpStream) -> Result<WsConn, Value> {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use std::sync::{Arc, OnceLock};
+
+    static CONFIG: OnceLock<Arc<rustls::ClientConfig>> = OnceLock::new();
+    let config = CONFIG
+        .get_or_init(|| {
+            let roots = rustls::RootCertStore {
+                roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+            };
+            let provider = Arc::new(rustls::crypto::ring::default_provider());
+            let config = rustls::ClientConfig::builder_with_provider(provider)
+                .with_safe_default_protocol_versions()
+                .expect("ring は TLS 1.2 と 1.3 に対応している")
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+            Arc::new(config)
+        })
+        .clone();
+    let name = rustls::pki_types::ServerName::try_from(host.to_string()).map_err(|_| {
+        error_value(
+            "network",
+            format!("`{host}` は TLS のホスト名として使えません"),
+        )
+    })?;
+    let conn = rustls::ClientConnection::new(config, name)
+        .map_err(|e| error_value("network", format!("TLS を始められません: {e}")))?;
+    Ok(WsConn::Tls(Rc::new(RefCell::new(
+        rustls::StreamOwned::new(conn, stream),
+    ))))
+}
+
+#[cfg(not(feature = "tls"))]
+fn tls_wrap(_: &str, _: TcpStream) -> Result<WsConn, Value> {
+    Err(error_value(
+        "network",
+        "この版には wss:// が含まれていません（`tls` feature を付けてビルドしてください）",
+    ))
+}
+
 /// ヘッダーの 1 行（末尾の改行を除く）を `line` に読む。大きさを `remaining` で制限する
 fn read_head_line(
-    reader: &mut BufReader<TcpStream>,
+    reader: &mut BufReader<WsConn>,
     line: &mut String,
     remaining: &mut usize,
 ) -> io::Result<()> {
@@ -392,6 +455,7 @@ fn close(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
             let payload = close_payload(code, &reason);
             // 送れなくても、閉じることに変わりはない
             let _ = write_frame(writer, OP_CLOSE, &payload, Some(random_bytes::<4>()));
+            writer.close_notify();
         }
         HandleKind::WsServer { tx } => {
             let _ = tx.send(WsOut::Close(code, reason));
@@ -457,7 +521,11 @@ mod tests {
         );
         let u = parse_url("ws://h?q=1").unwrap();
         assert_eq!(u.target, "/?q=1");
-        assert!(parse_url("wss://h/").unwrap_err().contains("wss"));
+        let u = parse_url("wss://h/x").unwrap();
+        assert_eq!((u.tls, u.port, u.target.as_str()), (true, 443, "/x"));
+        let u = parse_url("wss://h:8443").unwrap();
+        assert_eq!((u.tls, u.port), (true, 8443));
+        assert!(!parse_url("ws://h").unwrap().tls);
         assert!(parse_url("http://h/").is_err());
         assert!(parse_url("ws://h:99999/").is_err());
         assert!(parse_url("ws:///x").is_err());
