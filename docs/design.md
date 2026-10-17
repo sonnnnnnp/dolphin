@@ -1020,7 +1020,7 @@ log["先にここまで進む"]
 | 引数の検査 | 引数の間違い（型・オプション）は、呼んだ時点で実行時エラー（ブロッキング版と同じ）。通信の失敗などは、コールバックにエラー値で届く | 確定 |
 | 待っている数の上限 | 10000 まで。超えたら実行時エラー | 確定 |
 | `os.run_async` の出力 | 子プロセスの出力は、結果のマップ（`stdout` `stderr`）に入るだけで、`log` とは混ざらない | 確定 |
-| ほかのブロッキング関数 | ファイル・TCP・WebSocket の非同期版は作らない（必要になったら足す）。コールバックの中でブロッキング関数を呼ぶと、その間はほかのコールバックも待つ | 確定 |
+| ほかのブロッキング関数 | ファイル・TCP の非同期版は作らない（必要になったら足す）。WebSocket は 5.37（`ws.connect_async`）。コールバックの中でブロッキング関数を呼ぶと、その間はほかのコールバックも待つ | 確定 |
 | 数 | タイマーと非同期の関数 1 つにつき補助スレッドを 1 つ使う | 確定 |
 
 ---
@@ -1561,6 +1561,50 @@ file_write_bytes["thumb.jpg", @thumb]
 | 並列 | 重い処理なので、`std:async` の非同期版は作らない（必要になったら足す） | 確定 |
 | ビルド | `image` feature（既定で有効）。無い版では `import["std:image"]` が「`image` feature を付けてビルドしてください」のエラー | 確定 |
 | 検証 | 画像はテスト内で作る（既知のピクセルを持つ小さな画像を、Rust 側で PNG・JPEG・GIF に符号化して使う） | 確定 |
+
+---
+
+### 5.37 WebSocket のコールバック版クライアント（`ws.connect_async`、v0.45.0、確定 2026-10-17）
+
+`std:ws`（5.22）のブロッキングの `connect` + `recv` は、待っている間インタプリタが止まる（タイマーも、ほかの通信のコールバックも動かない）。`ws.connect_async` は、サーバー側（`http.serve` の `websocket`）と同じ**コールバックの組**で受け取り、イベントループ（5.23）の上で動く。接続の読み書きは補助スレッドが行い、コールバックはインタプリタのスレッドで 1 つずつ呼ばれる。
+
+```
+@ws := import["std:ws"]
+@id := @ws.connect_async["wss://example.com/cable", {
+    "on_open": [@conn] ( @ws.send[@conn, "{\"command\":\"subscribe\"}"] ),
+    "on_message": [@conn, @msg] ( log["受信: @msg"] ),
+    "on_close": [@conn, @code, @reason] ( log["切断 @code @reason"] ),
+    "on_error": [@e] ( log["接続できません: @{err_message[@e]}"] ),
+}]
+@async.run[]
+```
+
+| 関数 | 内容 |
+|---|---|
+| `ws.connect_async[url, handlers]` `ws.connect_async[url, options, handlers]` | 接続を始めて、すぐ番号を返す（`async.cancel` に渡せる）。`url` と `options`（`headers` `timeout`）は `ws.connect` と同じ。`handlers` はコールバックのマップ（下） |
+
+| `handlers` のキー | 呼ばれるとき |
+|---|---|
+| `on_open[conn]` | ハンドシェイクが終わったとき。`conn` は `ws.send` `ws.close` に渡せる |
+| `on_message[conn, message]` | メッセージが届くたび。`message` は文字列かバイト列。届いた順に 1 つずつ |
+| `on_close[conn, code, reason]` | 閉じたとき（相手が閉じた・こちらが `ws.close` した・回線が切れた）。`code` は終了コード（回線が切れたら `1006`）、`reason` は文字列。**1 回だけ**で、これが最後 |
+| `on_error[error]` | 接続できなかったとき（`ws.connect` が返すエラー値と同じ種類）。これが最後で、`on_open` も `on_close` も呼ばれない |
+
+どれも省略できる。ほかのキー、関数でない値は実行時エラー（呼んだ時点）。
+
+| 項目 | 内容 | 状態 |
+|---|---|---|
+| 送信 | `conn` に対して `ws.send[conn, 文字列かバイト列]` と `ws.close[conn]` `ws.close[conn, code, reason]`（サーバー側の接続と同じ）。接続が閉じたあとは `closed` のエラー値。`on_open` の前には `conn` を渡さないので、送れない | 確定 |
+| 受信 | `ws.recv` `ws.set_timeout` は使えない（実行時エラー。`on_message` で受け取る） | 確定 |
+| 閉じる | `ws.close` は close フレームを送り、相手の close を最大 3 秒待ってから切る。そのあと `on_close` が呼ばれる（`code` は送った終了コード） | 確定 |
+| `async.cancel[id]` | 接続を静かに閉じる（close フレームを送って切る）。**コールバックは呼ばない**。接続中でも、開いたあとでも使える | 確定 |
+| 終了 | 接続が開いている間は、イベントループの「待っているもの」として数える。`on_close` / `on_error` のあと、ほかに待つものがなければループが終わる | 確定 |
+| 再接続 | 自動ではしない。`on_close` / `on_error` の中で `async.after` を使い、`ws.connect_async` を呼び直す（待ち時間の増やし方などは、使う側が決める） | 確定 |
+| ping | 相手の ping には自動で pong を返す。こちらから送るなら `options` の `"ping_interval": 秒`（0 より大きい数）。省略は送らない | 確定 |
+| 規約違反 | RFC に反するフレームを受けたら、相手に close を送って切り、`on_close`（`code` は `1002` `1007` `1009` など、5.22 の規則と同じ）。理由は文字列 | 確定 |
+| 順序 | 1 つの接続のコールバックは、`on_open` → `on_message`（0 回以上）→ `on_close` の順 | 確定 |
+| 注意 | メッセージの途中で相手が止まると、その間はこちらからの送信と `async.cancel` が効かない（回線が切れるまで）。メッセージは 16 MB まで（5.22） | 確定 |
+| 待っている数 | 10000 まで（5.23 と共通） | 確定 |
 
 ---
 
