@@ -1639,12 +1639,12 @@ file_write_bytes["thumb.jpg", @thumb]
 ```
 @e := err_new["api", "認証が必要です", {"status": 401, "error_code": -3, "retry_in": nil}]
 log[err_data[@e]{"status"}]     // 401
-log[err_data[err_new["x", "y"]])  // nil
+log[err_data[err_new["x", "y"]]]   // nil
 ```
 
 | 項目 | 内容 | 状態 |
 |---|---|---|
-| `err_new[kind, message]` `err_new[kind, message, data]` | `data` は任意の値。持ち出せる値（`nil` 真偽値 数値 文字列 バイト列 配列 マップ エラー値）だけが入る。関数・モジュール・ハンドルは `nil` になる（スレッドをまたげる値と同じ規則。5.23） | 確定 |
+| `err_new[kind, message]` `err_new[kind, message, data]` | `data` は任意の値（`nil` は「なし」と同じ）。持ち出せる値（`nil` 真偽値 数値 文字列 バイト列 配列 マップ エラー値）だけが入る。関数・モジュール・ハンドルは `nil` になる（スレッドをまたげる値と同じ規則。5.23） | 確定 |
 | `err_data[e]` | 詳細データ（なければ `nil`）。取り出すたびに、新しい配列・マップとして返す（元のエラー値の中身は書き換えられない） | 確定 |
 | 比較 | `==` は種類・メッセージ・詳細データがすべて同じなら true | 確定 |
 | 表示 | 変わらない（`<エラー kind: message>`。詳細データは出さない） | 確定 |

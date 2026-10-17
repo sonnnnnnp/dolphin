@@ -1,0 +1,22 @@
+// エラー値の詳細データ（design.md 5.39）
+@e := err_new["api", "認証が必要です", {"status": 401, "codes": {1, 2}, "f": [@x] ( # 1 )}]
+log[err_kind[@e], err_message[@e]]
+log[err_data[@e]]
+log[err_data[@e]{"status"}]
+
+// 詳細がなければ nil。標準ライブラリのエラーも同じ
+log[err_data[err_new["x", "y"]]]
+log[err_data[file_read["/no/such/file"]]]
+
+// 取り出すたびに別の値（書き換えても元のエラーは変わらない）
+@d := err_data[@e]
+@d{"status"} = 500
+log[err_data[@e]{"status"}]
+
+// 比較: 詳細も含めて同じなら等しい
+log[err_new["a", "b", 1] == err_new["a", "b", 1]]
+log[err_new["a", "b", 1] == err_new["a", "b", 2]]
+log[err_new["a", "b"] == err_new["a", "b", nil]]
+
+// 表示には詳細を出さない
+log[err_new["a", "b", {"k": 1}]]

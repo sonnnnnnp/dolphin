@@ -1,6 +1,7 @@
-//! エラー値: is_error, err_kind, err_message, err_new（design.md 8.6）
+//! エラー値: is_error, err_kind, err_message, err_new, err_data（design.md 8.6・5.39）
 
 use super::{expect_args, str_arg};
+use crate::runtime::data::Data;
 use crate::runtime::interp::Interpreter;
 use crate::runtime::value::{ErrorValue, Value};
 
@@ -9,6 +10,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     interp.register("err_kind", err_kind);
     interp.register("err_message", err_message);
     interp.register("err_new", err_new);
+    interp.register("err_data", err_data);
 }
 
 fn is_error(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
@@ -29,10 +31,29 @@ fn err_message(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String>
 
 /// 自分でエラー値を作る
 fn err_new(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
-    expect_args("err_new", args, 2)?;
+    if !(2..=3).contains(&args.len()) {
+        return Err(format!(
+            "err_new の引数は 2 個か 3 個です（{} 個渡されました）",
+            args.len()
+        ));
+    }
     let kind = str_arg("err_new", args, 0)?;
     let message = str_arg("err_new", args, 1)?;
-    Ok(Value::error(kind, message))
+    // `nil` は「詳細なし」と同じ
+    let data = args
+        .get(2)
+        .filter(|v| !matches!(v, Value::Nil))
+        .map(Data::from_value);
+    Ok(Value::error_with(kind, message, data))
+}
+
+/// エラー値の詳細データ。なければ `nil`
+fn err_data(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("err_data", args, 1)?;
+    Ok(match &error_arg("err_data", args)?.data {
+        Some(data) => (**data).clone().into_value(),
+        None => Value::Nil,
+    })
 }
 
 fn error_arg<'v>(name: &str, args: &'v [Value]) -> Result<&'v ErrorValue, String> {

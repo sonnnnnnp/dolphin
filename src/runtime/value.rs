@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
+use super::data::Data;
 use super::env::Env;
 use super::gc;
 use super::handle::Handle;
@@ -36,11 +37,13 @@ pub enum Value {
     Handle(Rc<Handle>),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct ErrorValue {
     /// `"not_found"` `"parse"` のような、プログラムで見分けるための種類
     pub kind: Rc<str>,
     pub message: Rc<str>,
+    /// 呼ぶ側が見て分岐するための詳細（design.md 5.39）。標準ライブラリのエラーにはない
+    pub data: Option<Rc<Data>>,
 }
 
 impl Value {
@@ -49,9 +52,14 @@ impl Value {
     }
 
     pub fn error(kind: &str, message: impl Into<Rc<str>>) -> Value {
+        Value::error_with(kind, message, None)
+    }
+
+    pub fn error_with(kind: &str, message: impl Into<Rc<str>>, data: Option<Data>) -> Value {
         Value::Error(Rc::new(ErrorValue {
             kind: kind.into(),
             message: message.into(),
+            data: data.map(Rc::new),
         }))
     }
 }

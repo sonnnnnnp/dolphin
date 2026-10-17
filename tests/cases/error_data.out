@@ -1,0 +1,10 @@
+api 認証が必要です
+{"status": 401, "codes": {1, 2}, "f": nil}
+401
+nil
+nil
+401
+true
+false
+true
+<エラー a: b>

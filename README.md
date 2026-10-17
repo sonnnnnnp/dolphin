@@ -155,6 +155,7 @@ count: 3
 | [v0.44.0](https://github.com/sonnnnnnp/dolphin/tree/v0.44.0) | 画像の加工 `std:image`（`info` `resize` `crop` `convert`） | [v0.43.0...v0.44.0](https://github.com/sonnnnnnp/dolphin/compare/v0.43.0...v0.44.0) |
 | [v0.45.0](https://github.com/sonnnnnnp/dolphin/tree/v0.45.0) | WebSocket のコールバック版 `ws.connect_async` | [v0.44.0...v0.45.0](https://github.com/sonnnnnnp/dolphin/compare/v0.44.0...v0.45.0) |
 | [v0.46.0](https://github.com/sonnnnnnp/dolphin/tree/v0.46.0) | パッケージの `import["名前"]`（`dolphin_modules/` と `DOLPHIN_PATH`） | [v0.45.0...v0.46.0](https://github.com/sonnnnnnp/dolphin/compare/v0.45.0...v0.46.0) |
+| [v0.47.0](https://github.com/sonnnnnnp/dolphin/tree/v0.47.0) | エラー値の詳細データ（`err_new` の第 3 引数、`err_data`） | [v0.46.0...v0.47.0](https://github.com/sonnnnnnp/dolphin/compare/v0.46.0...v0.47.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

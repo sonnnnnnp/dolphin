@@ -14,7 +14,11 @@ pub enum Data {
     Bytes(Vec<u8>),
     Array(Vec<Data>),
     Map(Vec<(String, Data)>),
-    Error { kind: String, message: String },
+    Error {
+        kind: String,
+        message: String,
+        data: Option<Box<Data>>,
+    },
 }
 
 impl Data {
@@ -37,6 +41,7 @@ impl Data {
             Value::Error(e) => Data::Error {
                 kind: e.kind.to_string(),
                 message: e.message.to_string(),
+                data: e.data.as_ref().map(|d| Box::new((**d).clone())),
             },
             _ => Data::Nil,
         }
@@ -57,7 +62,11 @@ impl Data {
                 }
                 gc::new_map(map)
             }
-            Data::Error { kind, message } => Value::error(&kind, message),
+            Data::Error {
+                kind,
+                message,
+                data,
+            } => Value::error_with(&kind, message, data.map(|d| *d)),
         }
     }
 }
@@ -76,6 +85,14 @@ mod tests {
         );
         map.insert("c".into(), Value::bytes([1, 2]));
         map.insert("d".into(), Value::error("k", "m"));
+        map.insert(
+            "e".into(),
+            Value::error_with(
+                "k",
+                "m",
+                Some(Data::Map(vec![("n".into(), Data::Num(1.0))])),
+            ),
+        );
         let value = gc::new_map(map);
         let data = Data::from_value(&value);
         // スレッドをまたげる
