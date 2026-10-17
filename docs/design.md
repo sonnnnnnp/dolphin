@@ -1608,6 +1608,30 @@ file_write_bytes["thumb.jpg", @thumb]
 
 ---
 
+### 5.38 パッケージ（`import["名前"]`、v0.46.0、確定 2026-10-18）
+
+別のリポジトリで配られるライブラリ（例: yaylib の Dolphin 版）を `import` できるようにする。パッケージマネージャーやダウンロードは作らない（`git clone` や git submodule で置く）。探し方は Node の `node_modules` と同じ。
+
+```
+@yay := import["yaylib"]                  // dolphin_modules/yaylib/mod.dol
+@client := import["yaylib/client"]        // dolphin_modules/yaylib/client.dol
+@util := import["small_tool"]             // dolphin_modules/small_tool.dol
+```
+
+| 項目 | 内容 | 状態 |
+|---|---|---|
+| パッケージ名の見分け方 | `import` の文字列が `std:` で始まらず、`.` `\` `:` を含まず、`/` で始まらないもの（`yaylib` `yaylib/client`）。`.dol` や `./` `../` を含むものは、今までどおり相対パス | 確定 |
+| 名前の形 | 最初の `/` までがパッケージ名（英数字・`_`・`-`、数字で始まらない）。残りはパッケージの中のモジュールのパス（各部分も同じ形） | 確定 |
+| 探す場所 | `import` したファイルのあるディレクトリから上の階層へ順に `dolphin_modules/` を見て、最後に環境変数 `DOLPHIN_PATH`（OS の区切りで複数）の各ディレクトリを見る。最初に見つかったものを使う | 確定 |
+| ファイル | `名前` だけなら `dolphin_modules/名前/mod.dol`、なければ `dolphin_modules/名前.dol`。`名前/パス` なら `dolphin_modules/名前/パス.dol` | 確定 |
+| パッケージの中の `import` | 相対パス（`./client.dol`）は、そのファイルのディレクトリから。ほかのパッケージ（`import["other"]`）は、そのファイルから上の階層の `dolphin_modules/` を探す（入れ子の `dolphin_modules/` も、上の階層にあるものも見える） | 確定 |
+| モジュールの同一性 | 本当のファイルの場所で決める（5.7 と同じ）。同じパッケージを別の場所から読んでも、1 回だけ実行する | 確定 |
+| 見つからないとき | 実行時エラー「パッケージ `名前` が見つかりません」。どこを探したかを添える | 確定 |
+| バージョン | 管理しない。`git` のタグやブランチで揃える | 確定 |
+| 言語サーバー | 定義へ移動・補完・ホバーも同じ規則でパッケージの中を探す | 確定 |
+
+---
+
 ## 6. 旧実装からの主な変更（案）
 
 | 旧実装 | 作り直し版 | 理由 |
