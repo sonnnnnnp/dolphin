@@ -62,6 +62,8 @@ pub struct Symbol {
 
 pub struct Analysis {
     pub refs: Vec<Ref>,
+    /// ファイルの中のすべての宣言（出てきた順）
+    pub defs: Vec<Rc<Def>>,
     pub symbols: Vec<Symbol>,
     /// トップレベルの関数と変数（import されたときの定義先）
     pub exports: HashMap<String, Rc<Def>>,
@@ -81,6 +83,7 @@ struct Walker<'a> {
     /// 内側のスコープが後ろ
     scopes: Vec<HashMap<String, Rc<Def>>>,
     refs: Vec<Ref>,
+    defs: Vec<Rc<Def>>,
 }
 
 impl<'a> Walker<'a> {
@@ -91,6 +94,7 @@ impl<'a> Walker<'a> {
             hoisted: HashMap::new(),
             scopes: Vec::new(),
             refs: Vec::new(),
+            defs: Vec::new(),
         }
     }
 
@@ -100,6 +104,7 @@ impl<'a> Walker<'a> {
             match &stmt.kind {
                 StmtKind::FuncDef(def) => {
                     let d = self.func_def(def);
+                    self.defs.push(d.clone());
                     self.refs.push(Ref {
                         span: d.span,
                         len: d.len,
@@ -142,6 +147,7 @@ impl<'a> Walker<'a> {
         let symbols = self.symbols(program);
         Analysis {
             refs: self.refs,
+            defs: self.defs,
             symbols,
             exports,
         }
@@ -252,6 +258,7 @@ impl<'a> Walker<'a> {
     }
 
     fn declare(&mut self, def: Rc<Def>) {
+        self.defs.push(def.clone());
         self.refs.push(Ref {
             span: def.span,
             len: def.len,
@@ -388,20 +395,30 @@ impl<'a> Walker<'a> {
         match &expr.kind {
             ExprKind::Number(_) | ExprKind::Bool(_) | ExprKind::Nil => {}
             ExprKind::Str(segments) => {
-                // 文字列の中の `@name` は、式の位置が文字列の先頭になっているので、原文から探す
+                // 文字列の中の `@name` は、式の位置が文字列の先頭になっているので、原文から探す。
+                // `@{ 式 }` の式は、字句の位置を持っている
                 let mut from = expr.span;
                 for segment in segments {
-                    if let StrSegment::Expr(Expr {
-                        kind: ExprKind::Var(var),
-                        ..
-                    }) = segment
-                    {
-                        let at = self.find_var(&var.0, from);
-                        self.use_var(&var.0, at);
-                        from = Span {
-                            line: at.line,
-                            col: at.col + var.0.chars().count() + 1,
-                        };
+                    match segment {
+                        StrSegment::Expr(
+                            e @ Expr {
+                                kind: ExprKind::Var(var),
+                                ..
+                            },
+                        ) if e.span == expr.span => {
+                            let at = self.find_var(&var.0, from);
+                            self.use_var(&var.0, at);
+                            from = Span {
+                                line: at.line,
+                                col: at.col + var.0.chars().count() + 1,
+                            };
+                        }
+                        StrSegment::Expr(e) => {
+                            self.expr(e);
+                            // 次の `@name` を探す位置を、この `@{ }` の後ろまで進める
+                            from = self.after_interpolation(e.span);
+                        }
+                        StrSegment::Text(_) => {}
                     }
                 }
             }
@@ -444,6 +461,18 @@ impl<'a> Walker<'a> {
                 self.expr(lhs);
                 self.expr(rhs);
             }
+        }
+    }
+
+    /// `at`（`@{ }` の中の位置）を含む `@{ }` の、閉じ `}` の次の位置
+    fn after_interpolation(&self, at: Span) -> Span {
+        let chars: Vec<char> = self.line(at.line).chars().collect();
+        match lexer::interpolation_end(&chars, at.col - 1) {
+            Some(end) => Span {
+                line: at.line,
+                col: end + 2,
+            },
+            None => at,
         }
     }
 
@@ -551,6 +580,13 @@ fn import_path(value: &Expr) -> Option<String> {
 }
 
 impl Analysis {
+    /// `def` を指す場所（宣言そのものも含む）
+    pub fn refs_to<'a>(&'a self, def: &'a Rc<Def>) -> impl Iterator<Item = &'a Ref> {
+        self.refs
+            .iter()
+            .filter(move |r| matches!(&r.target, Target::Def(d) if Rc::ptr_eq(d, def)))
+    }
+
     /// 位置（1 始まりの行・文字）にある名前の使われ方
     pub fn ref_at(&self, line: usize, col: usize) -> Option<&Ref> {
         self.refs
@@ -597,6 +633,23 @@ if @total > 0 (
         assert_eq!(target_span(&a, 9, 15), Some(Span { line: 8, col: 5 }));
         // 無名関数は外側の `@total` を捕まえる
         assert_eq!(target_span(&a, 11, 22), Some(Span { line: 6, col: 1 }));
+    }
+
+    #[test]
+    fn interpolation_expressions_are_walked() {
+        let a = analyze(
+            "@x := 1
+log[\"a @{@x + 1} b @x\"]
+",
+        )
+        .unwrap();
+        let spans: Vec<_> = a.refs.iter().map(|r| (r.span.line, r.span.col)).collect();
+        assert_eq!(
+            spans.iter().filter(|s| **s == (2, 10)).count(),
+            1,
+            "{spans:?}"
+        );
+        assert!(spans.contains(&(2, 20)), "{spans:?}");
     }
 
     #[test]

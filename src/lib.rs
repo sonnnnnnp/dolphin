@@ -44,6 +44,13 @@ pub fn run_script(
     Ok(session.exit_code().unwrap_or(0))
 }
 
+/// この版に入っている組み込みの名前
+pub struct Catalog {
+    pub functions: Vec<&'static str>,
+    /// （`std:json` のようなモジュール名、そのメンバー）
+    pub modules: Vec<(&'static str, Vec<&'static str>)>,
+}
+
 /// 変数と関数を保ったまま、ソースを何回かに分けて実行する（REPL で使う）
 pub struct Session<'a> {
     interp: Interpreter<'a>,
@@ -80,6 +87,14 @@ impl<'a> Session<'a> {
             |name| self.interp.callee(name),
             |name| self.interp.has_global(name),
         )
+    }
+
+    /// 組み込み関数と組み込みモジュールの名前（言語サーバーの補完用）
+    pub fn catalog(&self) -> Catalog {
+        Catalog {
+            functions: self.interp.native_names(),
+            modules: self.interp.std_modules(),
+        }
     }
 
     /// 名前つきの関数を定義の順に（名前、引数の数）で返す（`dolphin test`）

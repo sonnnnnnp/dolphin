@@ -1,6 +1,7 @@
 //! 言語サーバー（`dolphin lsp`、design.md 5.33）。標準入出力で LSP（JSON-RPC）を話す
 
 pub mod analysis;
+mod completion;
 pub mod json;
 
 use std::collections::HashMap;
@@ -16,8 +17,13 @@ use crate::diag::Diagnostic;
 /// `input` から要求を読み、`output` へ応答を書く。`exit` 通知で終わり、終了コードを返す
 /// （`shutdown` の後なら 0、なければ 1）
 pub fn serve(input: &mut dyn BufRead, output: &mut dyn Write) -> i32 {
+    let mut sink = Vec::new();
+    let catalog = crate::Session::new(&mut sink).catalog();
     let mut server = Server {
         docs: HashMap::new(),
+        fresh: HashMap::new(),
+        last_good: HashMap::new(),
+        catalog,
         shutdown: false,
     };
     loop {
@@ -106,10 +112,18 @@ fn write_message(output: &mut dyn Write, message: &Json) -> io::Result<()> {
 }
 
 const METHOD_NOT_FOUND: i32 = -32601;
+const REQUEST_FAILED: i32 = -32803;
+const CANNOT_RENAME: &str =
+    "この名前はリネームできません（組み込み、ほかのファイルの宣言、または宣言が見つかりません）";
 
 struct Server {
     /// 開いている文書（URI → 内容）
     docs: HashMap<String, String>,
+    /// 現在の内容を解析できたときの結果
+    fresh: HashMap<String, Rc<Analysis>>,
+    /// 直前に解析できた結果（補完は、構文エラーの間もこれを使う）
+    last_good: HashMap<String, Rc<Analysis>>,
+    catalog: crate::Catalog,
     shutdown: bool,
 }
 
@@ -127,6 +141,18 @@ impl Server {
                         ("hoverProvider", Json::Bool(true)),
                         ("documentSymbolProvider", Json::Bool(true)),
                         ("documentFormattingProvider", Json::Bool(true)),
+                        ("referencesProvider", Json::Bool(true)),
+                        (
+                            "renameProvider",
+                            Json::obj([("prepareProvider", Json::Bool(true))]),
+                        ),
+                        (
+                            "completionProvider",
+                            Json::obj([(
+                                "triggerCharacters",
+                                Json::Arr(vec![Json::str("@"), Json::str("."), Json::str(":")]),
+                            )]),
+                        ),
                     ]),
                 ),
                 (
@@ -146,6 +172,10 @@ impl Server {
             "textDocument/documentSymbol" => {
                 Ok(self.document_symbols(params).unwrap_or(Json::Arr(vec![])))
             }
+            "textDocument/completion" => Ok(self.completion(params).unwrap_or(Json::Arr(vec![]))),
+            "textDocument/references" => Ok(self.references(params).unwrap_or(Json::Arr(vec![]))),
+            "textDocument/prepareRename" => self.prepare_rename(params),
+            "textDocument/rename" => self.rename(params),
             "textDocument/formatting" => Ok(self.formatting(params).unwrap_or(Json::Null)),
             _ => Err((METHOD_NOT_FOUND, format!("未対応の要求です: {method}"))),
         }
@@ -163,7 +193,7 @@ impl Server {
                     .path("textDocument.text")
                     .and_then(Json::as_str)
                     .unwrap_or("");
-                self.docs.insert(uri.clone(), text.to_string());
+                self.set_doc(&uri, text);
                 vec![self.diagnostics(&uri)]
             }
             ("textDocument/didChange", Some(uri)) => {
@@ -177,7 +207,7 @@ impl Server {
                 };
                 match text {
                     Some(text) => {
-                        self.docs.insert(uri.clone(), text.to_string());
+                        self.set_doc(&uri, text);
                         vec![self.diagnostics(&uri)]
                     }
                     None => vec![],
@@ -188,9 +218,25 @@ impl Server {
             }
             ("textDocument/didClose", Some(uri)) => {
                 self.docs.remove(&uri);
+                self.fresh.remove(&uri);
+                self.last_good.remove(&uri);
                 vec![publish(&uri, vec![])]
             }
             _ => vec![],
+        }
+    }
+
+    fn set_doc(&mut self, uri: &str, text: &str) {
+        self.docs.insert(uri.to_string(), text.to_string());
+        match analyze(text) {
+            Ok(analysis) => {
+                let analysis = Rc::new(analysis);
+                self.fresh.insert(uri.to_string(), analysis.clone());
+                self.last_good.insert(uri.to_string(), analysis);
+            }
+            Err(_) => {
+                self.fresh.remove(uri);
+            }
         }
     }
 
@@ -212,11 +258,126 @@ impl Server {
 
     // ---- 位置から名前を引く ----
 
-    fn text_and_analysis(&self, params: &Json) -> Option<(String, &str, Analysis)> {
+    fn text_and_analysis(&self, params: &Json) -> Option<(String, &str, Rc<Analysis>)> {
         let uri = params.path("textDocument.uri")?.as_str()?.to_string();
         let src = self.docs.get(&uri).map(String::as_str)?;
-        let analysis = analyze(src).ok()?;
+        let analysis = self.fresh.get(&uri)?.clone();
         Some((uri, src, analysis))
+    }
+
+    /// カーソルの 1 始まりの（行, 文字の列）と、その行の文字列
+    fn cursor<'a>(&self, params: &Json, src: &'a str) -> Option<(usize, usize, &'a str)> {
+        let line0 = params.path("position.line")?.as_usize()?;
+        let units = params.path("position.character")?.as_usize()?;
+        let text = src.lines().nth(line0).unwrap_or("");
+        Some((line0 + 1, utf16_to_col(text, units), text))
+    }
+
+    fn completion(&self, params: &Json) -> Option<Json> {
+        let uri = params.path("textDocument.uri")?.as_str()?;
+        let src = self.docs.get(uri)?;
+        let analysis = self.last_good.get(uri)?;
+        let (line, col, text) = self.cursor(params, src)?;
+        let before: String = text.chars().take(col - 1).collect();
+        let dir = uri_to_path(uri).and_then(|p| p.parent().map(Path::to_path_buf));
+        Some(completion::complete(
+            analysis,
+            &self.catalog,
+            dir.as_deref(),
+            &before,
+            line,
+            text,
+        ))
+    }
+
+    /// カーソルの名前の宣言（このファイルの中のものだけ）
+    fn local_def_at(&self, params: &Json) -> Option<(String, &str, Rc<Analysis>, Rc<Def>)> {
+        let (uri, src, analysis) = self.text_and_analysis(params)?;
+        let (line, col, _) = self.cursor(params, src)?;
+        let Target::Def(def) = &analysis.ref_at(line, col)?.target else {
+            return None;
+        };
+        let def = def.clone();
+        Some((uri, src, analysis, def))
+    }
+
+    fn references(&self, params: &Json) -> Option<Json> {
+        let (uri, src, analysis, def) = self.local_def_at(params)?;
+        let include_decl = !matches!(
+            params.path("context.includeDeclaration"),
+            Some(Json::Bool(false))
+        );
+        let list = analysis
+            .refs_to(&def)
+            .filter(|r| include_decl || r.span != def.span)
+            .map(|r| {
+                Json::obj([
+                    ("uri", Json::str(&uri)),
+                    ("range", range_json(src, r.span.line, r.span.col, r.len)),
+                ])
+            })
+            .collect();
+        Some(Json::Arr(list))
+    }
+
+    fn prepare_rename(&self, params: &Json) -> Reply {
+        let Some((_, src, analysis, def)) = self.local_def_at(params) else {
+            return Err((REQUEST_FAILED, CANNOT_RENAME.to_string()));
+        };
+        let (line, col, _) = self
+            .cursor(params, src)
+            .ok_or((REQUEST_FAILED, CANNOT_RENAME.to_string()))?;
+        let r = analysis
+            .ref_at(line, col)
+            .ok_or((REQUEST_FAILED, CANNOT_RENAME.to_string()))?;
+        Ok(Json::obj([
+            ("range", range_json(src, r.span.line, r.span.col, r.len)),
+            ("placeholder", Json::str(def.name.clone())),
+        ]))
+    }
+
+    fn rename(&self, params: &Json) -> Reply {
+        let fail = |text: &str| Err((REQUEST_FAILED, text.to_string()));
+        let Some((uri, src, analysis, def)) = self.local_def_at(params) else {
+            return fail(CANNOT_RENAME);
+        };
+        let raw = params.get("newName").and_then(Json::as_str).unwrap_or("");
+        let new = raw.strip_prefix('@').unwrap_or(raw);
+        let valid = new
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && new.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !valid {
+            return fail("名前は英数字と `_` で、数字で始められません");
+        }
+        if analysis
+            .defs
+            .iter()
+            .any(|d| d.kind == def.kind && d.name == new && !Rc::ptr_eq(d, &def))
+        {
+            return fail(&format!(
+                "同じ種類の `{new}` がこのファイルにすでにあります"
+            ));
+        }
+        let text = if def.kind == DefKind::Var {
+            format!("@{new}")
+        } else {
+            new.to_string()
+        };
+        let edits = analysis
+            .refs_to(&def)
+            .map(|r| {
+                Json::obj([
+                    ("range", range_json(src, r.span.line, r.span.col, r.len)),
+                    ("newText", Json::str(text.clone())),
+                ])
+            })
+            .collect();
+        Ok(Json::obj([(
+            "changes",
+            Json::obj([(uri.as_str(), Json::Arr(edits))]),
+        )]))
     }
 
     /// カーソル位置にある名前の宣言と、その宣言があるファイル（このファイルなら None）
@@ -544,6 +705,102 @@ mod tests {
         assert_eq!(items[0].get("name").unwrap().as_str(), Some("add"));
     }
 
+    fn labels(items: &Json) -> Vec<String> {
+        let Json::Arr(items) = items else { panic!() };
+        items
+            .iter()
+            .map(|i| i.get("label").unwrap().as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn completion_in_each_context() {
+        let uri = "file:///tmp/d.dol";
+        // 5 行目まで解析できる内容を開いてから、書きかけ（構文エラー）にする
+        let good = "add[@a] (
+    # @a
+)
+@total := 1
+log[@total]
+";
+        let broken = "add[@a] (
+    # @a
+)
+@total := 1
+log[@t
+@j := import[\"std:js
+@j.pa
+log[ad";
+        let mut input = open(uri, good);
+        input += &notify(
+            "textDocument/didChange",
+            Json::obj([
+                ("textDocument", Json::obj([("uri", Json::str(uri))])),
+                (
+                    "contentChanges",
+                    Json::Arr(vec![Json::obj([("text", Json::str(broken))])]),
+                ),
+            ]),
+        );
+        input += &call(1, "textDocument/completion", at(uri, 4, 6));
+        input += &call(2, "textDocument/completion", at(uri, 5, 20));
+        input += &call(3, "textDocument/completion", at(uri, 7, 6));
+        input += &call(4, "textDocument/completion", at(uri, 1, 8));
+        let (out, _) = run(input);
+        // 0: 診断, 1: 診断, 2〜: 応答
+        assert!(labels(out[2].path("result").unwrap()).contains(&"total".to_string()));
+        assert!(labels(out[3].path("result").unwrap()).contains(&"std:json".to_string()));
+        assert!(!labels(out[4].path("result").unwrap()).is_empty());
+        // 関数の中では、トップレベルの変数と引数が見える
+        let inside = labels(out[5].path("result").unwrap());
+        assert!(
+            inside.contains(&"a".to_string()) && inside.contains(&"total".to_string()),
+            "{inside:?}"
+        );
+    }
+
+    #[test]
+    fn references_and_rename() {
+        let uri = "file:///tmp/e.dol";
+        let src = "@n := 1
+log[@n + 1]
+log[\"v=@n\"]
+f[] ( # 1 )
+log[f[]]
+";
+        let mut input = open(uri, src);
+        input += &call(1, "textDocument/references", at(uri, 1, 5));
+        let mut rename = at(uri, 1, 5);
+        if let Json::Obj(f) = &mut rename {
+            f.push(("newName".into(), Json::str("count")));
+        }
+        input += &call(2, "textDocument/rename", rename);
+        let mut bad = at(uri, 1, 5);
+        if let Json::Obj(f) = &mut bad {
+            f.push(("newName".into(), Json::str("1x")));
+        }
+        input += &call(3, "textDocument/rename", bad);
+        input += &call(4, "textDocument/prepareRename", at(uri, 4, 4));
+        input += &call(5, "textDocument/prepareRename", at(uri, 4, 0));
+        let (out, _) = run(input);
+        let Some(Json::Arr(refs)) = out[1].path("result") else {
+            panic!()
+        };
+        assert_eq!(refs.len(), 3);
+        let Some(Json::Arr(edits)) = out[2].path("result.changes").and_then(|c| c.get(uri)) else {
+            panic!("{:?}", out[2])
+        };
+        assert_eq!(edits.len(), 3);
+        assert_eq!(edits[0].get("newText").unwrap().as_str(), Some("@count"));
+        assert!(out[3].path("error.message").is_some());
+        assert_eq!(
+            out[4].path("result.placeholder").unwrap().as_str(),
+            Some("f")
+        );
+        // `log` は組み込み関数なのでリネームできない
+        assert!(out[5].path("error").is_some());
+    }
+
     #[test]
     fn syntax_error_becomes_diagnostic() {
         let uri = "file:///tmp/b.dol";
@@ -561,7 +818,7 @@ mod tests {
     #[test]
     fn unknown_request_is_an_error_and_exit_without_shutdown_is_1() {
         let (out, code) =
-            run(call(1, "textDocument/rename", Json::Null) + &notify("exit", Json::Null));
+            run(call(1, "textDocument/codeAction", Json::Null) + &notify("exit", Json::Null));
         assert_eq!(out[0].path("error.code"), Some(&Json::Num(-32601.0)));
         assert_eq!(code, 1);
     }

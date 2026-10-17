@@ -122,6 +122,38 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    /// 組み込み関数の名前（並べ替え済み。言語サーバーの補完用）
+    pub fn native_names(&self) -> Vec<&'static str> {
+        let mut names: Vec<_> = self.natives.keys().copied().collect();
+        names.sort_unstable();
+        names
+    }
+
+    /// 組み込みモジュールと、そのメンバー（関数と定数）の名前。どちらも並べ替え済み
+    pub fn std_modules(&self) -> Vec<(&'static str, Vec<&'static str>)> {
+        let mut modules: Vec<_> = self
+            .std_registry
+            .iter()
+            .map(|(&name, functions)| {
+                let mut members: Vec<&'static str> = functions
+                    .iter()
+                    .map(|&(full, _)| full.rsplit('.').next().unwrap_or(full))
+                    .chain(
+                        self.std_consts
+                            .get(name)
+                            .into_iter()
+                            .flatten()
+                            .map(|&(n, _)| n),
+                    )
+                    .collect();
+                members.sort_unstable();
+                (name, members)
+            })
+            .collect();
+        modules.sort_unstable();
+        modules
+    }
+
     pub fn register(&mut self, name: &'static str, f: NativeFn) {
         self.natives.insert(name, f);
     }
