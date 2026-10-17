@@ -191,16 +191,41 @@ fn parse_close(payload: &[u8]) -> Result<Option<(u16, String)>, ProtoError> {
 pub fn read_message(
     r: &mut impl Read,
     expect_masked: bool,
-    mut on_ping: impl FnMut(&[u8]) -> io::Result<()>,
+    on_ping: impl FnMut(&[u8]) -> io::Result<()>,
 ) -> Result<Message, ProtoError> {
+    Ok(read_step(r, expect_masked, on_ping, false)?.expect("制御フレームでは戻らない"))
+}
+
+/// `read_message` と同じだが、メッセージの途中でないときに ping / pong だけを読んだら、
+/// そこで `None` を返す（待っている間に別の仕事をしたい呼び出し側のため。design.md 5.37）
+pub fn read_message_or_control(
+    r: &mut impl Read,
+    expect_masked: bool,
+    on_ping: impl FnMut(&[u8]) -> io::Result<()>,
+) -> Result<Option<Message>, ProtoError> {
+    read_step(r, expect_masked, on_ping, true)
+}
+
+fn read_step(
+    r: &mut impl Read,
+    expect_masked: bool,
+    mut on_ping: impl FnMut(&[u8]) -> io::Result<()>,
+    return_on_control: bool,
+) -> Result<Option<Message>, ProtoError> {
     // 組み立て中のデータメッセージ（オペコードと、ここまでの本体）
     let mut partial: Option<(u8, Vec<u8>)> = None;
     loop {
         let frame = read_frame(r, expect_masked)?;
         match frame.opcode {
-            OP_PING => on_ping(&frame.payload)?,
-            OP_PONG => {}
-            OP_CLOSE => return Ok(Message::Close(parse_close(&frame.payload)?)),
+            OP_PING | OP_PONG => {
+                if frame.opcode == OP_PING {
+                    on_ping(&frame.payload)?;
+                }
+                if return_on_control && partial.is_none() {
+                    return Ok(None);
+                }
+            }
+            OP_CLOSE => return Ok(Some(Message::Close(parse_close(&frame.payload)?))),
             OP_TEXT | OP_BINARY => {
                 if partial.is_some() {
                     return Err(ProtoError::Protocol(
@@ -208,7 +233,7 @@ pub fn read_message(
                     ));
                 }
                 if frame.fin {
-                    return finish(frame.opcode, frame.payload);
+                    return finish(frame.opcode, frame.payload).map(Some);
                 }
                 partial = Some((frame.opcode, frame.payload));
             }
@@ -223,7 +248,7 @@ pub fn read_message(
                 if frame.fin {
                     let opcode = *opcode;
                     let data = std::mem::take(data);
-                    return finish(opcode, data);
+                    return finish(opcode, data).map(Some);
                 }
             }
         }
@@ -309,6 +334,27 @@ mod tests {
 
     fn hex(bytes: &[u8]) -> String {
         bytes.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    #[test]
+    fn control_frames_return_to_the_caller() {
+        let mut wire = Vec::new();
+        write_frame(&mut wire, OP_PING, b"p", None).unwrap();
+        write_frame(&mut wire, OP_PONG, b"", None).unwrap();
+        write_frame(&mut wire, OP_TEXT, b"hi", None).unwrap();
+        let mut r = std::io::Cursor::new(wire);
+        let mut pings = 0;
+        let mut step = |r: &mut std::io::Cursor<Vec<u8>>| {
+            read_message_or_control(r, false, |_| {
+                pings += 1;
+                Ok(())
+            })
+            .unwrap()
+        };
+        assert!(step(&mut r).is_none()); // ping
+        assert!(step(&mut r).is_none()); // pong
+        assert!(matches!(step(&mut r), Some(Message::Text(s)) if s == "hi"));
+        assert_eq!(pings, 1);
     }
 
     #[test]

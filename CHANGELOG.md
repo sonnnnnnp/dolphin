@@ -7,6 +7,17 @@
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-10-18
+
+WebSocket のコールバック版クライアント（[design.md 5.37](docs/design.md)）。ブロッキングの `recv` だと、待っている間タイマーもほかの通信も止まるため。
+
+### 追加
+- `ws.connect_async[url, handlers]` `ws.connect_async[url, options, handlers]`: 接続の読み書きは補助スレッドが行い、`on_open[conn]` `on_message[conn, message]` `on_close[conn, code, reason]` `on_error[error]` をイベントループ（`std:async`）の上で 1 つずつ呼ぶ。戻り値の番号を `async.cancel` に渡すと、静かに閉じる。`wss://` も使える。`options` は `ws.connect` と同じ（`headers` `timeout`）に、`ping_interval`（秒）が加わる
+- 開いている間は、イベントループの「待っているもの」に数える。再接続は自動ではしない（`on_close` の中で `async.after` を使って呼び直す）
+
+### 変更
+- `ws.recv` と `ws.set_timeout` をコールバック式の接続に使ったときのメッセージを、`ws.connect_async` も含む言い方にした
+
 ## [0.44.0] - 2026-10-17
 
 画像の加工（[design.md 5.36](docs/design.md)）。画像を投稿する前に、縦横を調べてサムネイルを作るため。

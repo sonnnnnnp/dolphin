@@ -11,6 +11,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use super::data::Data;
 use super::error::RuntimeError;
+use super::handle::HandleKind;
 use super::interp::Interpreter;
 use super::value::Value;
 use crate::diag::Diagnostic;
@@ -18,12 +19,24 @@ use crate::diag::Diagnostic;
 /// 待っていられる処理の数の上限
 pub const MAX_PENDING: usize = 10_000;
 
+/// 開いている接続（`ws.connect_async`、design.md 5.37）の出来事
+pub enum StreamEvent {
+    Open,
+    Message(Data),
+    /// 閉じた。終了コードと理由。これが最後
+    Close(u16, String),
+    /// 接続できなかった。エラー値。これが最後
+    Error(Data),
+}
+
 /// 補助スレッドからインタプリタのスレッドへ届くもの
 pub enum Event {
     /// 非同期の関数の結果。`id` のコールバックに `data` を渡す
     Done { id: u64, data: Data },
     /// タイマーの時刻。`id` のコールバックを引数なしで呼ぶ
     Tick { id: u64 },
+    /// 開いている接続の出来事。`id` の `handlers` の該当するコールバックを呼ぶ
+    Stream { id: u64, event: StreamEvent },
     /// ほかの仕組み（`http.serve` など）が自分のために送るもの
     Ext(Box<dyn Any + Send>),
 }
@@ -36,6 +49,26 @@ struct Pending {
     callback: Value,
     /// タイマーなら、止める旗と、繰り返すか
     timer: Option<(Arc<AtomicBool>, bool)>,
+    /// 接続なら、そのコールバックなど
+    stream: Option<Stream>,
+}
+
+struct Stream {
+    /// コールバックのマップ（`on_open` など）
+    handlers: Value,
+    /// コールバックに渡す接続のハンドル
+    conn: Value,
+    /// 立てると、補助スレッドが接続を静かに閉じる
+    stop: Arc<AtomicBool>,
+}
+
+impl Stream {
+    /// 接続のハンドルを「閉じた」にする
+    fn mark_closed(&self) {
+        if let Value::Handle(handle) = &self.conn {
+            *handle.inner.borrow_mut() = HandleKind::Closed;
+        }
+    }
 }
 
 pub struct Events {
@@ -105,18 +138,46 @@ impl Events {
         }
         let id = self.next_id;
         self.next_id += 1;
-        self.pending.insert(id, Pending { callback, timer });
+        self.pending.insert(
+            id,
+            Pending {
+                callback,
+                timer,
+                stream: None,
+            },
+        );
+        Ok(id)
+    }
+
+    /// 接続のコールバックを登録して、番号を返す。接続が終わる（`Close` か `Error`）まで残る
+    pub fn register_stream(
+        &mut self,
+        handlers: Value,
+        conn: Value,
+        stop: Arc<AtomicBool>,
+    ) -> Result<u64, String> {
+        let id = self.register(Value::Nil, None)?;
+        if let Some(pending) = self.pending.get_mut(&id) {
+            pending.stream = Some(Stream {
+                handlers,
+                conn,
+                stop,
+            });
+        }
         Ok(id)
     }
 
     /// タイマーを止める / 結果を捨てる
     pub fn cancel(&mut self, id: u64) {
-        if let Some(Pending {
-            timer: Some((flag, _)),
-            ..
-        }) = self.pending.remove(&id)
-        {
+        let Some(pending) = self.pending.remove(&id) else {
+            return;
+        };
+        if let Some((flag, _)) = pending.timer {
             flag.store(true, Ordering::SeqCst);
+        }
+        if let Some(stream) = pending.stream {
+            stream.stop.store(true, Ordering::SeqCst);
+            stream.mark_closed();
         }
     }
 
@@ -167,6 +228,7 @@ impl Interpreter<'_> {
                         self.call_callback(&callback, Vec::new())?;
                     }
                 }
+                Event::Stream { id, event } => self.stream_event(id, event)?,
                 Event::Ext(payload) => {
                     if let Some(mut handler) = self.events.ext.take() {
                         let result = handler(self, payload);
@@ -179,6 +241,39 @@ impl Interpreter<'_> {
             }
         }
         Ok(())
+    }
+
+    /// 開いている接続の出来事を、該当するコールバックに渡す
+    fn stream_event(&mut self, id: u64, event: StreamEvent) -> Result<(), String> {
+        let Some(stream) = self.events.pending.get(&id).and_then(|p| p.stream.as_ref()) else {
+            // 止められた接続の出来事は捨てる
+            return Ok(());
+        };
+        let (handlers, conn) = (stream.handlers.clone(), stream.conn.clone());
+        let (name, args, last) = match event {
+            StreamEvent::Open => ("on_open", vec![conn], false),
+            StreamEvent::Message(data) => ("on_message", vec![conn, data.into_value()], false),
+            StreamEvent::Close(code, reason) => (
+                "on_close",
+                vec![conn, Value::Num(f64::from(code)), Value::Str(reason.into())],
+                true,
+            ),
+            StreamEvent::Error(data) => ("on_error", vec![data.into_value()], true),
+        };
+        if last
+            && let Some(pending) = self.events.pending.remove(&id)
+            && let Some(stream) = &pending.stream
+        {
+            stream.mark_closed();
+        }
+        let callback = match &handlers {
+            Value::Map(map) => map.borrow().get(name).cloned(),
+            _ => None,
+        };
+        match callback {
+            Some(callback) => self.call_callback(&callback, args),
+            None => Ok(()),
+        }
     }
 
     /// コールバックを呼ぶ。エラーは標準エラーに出して続ける。`os.exit` だけは `Err`

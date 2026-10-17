@@ -5,15 +5,21 @@
 
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use super::encoding::base64_encode;
 use super::net::{closed, failure, seconds};
 use super::ws_proto::{
-    Message, OP_BINARY, OP_CLOSE, OP_PONG, OP_TEXT, ProtoError, accept_key, close_payload,
-    read_message, write_frame,
+    Message, OP_BINARY, OP_CLOSE, OP_PING, OP_PONG, OP_TEXT, ProtoError, accept_key, close_payload,
+    read_message, read_message_or_control, write_frame,
 };
 use super::{error_value, expect_args, int_arg, num_arg, str_arg, type_error};
+use crate::runtime::data::Data;
+use crate::runtime::events::{Event, StreamEvent};
 use crate::runtime::handle::{Handle, HandleKind, WsConn, WsOut};
 use crate::runtime::interp::Interpreter;
 use crate::runtime::value::Value;
@@ -27,6 +33,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
         "std:ws",
         &[
             ("ws.connect", connect),
+            ("ws.connect_async", connect_async),
             ("ws.send", send),
             ("ws.recv", recv),
             ("ws.close", close),
@@ -116,56 +123,96 @@ fn connect(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         ));
     }
     let url = str_arg("ws.connect", args, 0)?;
-    let mut timeout = DEFAULT_TIMEOUT;
-    let mut headers: Vec<(String, String)> = Vec::new();
-    if let Some(options) = args.get(1) {
-        let Value::Map(options) = options else {
-            return Err(type_error("ws.connect", 1, "マップ", options));
-        };
-        for (key, value) in options.borrow().iter() {
-            match (&**key, value) {
-                ("timeout", Value::Num(n)) => timeout = *n,
-                ("headers", Value::Map(h)) => {
-                    for (name, value) in h.borrow().iter() {
-                        let Value::Str(value) = value else {
-                            return Err(format!(
-                                "ws.connect の `headers` の値は文字列です（`{name}` は{}）",
-                                value.type_name()
-                            ));
-                        };
-                        if name.bytes().any(|b| b <= b' ' || b == b':' || b == 0x7f)
-                            || value.bytes().any(|b| b == b'\r' || b == b'\n')
-                        {
-                            return Err(format!(
-                                "ws.connect のヘッダー `{name}` に使えない文字があります"
-                            ));
-                        }
-                        headers.push((name.to_string(), value.to_string()));
-                    }
-                }
-                ("timeout" | "headers", other) => {
-                    return Err(format!(
-                        "ws.connect のオプション `{key}` の型が違います（{}が渡されました）",
-                        other.type_name()
-                    ));
-                }
-                _ => return Err(format!("ws.connect のオプション `{key}` は知りません")),
-            }
-        }
-    }
+    let opts = match args.get(1) {
+        Some(options) => connect_options("ws.connect", options, 1, false)?,
+        None => ConnectOptions::default(),
+    };
+    let (timeout, headers) = (opts.timeout, opts.headers);
     let timeout = seconds("ws.connect", timeout)?;
     let url = match parse_url(url) {
         Ok(url) => url,
         Err(message) => return Ok(error_value("network", message)),
     };
-    Ok(match handshake(&url, &headers, timeout) {
-        Ok(value) => value,
+    Ok(match open(&url, &headers, timeout) {
+        Ok((reader, writer)) => Value::Handle(Handle::new(HandleKind::WsClient { reader, writer })),
         Err(e) => e,
     })
 }
 
-/// TCP の接続とハンドシェイク。失敗はエラー値
-fn handshake(url: &Url, headers: &[(String, String)], timeout: Duration) -> Result<Value, Value> {
+struct ConnectOptions {
+    timeout: f64,
+    headers: Vec<(String, String)>,
+    /// こちらから ping を送る間隔（秒）。`connect_async` だけ
+    ping_interval: Option<f64>,
+}
+
+impl Default for ConnectOptions {
+    fn default() -> Self {
+        Self {
+            timeout: DEFAULT_TIMEOUT,
+            headers: Vec::new(),
+            ping_interval: None,
+        }
+    }
+}
+
+/// `ws.connect` / `ws.connect_async` の `options`（`args[i]`）を読む
+fn connect_options(
+    name: &str,
+    options: &Value,
+    i: usize,
+    allow_ping: bool,
+) -> Result<ConnectOptions, String> {
+    let Value::Map(options) = options else {
+        return Err(type_error(name, i, "マップ", options));
+    };
+    let mut opts = ConnectOptions::default();
+    for (key, value) in options.borrow().iter() {
+        match (&**key, value) {
+            ("timeout", Value::Num(n)) => opts.timeout = *n,
+            ("ping_interval", Value::Num(n)) if allow_ping => opts.ping_interval = Some(*n),
+            ("headers", Value::Map(h)) => {
+                for (header, value) in h.borrow().iter() {
+                    let Value::Str(value) = value else {
+                        return Err(format!(
+                            "{name} の `headers` の値は文字列です（`{header}` は{}）",
+                            value.type_name()
+                        ));
+                    };
+                    if header.bytes().any(|b| b <= b' ' || b == b':' || b == 0x7f)
+                        || value.bytes().any(|b| b == b'\r' || b == b'\n')
+                    {
+                        return Err(format!(
+                            "{name} のヘッダー `{header}` に使えない文字があります"
+                        ));
+                    }
+                    opts.headers.push((header.to_string(), value.to_string()));
+                }
+            }
+            ("timeout" | "headers", other) => {
+                return Err(format!(
+                    "{name} のオプション `{key}` の型が違います（{}が渡されました）",
+                    other.type_name()
+                ));
+            }
+            ("ping_interval", other) if allow_ping => {
+                return Err(format!(
+                    "{name} のオプション `{key}` の型が違います（{}が渡されました）",
+                    other.type_name()
+                ));
+            }
+            _ => return Err(format!("{name} のオプション `{key}` は知りません")),
+        }
+    }
+    Ok(opts)
+}
+
+/// TCP の接続とハンドシェイク（読む側と書く側）。失敗はエラー値
+fn open(
+    url: &Url,
+    headers: &[(String, String)],
+    timeout: Duration,
+) -> Result<(BufReader<WsConn>, WsConn), Value> {
     let io_error = |what: &str, e: &io::Error| failure(what, e);
     let addrs = (url.host.as_str(), url.port)
         .to_socket_addrs()
@@ -261,10 +308,7 @@ fn handshake(url: &Url, headers: &[(String, String)], timeout: Duration) -> Resu
     let reset = |e: io::Error| io_error("接続を準備できません", &e);
     reader.get_ref().set_read_timeout(None).map_err(reset)?;
     writer.set_write_timeout(None).map_err(reset)?;
-    Ok(Value::Handle(Handle::new(HandleKind::WsClient {
-        reader,
-        writer,
-    })))
+    Ok((reader, writer))
 }
 
 /// TCP の接続を TLS にする（証明書とホスト名は必ず検証する。design.md 5.35）。
@@ -335,6 +379,247 @@ fn read_head_line(
     Ok(())
 }
 
+// ---- コールバック版（design.md 5.37） ----
+
+const HANDLER_KEYS: [&str; 4] = ["on_open", "on_message", "on_close", "on_error"];
+/// 補助スレッドが、送信の依頼と停止の合図を見に戻る間隔
+const POLL: Duration = Duration::from_millis(20);
+/// こちらから close を送ったあと、相手の close を待つ時間
+const CLOSE_WAIT: Duration = Duration::from_secs(3);
+
+fn connect_async(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    const NAME: &str = "ws.connect_async";
+    if !(2..=3).contains(&args.len()) {
+        return Err(format!(
+            "{NAME} の引数は 2 個か 3 個です（{} 個渡されました）",
+            args.len()
+        ));
+    }
+    let url = str_arg(NAME, args, 0)?.to_string();
+    let handlers = &args[args.len() - 1];
+    let Value::Map(map) = handlers else {
+        return Err(format!(
+            "{NAME} の最後の引数はコールバックのマップです（{}が渡されました）",
+            handlers.type_name()
+        ));
+    };
+    for (key, value) in map.borrow().iter() {
+        if !HANDLER_KEYS.contains(&&**key) {
+            return Err(format!(
+                "{NAME} のコールバックに知らないキー `{key}` があります"
+            ));
+        }
+        if !matches!(value, Value::Func(_) | Value::Native(_)) {
+            return Err(format!(
+                "{NAME} の `{key}` は関数です（{}でした）",
+                value.type_name()
+            ));
+        }
+    }
+    let opts = if args.len() == 3 {
+        connect_options(NAME, &args[1], 1, true)?
+    } else {
+        ConnectOptions::default()
+    };
+    let timeout = seconds(NAME, opts.timeout)?;
+    let ping = opts.ping_interval.map(|n| seconds(NAME, n)).transpose()?;
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let (out_tx, out_rx) = mpsc::channel::<WsOut>();
+    let conn = Value::Handle(Handle::new(HandleKind::WsServer { tx: out_tx }));
+    let id = interp
+        .events
+        .register_stream(handlers.clone(), conn, Arc::clone(&stop))?;
+    let job = ClientJob {
+        url: parse_url(&url),
+        headers: opts.headers,
+        timeout,
+        ping,
+        id,
+        events: interp.events.sender(),
+        out_rx,
+        stop,
+    };
+    thread::spawn(move || client_thread(job));
+    Ok(Value::Num(id as f64))
+}
+
+struct ClientJob {
+    url: Result<Url, String>,
+    headers: Vec<(String, String)>,
+    timeout: Duration,
+    ping: Option<Duration>,
+    id: u64,
+    events: Sender<Event>,
+    out_rx: Receiver<WsOut>,
+    stop: Arc<AtomicBool>,
+}
+
+/// 補助スレッド: 接続して、送信の依頼を書き、届いたものをイベントとして送る
+fn client_thread(job: ClientJob) {
+    let ClientJob {
+        url,
+        headers,
+        timeout,
+        ping,
+        id,
+        events,
+        out_rx,
+        stop,
+    } = job;
+    let emit = |event: StreamEvent| events.send(Event::Stream { id, event }).is_ok();
+    let fail = |value: Value| {
+        // 止められたあとの失敗は、誰も待っていない
+        if !stop.load(Ordering::SeqCst) {
+            emit(StreamEvent::Error(Data::from_value(&value)));
+        }
+    };
+    let url = match url {
+        Ok(url) => url,
+        Err(message) => return fail(error_value("network", message)),
+    };
+    let (mut reader, mut writer) = match open(&url, &headers, timeout) {
+        Ok(streams) => streams,
+        Err(e) => return fail(e),
+    };
+    if stop.load(Ordering::SeqCst) {
+        close_quietly(&mut writer);
+        return;
+    }
+    if !emit(StreamEvent::Open) {
+        return;
+    }
+    if let Some(result) = run_client(&mut reader, &mut writer, &out_rx, &stop, ping, &emit) {
+        let (code, reason) = result;
+        emit(StreamEvent::Close(code, reason));
+    }
+}
+
+fn mask() -> Option<[u8; 4]> {
+    Some(random_bytes::<4>())
+}
+
+fn close_quietly(writer: &mut WsConn) {
+    let payload = close_payload(1000, "");
+    let _ = write_frame(writer, OP_CLOSE, &payload, mask());
+    writer.close_notify();
+}
+
+fn is_timeout(e: &io::Error) -> bool {
+    matches!(
+        e.kind(),
+        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+    )
+}
+
+/// 接続の面倒を見る。閉じたら `Some((終了コード, 理由))`。止められて静かに閉じたら `None`
+fn run_client(
+    reader: &mut BufReader<WsConn>,
+    writer: &mut WsConn,
+    out_rx: &Receiver<WsOut>,
+    stop: &AtomicBool,
+    ping: Option<Duration>,
+    emit: &dyn Fn(StreamEvent) -> bool,
+) -> Option<(u16, String)> {
+    let lost = |e: &dyn std::fmt::Display| Some((1006, format!("接続が切れました: {e}")));
+    if let Err(e) = reader.get_ref().set_read_timeout(Some(POLL)) {
+        return lost(&e);
+    }
+    // こちらから close を送ったとき: （終了コード, 理由, 送った時刻）
+    let mut closing: Option<(u16, String, Instant)> = None;
+    let mut last_ping = Instant::now();
+    loop {
+        if stop.load(Ordering::SeqCst) {
+            close_quietly(writer);
+            return None;
+        }
+        // 送信の依頼
+        while let Ok(out) = out_rx.try_recv() {
+            let written = match out {
+                _ if closing.is_some() => Ok(()),
+                WsOut::Text(s) => write_frame(writer, OP_TEXT, s.as_bytes(), mask()),
+                WsOut::Binary(b) => write_frame(writer, OP_BINARY, &b, mask()),
+                WsOut::Pong(p) => write_frame(writer, OP_PONG, &p, mask()),
+                WsOut::Close(code, reason) => {
+                    let payload = close_payload(code, &reason);
+                    closing = Some((code, reason, Instant::now()));
+                    write_frame(writer, OP_CLOSE, &payload, mask())
+                }
+            };
+            if let Err(e) = written {
+                return lost(&e);
+            }
+        }
+        if let Some((code, reason, since)) = &closing
+            && since.elapsed() > CLOSE_WAIT
+        {
+            writer.close_notify();
+            return Some((*code, reason.clone()));
+        }
+        if let Some(interval) = ping
+            && closing.is_none()
+            && last_ping.elapsed() >= interval
+        {
+            last_ping = Instant::now();
+            if let Err(e) = write_frame(writer, OP_PING, b"", mask()) {
+                return lost(&e);
+            }
+        }
+        // 届いたもの。1 バイトでも来ていれば、そのメッセージは最後まで読む
+        match reader.fill_buf() {
+            Ok([]) => return lost(&"相手が接続を閉じました"),
+            Ok(_) => {}
+            Err(e) if is_timeout(&e) => continue,
+            Err(e) => return lost(&e),
+        }
+        let _ = reader.get_ref().set_read_timeout(None);
+        let result = read_message_or_control(reader, false, |payload| {
+            write_frame(writer, OP_PONG, payload, mask())
+        });
+        if let Err(e) = reader.get_ref().set_read_timeout(Some(POLL)) {
+            return lost(&e);
+        }
+        match result {
+            // ping / pong だけだったので、送信の依頼を見に戻る
+            Ok(None) => {}
+            Ok(Some(Message::Text(s))) => {
+                // 送り先（イベントループ）がなくなっていれば、静かに終わる
+                if !emit(StreamEvent::Message(Data::Str(s))) {
+                    return None;
+                }
+            }
+            Ok(Some(Message::Binary(b))) => {
+                if !emit(StreamEvent::Message(Data::Bytes(b))) {
+                    return None;
+                }
+            }
+            Ok(Some(Message::Close(code))) => {
+                let (code, reason) = code.unwrap_or((1005, String::new()));
+                if closing.is_none() {
+                    let _ = write_frame(writer, OP_CLOSE, &close_payload(code, ""), mask());
+                    writer.close_notify();
+                    return Some((code, reason));
+                }
+                writer.close_notify();
+                let (sent, sent_reason, _) = closing.take().expect("closing は Some");
+                return Some((sent, sent_reason));
+            }
+            Err(ProtoError::Io(e)) => return lost(&e),
+            Err(e) => {
+                let reason = match &e {
+                    ProtoError::Protocol(why) => (*why).to_string(),
+                    ProtoError::BadUtf8 => "テキストが UTF-8 ではありません".to_string(),
+                    _ => "メッセージが 16 MB を超えました".to_string(),
+                };
+                let code = e.close_code();
+                let _ = write_frame(writer, OP_CLOSE, &close_payload(code, ""), mask());
+                writer.close_notify();
+                return Some((code, reason));
+            }
+        }
+    }
+}
+
 // ---- 送受信 ----
 
 fn handle_arg<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v Handle, String> {
@@ -391,7 +676,7 @@ fn recv(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         }),
         HandleKind::WsServer { .. } => {
             return Err(
-                "サーバー側の接続は ws.recv できません（`on_message` コールバックで受け取ります）"
+                "コールバック式の接続（`http.serve` の `websocket` と `ws.connect_async`）は ws.recv できません（`on_message` で受け取ります）"
                     .into(),
             );
         }
@@ -491,7 +776,7 @@ fn set_timeout(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String>
             })
         }
         HandleKind::WsServer { .. } => {
-            Err("サーバー側の接続には ws.set_timeout を使えません".into())
+            Err("コールバック式の接続（`http.serve` の `websocket` と `ws.connect_async`）には ws.set_timeout を使えません".into())
         }
         HandleKind::Closed => Ok(closed()),
         _ => Err(not_ws("ws.set_timeout")),

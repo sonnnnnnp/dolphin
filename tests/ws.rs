@@ -299,3 +299,113 @@ log[err_kind[@ws.connect["wss://127.0.0.1/"]]]
     seen.sort();
     assert_eq!(seen, ["closed 1001", "closed 4000"]);
 }
+
+#[test]
+fn callback_client_talks_to_dolphin_server() {
+    let server = start("peer_async.dol");
+    let dir = std::env::temp_dir().join("dolphin-ws-tests");
+    let path = dir.join("client_async.dol");
+    fs::write(
+        &path,
+        format!(
+            r#"@ws := import["std:ws"]
+@async := import["std:async"]
+
+second[] (
+    // こちらから閉じる。サーバーのログに `closed 1001` が出る
+    @ws.connect_async["ws://127.0.0.1:{port}/echo", {{
+        "on_open": [@c] ( @ws.close[@c, 1001, "going away"] ),
+        "on_message": [@c, @m] ( log["second message @m"] ),
+        "on_close": [@c, @code, @reason] (
+            log["second close @code @reason"]
+            log[err_kind[@ws.send[@c, "late"]]]
+            third[]
+        )
+    }}]
+)
+
+third[] (
+    // つながらない相手
+    @ws.connect_async["ws://127.0.0.1:1/", {{
+        "on_open": [@c] ( log["unexpected open"] ),
+        "on_close": [@c, @code, @reason] ( log["unexpected close"] ),
+        "on_error": [@e] ( log["error @{{err_kind[@e]}}"] )
+    }}]
+)
+
+@ws.connect_async["ws://127.0.0.1:{port}/echo?x=1", {{"headers": {{"X-Test": "1"}}}}, {{
+    "on_open": [@c] ( log["open @{{type_of[@c]}}"] ),
+    "on_message": [@c, @m] (
+        log["message @m"]
+        if @m == "welcome" (
+            @ws.send[@c, "hello"]
+        )
+        if @m == "hello" (
+            @ws.send[@c, str_to_bytes["ab"]]
+        )
+        if type_of[@m] == "bytes" (
+            @ws.send[@c, "close"]
+        )
+    ),
+    "on_close": [@c, @code, @reason] (
+        log["close @code @reason"]
+        second[]
+    )
+}}]
+"#,
+            port = server.port
+        ),
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_dolphin"))
+        .arg(&path)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n");
+    assert_eq!(
+        stdout,
+        "open handle\nmessage welcome\nmessage hello\nmessage <bytes 6162>\nclose 4000 bye\nsecond message welcome\nsecond close 1001 going away\nclosed\nerror network\n",
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let mut seen = vec![server.next_line(), server.next_line()];
+    seen.sort();
+    assert_eq!(seen, ["closed 1001", "closed 4000"]);
+}
+
+#[test]
+fn callback_client_validates_arguments() {
+    let dir = std::env::temp_dir().join("dolphin-ws-tests");
+    fs::create_dir_all(&dir).unwrap();
+    for (src, expected) in [
+        (
+            r#"@ws := import["std:ws"]
+@ws.connect_async["ws://127.0.0.1:1/", {"on_open": 1}]"#,
+            "`on_open` は関数です",
+        ),
+        (
+            r#"@ws := import["std:ws"]
+@ws.connect_async["ws://127.0.0.1:1/", {"on_other": [@c] ( 1 )}]"#,
+            "知らないキー `on_other`",
+        ),
+        (
+            r#"@ws := import["std:ws"]
+@ws.connect_async["ws://127.0.0.1:1/", {"ping_interval": 0}, {:}]"#,
+            "秒数は 0 より大きい数",
+        ),
+        (
+            r#"@ws := import["std:ws"]
+@ws.connect_async["ws://127.0.0.1:1/", {"bogus": 1}, {:}]"#,
+            "オプション `bogus` は知りません",
+        ),
+    ] {
+        let path = dir.join("bad_async.dol");
+        fs::write(&path, src).unwrap();
+        let output = Command::new(env!("CARGO_BIN_EXE_dolphin"))
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains(expected), "{expected}: {stderr}");
+    }
+}
