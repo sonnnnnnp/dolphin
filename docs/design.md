@@ -921,7 +921,7 @@ log[@net.read_line[@conn]?]
 
 ### 5.22 WebSocket（`std:ws` と `http.serve`、v0.30.0、確定 2026-10-12）
 
-RFC 6455。サーバー側は `http.serve` のハンドラが「この接続を WebSocket にする」と返し、**コールバック**（イベント駆動）で扱う。クライアント側は `std:ws` のブロッキング関数（5.21 の TCP と同じ書き方）。TLS（`wss://`）は後回し。
+RFC 6455。サーバー側は `http.serve` のハンドラが「この接続を WebSocket にする」と返し、**コールバック**（イベント駆動）で扱う。クライアント側は `std:ws` のブロッキング関数（5.21 の TCP と同じ書き方）。TLS（`wss://`）は 5.35。
 
 #### サーバー
 
@@ -968,7 +968,7 @@ RFC 6455。サーバー側は `http.serve` のハンドラが「この接続を 
 | `Origin` `Sec-WebSocket-Protocol` | 見ない・扱わない（認証や許可は、ハンドラが `@req{"headers"}` を見て決める） | 確定 |
 | 圧縮（permessage-deflate） | 扱わない（申し出られても使わない） | 確定 |
 | 同時接続 | `http.serve` の 256 接続の上限に含む | 確定 |
-| `wss://` | 後回し（TLS を直接扱う実装が要る） | 後回し |
+| `wss://` | 5.35（v0.43.0） | 確定 |
 | ビルド | `http_server`（`http` feature）の中。`std:ws` は標準ライブラリだけで、feature なし（SHA-1 は自前で書く） | 確定 |
 
 ---
@@ -1496,6 +1496,29 @@ VS Code 拡張（`editors/vscode`）は、`dolphin lsp` を起動する小さな
 #### 解析の変更（5.33 の補足）
 
 文字列の中の `@{ 式 }` の式も、名前の使用として辿る（リネームで取りこぼさないため。定義へ移動・ホバーも効くようになる）。
+
+---
+
+### 5.35 `wss://`（`std:ws` の TLS、v0.43.0、確定 2026-10-17）
+
+`ws.connect`（5.22）が `wss://host[:port]/path?query` も受ける。yaylib のように、`wss://` でしか話せるサーバーのため。クライアントだけ（`http.serve` を `wss://` で待ち受けることはしない。TLS の終端はリバースプロキシに任せる）。
+
+```
+@ws := import["std:ws"]
+@conn := @ws.connect["wss://example.com/cable", {"headers": {"Origin": "https://example.com"}}]?
+```
+
+| 項目 | 内容 | 状態 |
+|---|---|---|
+| 書き方 | `ws.connect` の URL が `wss://` で始まれば TLS。ポートの既定は 443（`ws://` は 80）。`options`、`send` `recv` `close` `set_timeout` は `ws://` と同じ | 確定 |
+| TLS | rustls。ルート証明書は `std:http` と同じ（webpki-roots）。**証明書とホスト名の検証は常に行う**（検証をやめる設定は作らない）。ホスト名は SNI にも使う（IP アドレスの URL も可） | 確定 |
+| `timeout` | TLS のハンドシェイクを含む（5.22 のハンドシェイクの時間切れと同じ） | 確定 |
+| `Host` ヘッダー | ポートが既定（`ws` は 80、`wss` は 443）なら、ポートを付けない。IPv6 は `[::1]:9` の形 | 確定 |
+| 失敗 | 証明書が正しくない・TLS が成立しない・サーバーが TLS を話さない、などは `network` のエラー値（理由を含む） | 確定 |
+| `close` | close フレームのあと、TLS の close_notify も送る（送れなくても閉じる） | 確定 |
+| feature | `tls`（既定で有効）。無い版では、`wss://` が `network` のエラー値（「この版には wss:// が含まれていません」）。`ws://` は影響を受けない | 確定 |
+| 受信中の時間切れ | `ws.set_timeout` の時間切れのあとも、同じ接続で続けられる（5.22 と同じ。TLS の途中のレコードは保たれる） | 確定 |
+| `http.serve` | 対象外。`wss://` で受けたいときは、TLS を外すプロキシ（nginx など）の後ろに置く | 確定 |
 
 ---
 
