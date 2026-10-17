@@ -1522,6 +1522,48 @@ VS Code 拡張（`editors/vscode`）は、`dolphin lsp` を起動する小さな
 
 ---
 
+### 5.36 画像（`std:image`、v0.44.0、確定 2026-10-17）
+
+画像の**バイト列**を受け取って、縦横を調べる・縮小する・形式を変える。`canvas.image`（5.26）は画面に描くためのもので、パスを受け取り `ui` feature が要る。こちらはデータを加工するもので、GUI なしで使える（アップロード前に寸法を調べてサムネイルを作る、など）。`image` クレートを使い、`image` feature（既定で有効。`ui` feature も含む）に入れる。
+
+```
+@img := import["std:image"]
+@data := file_read_bytes["photo.png"]?
+@info := @img.info[@data]?                  // {"format": "png", "width": 1200, "height": 800}
+@thumb := @img.resize[@data, 300, 300, {"fit": "inside", "format": "jpeg", "quality": 85}]?
+file_write_bytes["thumb.jpg", @thumb]
+```
+
+| 関数 | 内容 |
+|---|---|
+| `info[data]` | `{"format": …, "width": …, "height": …}`。`format` は中身から決める（拡張子ではなく先頭のバイトを見る）: `"png"` `"jpeg"` `"gif"` `"bmp"` `"webp"`。ヘッダーだけ読む |
+| `resize[data, w, h]` `resize[data, w, h, options]` | 縮小・拡大した画像のバイト列 |
+| `crop[data, x, y, w, h]` `crop[data, x, y, w, h, options]` | `(x, y)` から `w` × `h` を切り出す。範囲が画像からはみ出せばエラー値 |
+| `convert[data, format]` `convert[data, format, options]` | 形式を変える（`format` は `"png"` `"jpeg"` `"gif"`） |
+
+#### `options`（マップ）
+
+| キー | 内容 |
+|---|---|
+| `format` | 出力の形式（`"png"` `"jpeg"` `"gif"`）。省略は入力と同じ形式（`bmp` `webp` は `"png"` になる） |
+| `quality` | JPEG の品質 1〜100。省略は 85。`jpeg` 以外では無視する |
+| `fit` | `resize` だけ。`"exact"`（既定。`w` × `h` にちょうどする）、`"inside"`（縦横比を保って `w` × `h` の箱に収める。**小さい画像は拡大しない**）、`"cover"`（縦横比を保って箱をちょうど埋め、はみ出しは中央で切る） |
+| `filter` | `resize` だけ。`"bilinear"`（既定）`"nearest"`（ドット絵向け）`"lanczos"`（きれい、遅い） |
+
+| 項目 | 内容 | 状態 |
+|---|---|---|
+| アニメーション GIF | 入力も出力も `gif` なら、全フレームを同じ規則で加工して、フレームの表示時間と繰り返しを保つ。出力が `gif` 以外なら、最初のフレームだけ | 確定 |
+| 透明 | JPEG は透明を持てないので、白の上に重ねて平らにする | 確定 |
+| 向き | EXIF の向き（回転）は見ない・直さない | 確定 |
+| 大きさの上限 | 縦横それぞれ 16384 画素まで、デコードは 1 億画素まで。超えたら `too_large` のエラー値 | 確定 |
+| 失敗 | 読めない・対応しない形式・壊れている → `parse` のエラー値。大きすぎる → `too_large`。範囲が画像の外 → `parse` ではなく実行時エラーにはせず `range` のエラー値 | 確定 |
+| 引数の間違い | `w` `h` が 1 以上の整数でない、`format` `fit` `filter` が知らない値、`quality` が 1〜100 でない、型が違う、は実行時エラー | 確定 |
+| 並列 | 重い処理なので、`std:async` の非同期版は作らない（必要になったら足す） | 確定 |
+| ビルド | `image` feature（既定で有効）。無い版では `import["std:image"]` が「`image` feature を付けてビルドしてください」のエラー | 確定 |
+| 検証 | 画像はテスト内で作る（既知のピクセルを持つ小さな画像を、Rust 側で PNG・JPEG・GIF に符号化して使う） | 確定 |
+
+---
+
 ## 6. 旧実装からの主な変更（案）
 
 | 旧実装 | 作り直し版 | 理由 |
