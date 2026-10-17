@@ -38,6 +38,7 @@ fn run_cli() -> i32 {
     match args[0].as_str() {
         "check" => return check(&args[1..]),
         "fmt" => return fmt(&args[1..]),
+        "lsp" if args.len() == 1 => return dolphin::lsp::run_stdio(),
         "test" => {
             let paths: Vec<_> = args[1..].iter().map(PathBuf::from).collect();
             return dolphin::testrun::run(&paths, &mut io::stdout());
@@ -53,6 +54,7 @@ fn run_cli() -> i32 {
             eprintln!("        dolphin check <file.dol>...  （実行せずに検査）");
             eprintln!("        dolphin test [パス...]       （*_test.dol の test_ 関数を実行）");
             eprintln!("        dolphin fmt [--check | --stdout] <file.dol>...  （整形）");
+            eprintln!("        dolphin lsp                  （言語サーバー。エディタが起動する）");
             eprintln!("        dolphin              （引数なしで対話モード）");
             return 2;
         }

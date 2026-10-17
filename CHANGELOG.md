@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-10-17
+
+言語サーバー（[design.md 5.33](docs/design.md)）。
+
+### 追加
+- `dolphin lsp`: 標準入出力で LSP を話す言語サーバー。**定義へ移動**（変数・引数・関数、`@m := import["相対パス"]` した先の `@m.f`）、**エラー表示**（`dolphin check` と同じ検査）、**ホバー**（関数の形と直前の `//` コメント、変数の宣言の行）、**アウトライン**、**整形**（`dolphin fmt` と同じ）。位置は UTF-16 に変換するので、日本語・絵文字のあとでもずれない。外部クレートなし（JSON-RPC 用に小さな JSON を自前で持つ）
+- VS Code 拡張（`editors/vscode`、0.2.0）が `dolphin lsp` を起動する。設定 `dolphin.path` で実行ファイルの場所を変えられる。`npm run package` で `.vsix` を作る
+
 ## [0.40.0] - 2026-10-16
 
 コレクションの道具（[design.md 5.32](docs/design.md)）。「Python に比べて足りないもの」の 5 つめ（これで 1 番の 5 つが揃った）。

@@ -1,15 +1,22 @@
-# Dolphin の VS Code 拡張（シンタックスハイライト）
+# Dolphin の VS Code 拡張（シンタックスハイライトと言語サーバー）
 
-`.dol` ファイルに、色づけとコメント・括弧の設定をつけます。
+`.dol` ファイルに、色づけとコメント・括弧の設定をつけます。さらに `dolphin lsp`（言語サーバー）につないで、**定義へ移動**（F12）・**エラー表示**・**ホバー**・**アウトライン**・**整形**を使えるようにします（仕様は docs/design.md 5.33）。`dolphin` の実行ファイルが PATH にあれば、設定なしで動きます。PATH にないときは、設定 `dolphin.path` に実行ファイルの場所を書きます。
 
 ## 入れ方
 
-このフォルダ（`editors/vscode`）を、VS Code の拡張機能のフォルダにコピーして、VS Code を再起動します。
+Node.js が要ります。このフォルダ（`editors/vscode`）で、`.vsix` を作って入れます。
 
-- Windows（PowerShell）: `Copy-Item -Recurse editors\vscode $env:USERPROFILE\.vscode\extensions\dolphin-lang`
-- macOS / Linux: `cp -r editors/vscode ~/.vscode/extensions/dolphin-lang`
+```
+npm install
+npm run package
+code --install-extension dolphin-lang-0.2.0.vsix
+```
 
-配布用に固めるなら、`npx @vscode/vsce package` で `.vsix` を作り、`code --install-extension dolphin-lang-0.1.0.vsix` で入れます。
+試すだけなら、このフォルダを VS Code で開いて、`npm install` のあと F5（拡張機能の開発ホスト）でも動きます。
+
+## ほかのエディタ
+
+拡張は要りません。「`dolphin lsp` を言語サーバーとして起動する」設定を書きます（例: Neovim の `vim.lsp.start({ name = "dolphin", cmd = { "dolphin", "lsp" } })`、Helix の `languages.toml` の `[language-server.dolphin]` に `command = "dolphin"` と `args = ["lsp"]`）。
 
 ## 色づけの対象
 

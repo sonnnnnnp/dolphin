@@ -1,11 +1,11 @@
 {
   "name": "dolphin-lang",
   "displayName": "Dolphin",
-  "description": "Dolphin 言語（.dol）のシンタックスハイライト",
-  "version": "0.1.1",
+  "description": "Dolphin 言語（.dol）のシンタックスハイライトと言語サーバー（定義へ移動・エラー表示・ホバー・アウトライン・整形）",
+  "version": "0.2.0",
   "publisher": "dolphin",
   "engines": {
-    "vscode": "^1.60.0"
+    "vscode": "^1.67.0"
   },
   "categories": [
     "Programming Languages"
@@ -50,6 +50,29 @@
           ]
         }
       }
+    },
+    "configuration": {
+      "title": "Dolphin",
+      "properties": {
+        "dolphin.path": {
+          "type": "string",
+          "default": "dolphin",
+          "description": "言語サーバーとして起動する dolphin の実行ファイル（既定は PATH の dolphin）"
+        }
+      }
     }
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:dolphin"
+  ],
+  "scripts": {
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "8.1.0"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.0.0"
   }
 }

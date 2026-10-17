@@ -5,6 +5,7 @@
 
 pub mod diag;
 pub mod fmt;
+pub mod lsp;
 pub mod runtime;
 pub mod sema;
 pub mod stdlib;

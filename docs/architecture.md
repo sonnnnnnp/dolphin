@@ -67,6 +67,7 @@ dolphin/
 │  ├─ repl.rs            対話モード（feature = "repl"、rustyline を使う）
 │  ├─ lib.rs             公開 API（run_source、Session）。CLI・テスト・将来の wasm 版から使う
 │  ├─ fmt.rs             `dolphin fmt`（字句単位の整形。空白と字下げだけを決め直す）
+│  ├─ lsp/               `dolphin lsp`（言語サーバー。mod.rs: JSON-RPC の読み書きと各要求、analysis.rs: 名前の宣言と使用の解析、json.rs: 小さな JSON）
 │  ├─ ui/             std:ui と std:canvas（canvas.rs / canvas_gui.rs: フレームごとの描画。mod.rs: 部品の木・コールバックの番号・ui.run、widgets.rs: 部品を作る関数、host.rs: メインスレッドのホスト、gui.rs: egui の描画（feature = "ui"））
 │  ├─ testrun.rs        `dolphin test`（*_test.dol を集めて test_ 関数を実行）
 │  ├─ diag.rs            Diagnostic（エラー表示）
