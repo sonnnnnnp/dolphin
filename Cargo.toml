@@ -1,6 +1,6 @@
 [package]
 name = "dolphin"
-version = "0.43.0"
+version = "0.44.0"
 edition = "2024"
 
 # コア言語（lib）は外部クレートに依存しない。CLI の便利機能だけ feature で足す
@@ -25,7 +25,7 @@ rustls = { version = "0.23", optional = true, default-features = false, features
 webpki-roots = { version = "1", optional = true }
 
 [features]
-default = ["repl", "http", "crypto", "regex", "tls"]
+default = ["repl", "http", "crypto", "regex", "tls", "image"]
 # REPL の行編集（矢印キー・履歴）。wasm 版などでは外す
 repl = ["dep:rustyline"]
 # HTTP クライアント（`import["std:http"]`）。外すと TLS などの依存がビルドに入らない
@@ -37,7 +37,9 @@ crypto = ["dep:ring", "dep:md-5"]
 # 正規表現（`import["std:regex"]`）
 regex = ["dep:regex"]
 # GUI（`import["std:ui"]`）。依存が多くビルドが重いので、既定では無効（`--features ui`）
-ui = ["dep:eframe", "dep:image"]
+ui = ["dep:eframe", "image"]
+# 画像の加工（`import["std:image"]`）。`ui` feature にも含まれる
+image = ["dep:image"]
 # 音の再生（`import["std:audio"]`）。既定では無効（`--features audio`）
 audio = ["dep:rodio"]
 # SQLite（`import["std:sqlite"]`）。ソースを同梱するのでビルドが長くなる。既定では無効（`--features sqlite`）

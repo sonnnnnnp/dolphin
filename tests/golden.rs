@@ -24,8 +24,15 @@ fn golden() {
         }
         // `ui` `audio` feature を付けた版では、あるモジュールの一覧が変わる
         if name == "std_missing.dol"
-            && (cfg!(feature = "ui") || cfg!(feature = "audio") || cfg!(feature = "sqlite"))
+            && (cfg!(feature = "ui")
+                || cfg!(feature = "audio")
+                || cfg!(feature = "sqlite")
+                || !cfg!(feature = "image"))
         {
+            continue;
+        }
+        // `image` feature を外した版では、std:image を使うケースは動かさない
+        if name.starts_with("image") && !cfg!(feature = "image") {
             continue;
         }
         // `regex` feature を外した版では、std:regex を使うケースは動かさない

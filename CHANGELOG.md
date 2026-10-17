@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-10-17
+
+画像の加工（[design.md 5.36](docs/design.md)）。画像を投稿する前に、縦横を調べてサムネイルを作るため。
+
+### 追加
+- `import["std:image"]`（`image` feature、既定で有効。`ui` feature にも含まれる）: `info`（形式は先頭のバイトから決め、ヘッダーだけ読んで縦横を返す）、`resize`（`fit` は `exact` `inside`〔縦横比を保ち、小さい画像は拡大しない〕`cover`、`filter` は `bilinear` `nearest` `lanczos`）、`crop`、`convert`。形式は `png` `jpeg`〔`quality` 1〜100、既定 85〕`gif`。入力は `bmp` `webp` も読める
+- 動く GIF は、GIF で出すとき全フレームを加工して、表示時間を保つ。透明は JPEG にするとき白の上に重ねる
+- 縦横 16384 画素・1 億画素を超える画像は `too_large` のエラー値
+
 ## [0.43.0] - 2026-10-17
 
 `wss://`（[design.md 5.35](docs/design.md)）。yaylib のように、TLS でしか話せない WebSocket のサーバーにつなぐため。

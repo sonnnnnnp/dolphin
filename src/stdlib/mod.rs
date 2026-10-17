@@ -21,6 +21,8 @@ pub mod gc;
 pub mod http;
 #[cfg(feature = "http")]
 pub mod http_server;
+#[cfg(feature = "image")]
+pub mod image_;
 pub mod io;
 pub mod json;
 pub mod map;
@@ -76,6 +78,8 @@ pub fn register(interp: &mut Interpreter<'_>) {
     csv::register(interp);
     path::register(interp);
     random::register(interp);
+    #[cfg(feature = "image")]
+    image_::register(interp);
     #[cfg(feature = "regex")]
     regex::register(interp);
     #[cfg(feature = "sqlite")]

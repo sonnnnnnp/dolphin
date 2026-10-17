@@ -1,0 +1,4 @@
+image_bad_option.dol:4:1: エラー: image.resize の `fit` は "exact" "inside" "cover" のどれかです（"stretch" が渡されました）
+  |
+4 | @img.resize[@png, 2, 2, {"fit": "stretch"}]
+  | ^

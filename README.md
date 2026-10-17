@@ -152,6 +152,7 @@ count: 3
 | [v0.41.0](https://github.com/sonnnnnnp/dolphin/tree/v0.41.0) | 言語サーバー `dolphin lsp`（定義へ移動・エラー表示・ホバー・アウトライン・整形）と VS Code 拡張 | [v0.40.0...v0.41.0](https://github.com/sonnnnnnp/dolphin/compare/v0.40.0...v0.41.0) |
 | [v0.42.0](https://github.com/sonnnnnnp/dolphin/tree/v0.42.0) | 言語サーバーに補完・参照の検索・リネーム | [v0.41.0...v0.42.0](https://github.com/sonnnnnnp/dolphin/compare/v0.41.0...v0.42.0) |
 | [v0.43.0](https://github.com/sonnnnnnp/dolphin/tree/v0.43.0) | `wss://`（WebSocket の TLS） | [v0.42.0...v0.43.0](https://github.com/sonnnnnnp/dolphin/compare/v0.42.0...v0.43.0) |
+| [v0.44.0](https://github.com/sonnnnnnp/dolphin/tree/v0.44.0) | 画像の加工 `std:image`（`info` `resize` `crop` `convert`） | [v0.43.0...v0.44.0](https://github.com/sonnnnnnp/dolphin/compare/v0.43.0...v0.44.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

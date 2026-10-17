@@ -1,0 +1,26 @@
+// std:image（design.md 5.36）
+@img := import["std:image"]
+@enc := import["std:encoding"]
+
+// 4 × 2 の PNG
+@png := @enc.base64_decode["iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAAIElEQVR4nGNgYGj4HwDEC4D4AxAzMFQABYB4ARB/AGIAB3URmbLcb2EAAAAASUVORK5CYII="]?
+log[@img.info[@png]?]
+
+// 縮小: exact は指定どおり、inside は縦横比を保ち、小さい画像は拡大しない
+log[@img.info[@img.resize[@png, 2, 2]?]?]
+log[@img.info[@img.resize[@png, 2, 2, {"fit": "inside"}]?]?]
+log[@img.info[@img.resize[@png, 100, 100, {"fit": "inside"}]?]?]
+log[@img.info[@img.resize[@png, 2, 2, {"fit": "cover", "filter": "nearest"}]?]?]
+
+// 形式の変換
+log[@img.info[@img.convert[@png, "jpeg"]?]?{"format"}]
+log[@img.info[@img.resize[@png, 2, 1, {"format": "jpeg", "quality": 50}]?]?]
+log[@img.info[@img.convert[@png, "gif"]?]?{"format"}]
+
+// 切り出し
+log[@img.info[@img.crop[@png, 1, 0, 2, 2]?]?]
+log[err_kind[@img.crop[@png, 3, 0, 2, 2]]]
+
+// 失敗はエラー値
+log[err_kind[@img.info[@enc.hex_decode["00112233"]?]]]
+log[err_kind[@img.resize[@enc.hex_decode["00112233"]?, 2, 2]]]

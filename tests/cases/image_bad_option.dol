@@ -1,0 +1,4 @@
+@img := import["std:image"]
+@enc := import["std:encoding"]
+@png := @enc.base64_decode["iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAAIElEQVR4nGNgYGj4HwDEC4D4AxAzMFQABYB4ARB/AGIAB3URmbLcb2EAAAAASUVORK5CYII="]?
+@img.resize[@png, 2, 2, {"fit": "stretch"}]
