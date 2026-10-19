@@ -30,6 +30,7 @@ pub mod math;
 pub mod net;
 pub mod os;
 pub mod path;
+pub mod process;
 pub mod random;
 #[cfg(feature = "regex")]
 pub mod regex;

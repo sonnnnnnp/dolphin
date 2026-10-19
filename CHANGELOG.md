@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.50.0] - 2026-10-20
+
+プロセスの常駐連携（[design.md 5.42](docs/design.md)）。起動したままのコマンドと、標準入出力でやり取りし続けられるように。
+
+### 追加
+- `os.spawn[command, args]` `os.spawn[command, args, options]`: 子プロセスを起動してすぐ返し、`{"pid", "process", "stdin", "stdout", "stderr"}` のマップを返す。標準入出力は `std:stream` のストリーム（`stdin` への `write` は書くたびに相手へ送る）。`options` は `cwd` `env` と、`stdin` `stdout` `stderr` の `"pipe"`（既定。`stderr` だけ `"inherit"`）`"null"` `"inherit"`
+- `os.wait[process]` `os.wait[process, timeout]`（終わるまで待つ。時間切れは `nil`）、`os.poll[process]`（待たずに調べる）、`os.kill[process]`
+- プロセスは `handle` 型。参照されなくなったとき、まだ動いていれば強制的に終わらせる
+
 ## [0.49.0] - 2026-10-20
 
 ストリーム `std:stream`（[design.md 5.41](docs/design.md)）。ファイル・標準入出力・HTTP の本文・メモリを、少しずつ読み書きできるように。数 GB のファイルやダウンロードが扱える。

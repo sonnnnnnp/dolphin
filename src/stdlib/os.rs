@@ -28,6 +28,10 @@ pub fn register(interp: &mut Interpreter<'_>) {
             ("os.exe", exe),
             ("os.run", run),
             ("os.run_async", run_async),
+            ("os.spawn", super::process::spawn),
+            ("os.wait", super::process::wait),
+            ("os.poll", super::process::poll),
+            ("os.kill", super::process::kill),
         ],
     );
 }

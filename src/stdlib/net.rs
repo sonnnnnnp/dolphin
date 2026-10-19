@@ -200,6 +200,9 @@ fn accept(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         HandleKind::Stream(_) | HandleKind::StreamClosed => {
             Err("net.accept に渡せるのは待ち受けのハンドルです（ストリームでした）".into())
         }
+        HandleKind::Process(_) => {
+            Err("net.accept に渡せるのは待ち受けのハンドルです（プロセスでした）".into())
+        }
         #[cfg(feature = "sqlite")]
         HandleKind::Sqlite(_) | HandleKind::SqliteClosed => {
             Err("net.accept に渡せるのは待ち受けのハンドルです（SQLite でした）".into())
@@ -225,6 +228,9 @@ fn with_conn(
         )),
         HandleKind::WsClient { .. } | HandleKind::WsServer { .. } => Err(format!(
             "{name} に渡せるのは TCP の接続のハンドルです（WebSocket でした）"
+        )),
+        HandleKind::Process(_) => Err(format!(
+            "{name} に渡せるのは TCP の接続のハンドルです（プロセスでした）"
         )),
         HandleKind::Stream(_) | HandleKind::StreamClosed => Err(format!(
             "{name} に渡せるのは TCP の接続のハンドルです（ストリームでした。ストリームには std:stream の関数を使います）"
@@ -366,6 +372,9 @@ fn local_addr(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> 
             return Err(
                 "net.local_addr に渡せるのは TCP のハンドルです（ストリームでした）".into(),
             );
+        }
+        HandleKind::Process(_) => {
+            return Err("net.local_addr に渡せるのは TCP のハンドルです（プロセスでした）".into());
         }
         #[cfg(feature = "sqlite")]
         HandleKind::Sqlite(_) | HandleKind::SqliteClosed => {

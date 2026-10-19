@@ -117,6 +117,8 @@ pub enum HandleKind {
     WsServer {
         tx: Sender<WsOut>,
     },
+    /// 起動した子プロセス（`os.spawn`。design.md 5.42）
+    Process(ProcessHandle),
     /// ストリーム（`std:stream`。design.md 5.41）
     Stream(StreamIo),
     StreamClosed,
@@ -126,6 +128,23 @@ pub enum HandleKind {
     #[cfg(feature = "sqlite")]
     SqliteClosed,
     Closed,
+}
+
+/// 起動した子プロセス。参照されなくなったとき、まだ動いていれば強制的に終わらせる
+pub struct ProcessHandle {
+    pub child: std::process::Child,
+    pub pid: u32,
+    /// 終わったあとの終了コード（シグナルで終わったときは None）。まだ動いていれば外側が None
+    pub result: Option<Option<i32>>,
+}
+
+impl Drop for ProcessHandle {
+    fn drop(&mut self) {
+        if self.result.is_none() {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
 }
 
 /// ストリームの書き込み先
@@ -193,6 +212,7 @@ impl fmt::Display for Handle {
                 Err(_) => write!(f, "<websocket 接続>"),
             },
             HandleKind::WsServer { .. } => write!(f, "<websocket サーバー側の接続>"),
+            HandleKind::Process(p) => write!(f, "<process {}>", p.pid),
             HandleKind::Stream(io) => write!(f, "<stream {}>", io.label),
             HandleKind::StreamClosed => write!(f, "<stream 閉じています>"),
             #[cfg(feature = "sqlite")]

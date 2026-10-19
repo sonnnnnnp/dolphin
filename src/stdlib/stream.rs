@@ -131,7 +131,7 @@ fn handle_arg<'v>(name: &str, args: &'v [Value], i: usize) -> Result<&'v Rc<Hand
     }
 }
 
-fn stream_value(
+pub(super) fn stream_value(
     reader: Option<Box<dyn BufRead>>,
     writer: Option<StreamSink>,
     label: String,

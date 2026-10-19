@@ -1726,7 +1726,7 @@ log[to_num[@id] + 1]             // 1.2345678901234568e18（数値になる）
 ```
 @os := import["std:os"]
 @s := import["std:stream"]
-@p := @os.spawn["python3", ["-u", "-c", "import sys\nfor l in sys.stdin: print(l.upper(), end='')"]]?
+@p := @os.spawn["python3", {"-u", "-c", "import sys\nfor l in sys.stdin: print(l.upper(), end='')"}]?
 @s.write[@p{"stdin"}, "hello\n"]?
 log[@s.read_line[@p{"stdout"}]?]      // HELLO
 @s.close[@p{"stdin"}]                 // 標準入力を閉じると、相手は読み終わって終わる
