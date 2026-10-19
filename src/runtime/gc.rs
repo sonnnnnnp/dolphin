@@ -289,6 +289,7 @@ mod tests {
         let env = Env::new(None);
         let def = Rc::new(FuncDef {
             name: String::new(),
+            is_async: false,
             params: Vec::new(),
             rest: None,
             body: Vec::new(),

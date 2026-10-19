@@ -74,6 +74,13 @@ pub struct Interpreter<'a> {
     depth: usize,
     /// コンパイル済みの関数（定義のアドレス → 定義と命令列）
     chunks: HashMap<usize, (Rc<FuncDef>, Rc<Chunk>)>,
+    /// 止まっている `async` 関数の流れ（番号 → 流れ。design.md 5.46）
+    coroutines: HashMap<u64, vm::Coroutine>,
+    next_coroutine: u64,
+    /// 再開できる（待っていた future が終わった）流れの番号
+    ready: std::collections::VecDeque<u64>,
+    /// いま動かしている流れ
+    current_coroutine: Option<u64>,
     natives: HashMap<&'static str, NativeFn>,
     /// いま実行している組み込み関数の呼び出し位置。組み込み関数が関数値を呼ぶときの位置になる
     native_span: Span,
@@ -108,6 +115,10 @@ impl<'a> Interpreter<'a> {
             stack: Vec::new(),
             depth: 0,
             chunks: HashMap::new(),
+            coroutines: HashMap::new(),
+            next_coroutine: 1,
+            ready: std::collections::VecDeque::new(),
+            current_coroutine: None,
             natives: HashMap::new(),
             native_span: Span { line: 1, col: 1 },
             native_error: None,
@@ -122,6 +133,11 @@ impl<'a> Interpreter<'a> {
     /// いま実行しているファイルのあるディレクトリ（`import` の相対パスの基準）
     pub fn current_dir(&self) -> &Path {
         &self.current.dir
+    }
+
+    /// 再開を待つ流れがあるか（スクリプトの最後で、イベントループを動かす必要があるか）
+    pub fn has_ready(&self) -> bool {
+        !self.ready.is_empty()
     }
 
     /// 組み込み関数の名前（並べ替え済み。言語サーバーの補完用）
@@ -357,6 +373,9 @@ impl<'a> Interpreter<'a> {
         callee_span: Span,
     ) -> RResult<Value> {
         match f {
+            Value::Func(closure) if closure.def.is_async => {
+                self.start_coroutine(&closure.module, &closure.def, &closure.env, args, span)
+            }
             Value::Func(closure) => {
                 let target = self.vm_frames.len();
                 self.push_function_frame(&closure.module, &closure.def, &closure.env, args, span)?;
@@ -572,6 +591,21 @@ impl<'a> Interpreter<'a> {
                 Const::Str(s) => Value::Str(s.into()),
             };
             module.globals.declare(name, value);
+        }
+        // Dolphin で書いた関数（`async.all` など）
+        if key == "std:async" {
+            let tokens = lexer::tokenize(crate::stdlib::async_::PRELUDE)
+                .expect("std:async の Dolphin のコードは字句に分けられる");
+            let program =
+                parser::parse(&tokens).expect("std:async の Dolphin のコードは解析できる");
+            for stmt in &program.stmts {
+                if let StmtKind::FuncDef(def) = &stmt.kind {
+                    module
+                        .functions
+                        .borrow_mut()
+                        .insert(def.name.clone(), Rc::clone(def));
+                }
+            }
         }
         let module = Rc::new(module);
         self.std_loaded.insert(key, Rc::clone(&module));

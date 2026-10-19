@@ -121,6 +121,8 @@ impl fmt::Display for Pattern {
 pub struct FuncDef {
     /// 無名関数は空文字列
     pub name: String,
+    /// `async` 関数（design.md 5.46）。呼ぶと future を返し、`await` で止まれる
+    pub is_async: bool,
     pub params: Vec<Param>,
     /// `...@rest`。残りの引数を配列で受け取る（design.md 5.19）
     pub rest: Option<String>,
@@ -194,6 +196,8 @@ pub enum ExprKind {
     },
     /// `expr?`。値がエラー値なら、いまの関数からそのエラーを返す
     Try(Box<Expr>),
+    /// `await expr`。future が終わるまで待って、その値になる（design.md 5.46）
+    Await(Box<Expr>),
     /// `callee[args]`。関数値を呼ぶ（`@f[1]`）
     CallValue {
         callee: Box<Expr>,
@@ -274,7 +278,8 @@ impl fmt::Display for Stmt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
             StmtKind::FuncDef(def) => {
-                write!(f, "(def {} (", def.name)?;
+                let head = if def.is_async { "async-def" } else { "def" };
+                write!(f, "({head} {} (", def.name)?;
                 write_seq(
                     f,
                     def.params
@@ -372,6 +377,7 @@ impl fmt::Display for Expr {
             }
             ExprKind::FuncRef(name) => write!(f, "(ref {name})"),
             ExprKind::Try(inner) => write!(f, "(? {inner})"),
+            ExprKind::Await(inner) => write!(f, "(await {inner})"),
             ExprKind::Spread(inner) => write!(f, "(... {inner})"),
             ExprKind::If {
                 cond,
@@ -379,7 +385,7 @@ impl fmt::Display for Expr {
                 else_expr,
             } => write!(f, "(if {cond} {then_expr} {else_expr})"),
             ExprKind::Lambda(def) => {
-                write!(f, "(fn (")?;
+                write!(f, "({} (", if def.is_async { "async-fn" } else { "fn" })?;
                 write_seq(
                     f,
                     def.params

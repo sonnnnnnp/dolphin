@@ -112,7 +112,9 @@ impl<'a> Session<'a> {
         self.exec(src, false)?;
         // 待っているもの（タイマー・非同期の関数）がある間は、イベントループを動かす（design.md 5.23）。
         // Err は `os.exit`（終了コードは `exit_code` にある）
-        if self.interp.exit_code.is_none() && self.interp.events.has_pending() {
+        if self.interp.exit_code.is_none()
+            && (self.interp.events.has_pending() || self.interp.has_ready())
+        {
             let _ = self.interp.run_event_loop();
         }
         Ok(())

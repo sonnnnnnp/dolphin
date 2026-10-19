@@ -94,6 +94,7 @@ pub fn resolve(
     let mut top = Ctx {
         scopes: vec![HashSet::new()],
         in_func: false,
+        in_async: false,
     };
     for stmt in &program.stmts {
         match &stmt.kind {
@@ -109,6 +110,8 @@ struct Ctx<'a> {
     /// 外側から順。各スコープで宣言済みの変数名
     scopes: Vec<HashSet<&'a str>>,
     in_func: bool,
+    /// `async` 関数の中か（`await` を書けるか。design.md 5.46）
+    in_async: bool,
 }
 
 struct Resolver<'a> {
@@ -125,6 +128,7 @@ impl<'a> Resolver<'a> {
         let mut ctx = Ctx {
             scopes: Vec::new(),
             in_func: true,
+            in_async: def.is_async,
         };
         self.func_body(def, &mut ctx)
     }
@@ -323,10 +327,21 @@ impl<'a> Resolver<'a> {
                 let mut inner = Ctx {
                     scopes: ctx.scopes.clone(),
                     in_func: true,
+                    in_async: def.is_async,
                 };
                 self.func_body(def, &mut inner)
             }
             ExprKind::Try(inner) | ExprKind::Spread(inner) => self.expr(inner, ctx),
+            ExprKind::Await(inner) => {
+                // `async` 関数の中と、ファイルの最上位で書ける
+                if ctx.in_func && !ctx.in_async {
+                    return Err(Diagnostic::new(
+                        expr.span,
+                        "`await` は `async` 関数の中か、ファイルの最上位でだけ書けます",
+                    ));
+                }
+                self.expr(inner, ctx)
+            }
             ExprKind::If {
                 cond,
                 then_expr,

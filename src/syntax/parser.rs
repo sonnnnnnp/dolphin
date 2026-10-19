@@ -149,6 +149,17 @@ impl<'t> Parser<'t> {
                 StmtKind::Continue
             }
             TokenKind::LBrace if self.looks_like_destructure() => return self.destructure(),
+            // `async 名前[…] ( … )` は async 関数の定義。`async [` は無名関数の式
+            TokenKind::Async if matches!(self.tokens[self.pos + 1].kind, TokenKind::Ident(_)) => {
+                self.advance();
+                if !self.looks_like_func_def() {
+                    return Err(Diagnostic::new(
+                        span,
+                        "`async` の後には、関数の定義（`async 名前[引数] ( … )`）を書きます",
+                    ));
+                }
+                return self.func_def_stmt(true, span);
+            }
             _ => return self.simple_statement(),
         };
         Ok(Stmt { kind, span })
@@ -163,25 +174,7 @@ impl<'t> Parser<'t> {
     fn simple_statement(&mut self) -> PResult<Stmt> {
         let span = self.peek().span;
         if self.looks_like_func_def() {
-            let TokenKind::Ident(name) = &self.peek().kind else {
-                unreachable!("looks_like_func_def が確かめた")
-            };
-            let name = name.clone();
-            self.advance();
-            self.advance();
-            let (params, rest) = self.params()?;
-            let body = self.block()?;
-            let def = FuncDef {
-                name,
-                params,
-                rest,
-                body,
-                span,
-            };
-            return Ok(Stmt {
-                kind: StmtKind::FuncDef(Rc::new(def)),
-                span,
-            });
+            return self.func_def_stmt(false, span);
         }
         let expr = self.expression()?;
 
@@ -207,6 +200,30 @@ impl<'t> Parser<'t> {
             StmtKind::Expr(expr)
         };
         Ok(Stmt { kind, span })
+    }
+
+    /// 関数の定義 `名前[引数] ( … )`。先頭は名前（`looks_like_func_def` が確かめてある）
+    fn func_def_stmt(&mut self, is_async: bool, span: Span) -> PResult<Stmt> {
+        let TokenKind::Ident(name) = &self.peek().kind else {
+            unreachable!("looks_like_func_def が確かめた")
+        };
+        let name = name.clone();
+        self.advance();
+        self.advance();
+        let (params, rest) = self.params()?;
+        let body = self.block()?;
+        let def = FuncDef {
+            name,
+            is_async,
+            params,
+            rest,
+            body,
+            span,
+        };
+        Ok(Stmt {
+            kind: StmtKind::FuncDef(Rc::new(def)),
+            span,
+        })
     }
 
     /// 文の先頭の `{ … }` の直後が `:=` か `=` か（分割代入）
@@ -451,11 +468,23 @@ impl<'t> Parser<'t> {
         Ok(lhs)
     }
 
-    /// unary = ( "-" | "!" ) unary | postfix
+    /// unary = ( "-" | "!" ) unary | "await" postfix_without_try { 後置 } | postfix
+    ///
+    /// `await 式?` は `(await 式)?` と読む（`?` は await の結果に効く）
     fn unary(&mut self) -> PResult<Expr> {
         let op = match self.peek().kind {
             TokenKind::Minus => UnaryOp::Neg,
             TokenKind::Bang => UnaryOp::Not,
+            TokenKind::Await => {
+                let span = self.advance().span;
+                let primary = self.primary()?;
+                let operand = self.postfix_rest(primary, false)?;
+                let awaited = Expr {
+                    kind: ExprKind::Await(Box::new(operand)),
+                    span,
+                };
+                return self.postfix_rest(awaited, true);
+            }
             _ => return self.postfix(),
         };
         let span = self.advance().span;
@@ -472,7 +501,12 @@ impl<'t> Parser<'t> {
     /// postfix = primary { "{" expression "}" | "[" [ args ] "]" | "." member | "?" }
     /// member  = IDENT [ "[" [ args ] "]" ]
     fn postfix(&mut self) -> PResult<Expr> {
-        let mut expr = self.primary()?;
+        let expr = self.primary()?;
+        self.postfix_rest(expr, true)
+    }
+
+    /// `expr` の後ろに続く `{ }` `[ ]` `.` `?` を読む。`allow_try` が false なら `?` の手前で止める
+    fn postfix_rest(&mut self, mut expr: Expr, allow_try: bool) -> PResult<Expr> {
         loop {
             let span = expr.span;
             if self.eat(&TokenKind::LBrace) {
@@ -494,7 +528,7 @@ impl<'t> Parser<'t> {
                     },
                     span,
                 };
-            } else if self.eat(&TokenKind::Question) {
+            } else if allow_try && self.eat(&TokenKind::Question) {
                 expr = Expr {
                     kind: ExprKind::Try(Box::new(expr)),
                     span,
@@ -578,13 +612,21 @@ impl<'t> Parser<'t> {
                     span: token.span,
                 });
             }
-            // lambda = "[" [ params ] "]" block
-            TokenKind::LBracket => {
+            // lambda = [ "async" ] "[" [ params ] "]" block
+            TokenKind::LBracket | TokenKind::Async => {
+                let is_async = self.at(&TokenKind::Async);
                 self.advance();
+                if is_async {
+                    if !self.at(&TokenKind::LBracket) {
+                        return Err(self.unexpected("`[`（`async` の無名関数）"));
+                    }
+                    self.advance();
+                }
                 let (params, rest) = self.params()?;
                 let body = self.block()?;
                 let def = FuncDef {
                     name: String::new(),
+                    is_async,
                     params,
                     rest,
                     body,

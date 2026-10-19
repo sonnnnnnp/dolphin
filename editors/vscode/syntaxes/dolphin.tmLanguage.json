@@ -148,7 +148,7 @@
       "patterns": [
         {
           "name": "keyword.control.dolphin",
-          "match": "\\b(if|else|while|for|in|break|continue)\\b"
+          "match": "\\b(if|else|while|for|in|break|continue|async|await)\\b"
         }
       ]
     },

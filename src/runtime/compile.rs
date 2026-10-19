@@ -404,6 +404,10 @@ impl Compiler {
                 self.expr(inner);
                 self.emit(Op::Try, span);
             }
+            ExprKind::Await(inner) => {
+                self.expr(inner);
+                self.emit(Op::Await, span);
+            }
             ExprKind::Lambda(def) => {
                 self.chunk.defs.push(def.clone());
                 let i = (self.chunk.defs.len() - 1) as u32;

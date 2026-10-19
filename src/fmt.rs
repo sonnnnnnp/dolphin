@@ -86,7 +86,7 @@ fn describe(kind: &TokenKind) -> String {
 enum Class {
     /// 変数・識別子・数値・`true` `false` `nil`
     Word,
-    /// `if` `else` `while` `for` `in` `break` `continue`
+    /// `if` `else` `while` `for` `in` `break` `continue` `async` `await`
     Keyword,
     Str,
     Open,
@@ -190,7 +190,8 @@ fn scan(src: &str) -> Vec<Tok> {
                     continue;
                 }
                 let class = match word.as_str() {
-                    "if" | "else" | "while" | "for" | "in" | "break" | "continue" => Class::Keyword,
+                    "if" | "else" | "while" | "for" | "in" | "break" | "continue" | "async"
+                    | "await" => Class::Keyword,
                     _ => Class::Word,
                 };
                 push(&mut toks, class, word);
@@ -562,5 +563,21 @@ log[...@x, 1, ...{2}]
             format_source("@x := (\n"),
             Err(FmtError::Syntax(_))
         ));
+    }
+
+    #[test]
+    fn async_and_await() {
+        assert_eq!(
+            fmt("async   f[@a](
+#await @g[1]?
+)
+@h:=async[@x](# await @x)
+"),
+            "async f[@a] (
+    # await @g[1]?
+)
+@h := async [@x] ( # await @x )
+"
+        );
     }
 }

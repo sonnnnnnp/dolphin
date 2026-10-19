@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::async_::{spawn_blocking, split_callback};
+use super::async_::{spawn_blocking_opt, split_callback_opt};
 use super::path::to_slash;
 use super::{error_value, expect_args, int_arg, new_array, new_map, str_arg, type_error};
 use crate::runtime::interp::Interpreter;
@@ -253,10 +253,10 @@ fn run(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
 
 /// `os.run_async[command, args, f]` / `os.run_async[command, args, options, f]`（design.md 5.23）
 fn run_async(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
-    let (rest, callback) = split_callback("os.run_async", args)?;
+    let (rest, callback) = split_callback_opt(args);
     let (command, arguments, options) = run_request("os.run_async", rest)?;
     interp.out.flush().map_err(|e| e.to_string())?;
-    spawn_blocking(interp, callback, move || {
+    spawn_blocking_opt(interp, callback, move || {
         spawn_and_wait(&command, &arguments, options)
     })
 }

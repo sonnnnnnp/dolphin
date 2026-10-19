@@ -293,6 +293,7 @@ mod tests {
         let def = |name: &str| {
             Rc::new(FuncDef {
                 name: name.into(),
+                is_async: false,
                 params: Vec::new(),
                 rest: None,
                 body: Vec::new(),

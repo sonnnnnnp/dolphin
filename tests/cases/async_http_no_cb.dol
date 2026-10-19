@@ -1,2 +1,5 @@
 @http := import["std:http"]
-log[@http.get_async["http://x"]]
+@f := @http.get_async["not a url"]
+log[type_of[@f], @f]
+log[err_kind[await @f]]
+log[@f]

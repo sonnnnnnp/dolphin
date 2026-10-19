@@ -19,6 +19,7 @@ use super::{
 use crate::runtime::bytecode::{Chunk, Op};
 use crate::runtime::compile::compile_function;
 use crate::runtime::gc;
+use crate::runtime::handle::{FutureOutcome, Handle, HandleKind};
 use crate::sema::resolver;
 use crate::syntax::ast::{BinaryOp, Pattern, UnaryOp};
 use crate::syntax::span::Span;
@@ -56,6 +57,27 @@ enum Step {
     Reload,
     /// 入口の枠が戻った
     Done(Value),
+    /// `await` で止まった（`async` 関数の流れの中だけ）
+    Suspend,
+}
+
+/// `run_vm_exit` の終わり方
+pub(super) enum Exit {
+    Return(Value),
+    Suspend,
+}
+
+/// 止められる流れ（`async` 関数の呼び出し 1 つ分。design.md 5.46）。
+/// 自分の枠のスタックと値のスタックを持ち、止まっている間はここに預ける
+pub(super) struct Coroutine {
+    frames: Vec<VmFrame>,
+    stack: Vec<Value>,
+    depth: usize,
+    /// 止まった時点の、いまのモジュールとスコープ
+    current: Rc<Module>,
+    env: Rc<Env>,
+    /// この流れの結果を受け取る future
+    future: Value,
 }
 
 impl Interpreter<'_> {
@@ -96,6 +118,24 @@ impl Interpreter<'_> {
         args: Vec<Value>,
         span: Span,
     ) -> RResult<()> {
+        let (frame, env) = self.make_function_frame(module, def, parent, args, span, self.depth)?;
+        self.current = Rc::clone(module);
+        self.env = env;
+        self.depth += 1;
+        self.vm_frames.push(frame);
+        Ok(())
+    }
+
+    /// 関数の枠と、その引数のスコープを作る（積まない）。`depth` はいまの呼び出しの深さ
+    fn make_function_frame(
+        &mut self,
+        module: &Rc<Module>,
+        def: &Rc<FuncDef>,
+        parent: &Rc<Env>,
+        args: Vec<Value>,
+        span: Span,
+        depth: usize,
+    ) -> RResult<(VmFrame, Rc<Env>)> {
         if args.len() < def.min_args() || def.max_args().is_some_and(|max| args.len() > max) {
             return Err(RuntimeError::new(
                 span,
@@ -107,7 +147,7 @@ impl Interpreter<'_> {
                 ),
             ));
         }
-        if self.depth >= super::MAX_DEPTH {
+        if depth >= super::MAX_DEPTH {
             return Err(RuntimeError::new(
                 span,
                 format!(
@@ -130,10 +170,7 @@ impl Interpreter<'_> {
             env.declare(rest, gc::new_array(extra));
         }
         let chunk = self.chunk_for(def);
-        let caller_module = mem::replace(&mut self.current, Rc::clone(module));
-        let caller_env = mem::replace(&mut self.env, env);
-        self.depth += 1;
-        self.vm_frames.push(VmFrame {
+        let frame = VmFrame {
             chunk,
             ip: 0,
             base: self.stack.len(),
@@ -144,10 +181,31 @@ impl Interpreter<'_> {
             module: Rc::clone(module),
             given,
             scopes: Vec::new(),
-            caller_module,
-            caller_env,
-        });
-        Ok(())
+            caller_module: Rc::clone(&self.current),
+            caller_env: Rc::clone(&self.env),
+        };
+        Ok((frame, env))
+    }
+
+    /// 関数を呼ぶ命令。`async` 関数なら新しい流れを始めて future を積み、普通の関数なら枠を積むだけ
+    /// （戻りを待たない）
+    fn enter_function(
+        &mut self,
+        module: &Rc<Module>,
+        def: &Rc<FuncDef>,
+        parent: &Rc<Env>,
+        args: Vec<Value>,
+        span: Span,
+        ip: usize,
+    ) -> RResult<Step> {
+        if def.is_async {
+            let future = self.start_coroutine(module, def, parent, args, span)?;
+            self.stack.push(future);
+            return Ok(Step::Next);
+        }
+        self.save_ip(ip);
+        self.push_function_frame(module, def, parent, args, span)?;
+        Ok(Step::Reload)
     }
 
     /// 枠を 1 つ抜けて、呼び出し元の状態に戻す
@@ -181,8 +239,17 @@ impl Interpreter<'_> {
         e
     }
 
-    /// `target` 枚の枠が残るまで（積んだ入口の枠が戻るまで）命令を実行して、その戻り値を返す
+    /// `target` 枚の枠が残るまで（積んだ入口の枠が戻るまで）命令を実行して、その戻り値を返す。
+    /// 止められない場所なので、`await` はイベントループを回して待つ
     pub(super) fn run_vm(&mut self, target: usize) -> RResult<Value> {
+        match self.run_vm_exit(target)? {
+            Exit::Return(value) => Ok(value),
+            Exit::Suspend => unreachable!("止められるのは流れの入口の実行だけ"),
+        }
+    }
+
+    /// `run_vm` と同じ。`async` 関数の流れの入口なら、`await` で止まって `Exit::Suspend` を返すことがある
+    fn run_vm_exit(&mut self, target: usize) -> RResult<Exit> {
         loop {
             let (chunk, mut ip) = {
                 let frame = self.vm_frames.last().expect("実行する枠がある");
@@ -195,9 +262,178 @@ impl Interpreter<'_> {
                 match self.step(op, span, &chunk, &mut ip, target) {
                     Ok(Step::Next) => {}
                     Ok(Step::Reload) => break,
-                    Ok(Step::Done(value)) => return Ok(value),
+                    Ok(Step::Done(value)) => return Ok(Exit::Return(value)),
+                    Ok(Step::Suspend) => return Ok(Exit::Suspend),
                     Err(e) => return Err(self.unwind(e, target)),
                 }
+            }
+        }
+    }
+
+    // ---- async 関数の流れ（design.md 5.46） ----
+
+    /// `async` 関数を呼んで、新しい流れを始める。最初の `await` で止まるか、終わるまで、その場で動かす。
+    /// 結果を受け取る future を返す
+    pub(super) fn start_coroutine(
+        &mut self,
+        module: &Rc<Module>,
+        def: &Rc<FuncDef>,
+        parent: &Rc<Env>,
+        args: Vec<Value>,
+        span: Span,
+    ) -> RResult<Value> {
+        // その場で始まる流れの入れ子は、いまの深さに積む（Rust の再帰が無限に深くならないように）
+        let base = self.depth;
+        let (mut frame, env) = self.make_function_frame(module, def, parent, args, span, base)?;
+        frame.base = 0;
+        let future = Handle::new_future();
+        let id = self.next_coroutine;
+        self.next_coroutine += 1;
+        let co = Coroutine {
+            frames: vec![frame],
+            stack: Vec::new(),
+            depth: base + 1,
+            current: Rc::clone(module),
+            env,
+            future: future.clone(),
+        };
+        self.run_coroutine(id, co)?;
+        Ok(future)
+    }
+
+    /// 流れを動かす。いまの実行の状態は預けておき、止まるか終わったら戻す。`Err` は `os.exit` だけ
+    fn run_coroutine(&mut self, id: u64, mut co: Coroutine) -> RResult<()> {
+        let outer_frames = mem::replace(&mut self.vm_frames, mem::take(&mut co.frames));
+        let outer_stack = mem::replace(&mut self.stack, mem::take(&mut co.stack));
+        let outer_depth = mem::replace(&mut self.depth, co.depth);
+        let outer_current = mem::replace(&mut self.current, Rc::clone(&co.current));
+        let outer_env = mem::replace(&mut self.env, Rc::clone(&co.env));
+        let outer_coroutine = self.current_coroutine.replace(id);
+
+        let result = self.run_vm_exit(0);
+
+        match &result {
+            Ok(Exit::Suspend) => {
+                co.frames = mem::take(&mut self.vm_frames);
+                co.stack = mem::take(&mut self.stack);
+                co.depth = self.depth;
+                co.current = Rc::clone(&self.current);
+                co.env = Rc::clone(&self.env);
+            }
+            Ok(Exit::Return(_)) | Err(_) => {}
+        }
+        self.vm_frames = outer_frames;
+        self.stack = outer_stack;
+        self.depth = outer_depth;
+        self.current = outer_current;
+        self.env = outer_env;
+        self.current_coroutine = outer_coroutine;
+
+        match result {
+            Ok(Exit::Suspend) => {
+                self.coroutines.insert(id, co);
+            }
+            Ok(Exit::Return(value)) => {
+                self.settle_future(&co.future, FutureOutcome::Resolved(value));
+            }
+            Err(e) => {
+                if self.exit_code.is_some() {
+                    let mut signal = RuntimeError::new(e.span, "os.exit による終了");
+                    signal.exit = true;
+                    return Err(signal);
+                }
+                self.settle_future(&co.future, FutureOutcome::Failed(e));
+            }
+        }
+        Ok(())
+    }
+
+    /// 再開できる流れを、すべて進める（再開した流れが、さらに別の流れを再開できるようにしても、続ける）
+    pub(crate) fn run_ready(&mut self) -> RResult<()> {
+        while let Some(id) = self.ready.pop_front() {
+            if let Some(co) = self.coroutines.remove(&id) {
+                self.run_coroutine(id, co)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// future を終わらせて、待っていた流れを再開できる列に入れる
+    pub(crate) fn settle_future(&mut self, future: &Value, outcome: FutureOutcome) {
+        let Value::Handle(handle) = future else {
+            return;
+        };
+        let mut inner = handle.inner.borrow_mut();
+        let HandleKind::Future(state) = &mut *inner else {
+            return;
+        };
+        if !matches!(state.outcome, FutureOutcome::Pending) {
+            return;
+        }
+        state.outcome = outcome;
+        self.ready.extend(mem::take(&mut state.waiters));
+    }
+
+    fn add_waiter(&mut self, future: &Value, id: u64) {
+        if let Value::Handle(handle) = future
+            && let HandleKind::Future(state) = &mut *handle.inner.borrow_mut()
+        {
+            state.waiters.push(id);
+        }
+    }
+
+    /// future の状態。終わっていなければ `None`。失敗は受け取ったことにする。future でなければエラー
+    fn future_outcome(
+        &self,
+        value: &Value,
+        span: Span,
+    ) -> RResult<Option<Result<Value, RuntimeError>>> {
+        let not_future = || {
+            RuntimeError::new(
+                span,
+                format!(
+                    "await できるのは future だけです（{}でした）",
+                    value.type_name()
+                ),
+            )
+        };
+        let Value::Handle(handle) = value else {
+            return Err(not_future());
+        };
+        let mut inner = handle.inner.borrow_mut();
+        let HandleKind::Future(state) = &mut *inner else {
+            return Err(not_future());
+        };
+        Ok(match &state.outcome {
+            FutureOutcome::Pending => None,
+            FutureOutcome::Resolved(value) => Some(Ok(value.clone())),
+            FutureOutcome::Failed(e) => {
+                state.observed = true;
+                Some(Err(e.clone()))
+            }
+        })
+    }
+
+    /// 止められない場所での `await`: future が終わるまで、イベントループを回して待つ
+    fn block_on(&mut self, future: &Value, span: Span) -> RResult<Value> {
+        loop {
+            self.run_ready()?;
+            if let Some(outcome) = self.future_outcome(future, span)? {
+                return outcome;
+            }
+            if !self.ready.is_empty() {
+                continue;
+            }
+            if !self.events.has_pending() {
+                return Err(RuntimeError::new(
+                    span,
+                    "await している future が終わる見込みがありません（待っているものがありません）",
+                ));
+            }
+            if let Err(message) = self.wait_one_event() {
+                let mut signal = RuntimeError::new(span, message);
+                signal.exit = true;
+                return Err(signal);
             }
         }
     }
@@ -444,6 +680,34 @@ impl Interpreter<'_> {
                     module: Rc::clone(&self.current),
                 })));
             }
+            Op::Await => {
+                let future = self.stack.last().cloned().expect("スタックに値がある");
+                match self.future_outcome(&future, span)? {
+                    Some(Ok(value)) => {
+                        self.pop();
+                        self.stack.push(value);
+                    }
+                    Some(Err(e)) => {
+                        self.pop();
+                        return Err(e);
+                    }
+                    None => {
+                        // 流れの入口の実行なら、ここで止める。再開したときに、この命令からやり直す
+                        if let Some(id) = self.current_coroutine
+                            && target == 0
+                        {
+                            self.add_waiter(&future, id);
+                            *ip -= 1;
+                            self.save_ip(*ip);
+                            return Ok(Step::Suspend);
+                        }
+                        // 止められない場所（ファイルの最上位など）では、終わるまでイベントループを回す
+                        let value = self.block_on(&future, span)?;
+                        self.pop();
+                        self.stack.push(value);
+                    }
+                }
+            }
             Op::Try => match self.pop() {
                 Value::Error(e) => {
                     let in_func = matches!(
@@ -604,9 +868,7 @@ impl Interpreter<'_> {
         if let Some(def) = def {
             let module = Rc::clone(&self.current);
             let env = Rc::clone(&module.globals);
-            self.save_ip(ip);
-            self.push_function_frame(&module, &def, &env, args, span)?;
-            return Ok(Step::Reload);
+            return self.enter_function(&module, &def, &env, args, span, ip);
         }
         let value = if name == "import" {
             self.import(&args, span)?
@@ -633,9 +895,7 @@ impl Interpreter<'_> {
     ) -> RResult<Step> {
         match f {
             Value::Func(closure) => {
-                self.save_ip(ip);
-                self.push_function_frame(&closure.module, &closure.def, &closure.env, args, span)?;
-                Ok(Step::Reload)
+                self.enter_function(&closure.module, &closure.def, &closure.env, args, span, ip)
             }
             Value::Native(native) => {
                 let value = self.call_native(native.f, &args, span)?;
@@ -668,9 +928,7 @@ impl Interpreter<'_> {
         match (def, module.natives.get(name)) {
             (Some(def), _) => {
                 let env = Rc::clone(&module.globals);
-                self.save_ip(ip);
-                self.push_function_frame(&module, &def, &env, args, span)?;
-                Ok(Step::Reload)
+                self.enter_function(&module, &def, &env, args, span, ip)
             }
             (None, Some(native)) => {
                 let value = self.call_native(native.f, &args, span)?;

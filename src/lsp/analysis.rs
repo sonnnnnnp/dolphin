@@ -429,7 +429,9 @@ impl<'a> Walker<'a> {
             }
             ExprKind::FuncRef(name) => self.use_func(name, expr.span),
             ExprKind::Lambda(def) => self.func_body(def),
-            ExprKind::Spread(inner) | ExprKind::Try(inner) => self.expr(inner),
+            ExprKind::Spread(inner) | ExprKind::Try(inner) | ExprKind::Await(inner) => {
+                self.expr(inner)
+            }
             ExprKind::If {
                 cond,
                 then_expr,

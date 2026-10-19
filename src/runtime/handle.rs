@@ -10,6 +10,9 @@ use std::time::Duration;
 
 pub use super::worker::WorkerHandle;
 
+use super::error::RuntimeError;
+use super::value::Value;
+
 /// WebSocket のサーバー側の接続に送る指示（送信は補助スレッドが行う。design.md 5.22）
 #[derive(Debug)]
 pub enum WsOut {
@@ -126,6 +129,8 @@ pub enum HandleKind {
         object: Box<dyn std::any::Any>,
         label: String,
     },
+    /// future（`async` 関数の結果。design.md 5.46）
+    Future(FutureState),
     /// ワーカー（`std:worker`。design.md 5.43）
     Worker(WorkerHandle),
     WorkerClosed,
@@ -138,6 +143,35 @@ pub enum HandleKind {
     #[cfg(feature = "sqlite")]
     SqliteClosed,
     Closed,
+}
+
+/// future の状態
+pub enum FutureOutcome {
+    Pending,
+    Resolved(Value),
+    Failed(RuntimeError),
+}
+
+/// `async` 関数の結果を、あとから受け取るための入れ物（design.md 5.46）
+pub struct FutureState {
+    pub outcome: FutureOutcome,
+    /// 終わるのを待って止まっている流れ（`Interpreter::coroutines` の番号）
+    pub waiters: Vec<u64>,
+    /// 失敗を `await` で受け取ったか。受け取られないまま捨てられた失敗は、標準エラーに出す
+    pub observed: bool,
+}
+
+impl Drop for FutureState {
+    fn drop(&mut self) {
+        if !self.observed
+            && let FutureOutcome::Failed(e) = &self.outcome
+        {
+            eprintln!(
+                "await されないまま捨てられた future の失敗: {}:{}: {}",
+                e.span.line, e.span.col, e.message
+            );
+        }
+    }
 }
 
 /// 起動した子プロセス。参照されなくなったとき、まだ動いていれば強制的に終わらせる
@@ -194,6 +228,15 @@ impl Handle {
         })
     }
 
+    /// 新しい future（まだ終わっていない）
+    pub fn new_future() -> Value {
+        Value::Handle(Handle::new(HandleKind::Future(FutureState {
+            outcome: FutureOutcome::Pending,
+            waiters: Vec::new(),
+            observed: false,
+        })))
+    }
+
     pub fn close(&self) {
         let mut inner = self.inner.borrow_mut();
         *inner = match &*inner {
@@ -225,6 +268,11 @@ impl fmt::Display for Handle {
             HandleKind::WsServer { .. } => write!(f, "<websocket サーバー側の接続>"),
             HandleKind::Process(p) => write!(f, "<process {}>", p.pid),
             HandleKind::Ffi { label, .. } => write!(f, "<ffi {label}>"),
+            HandleKind::Future(state) => match state.outcome {
+                FutureOutcome::Pending => write!(f, "<future 待機中>"),
+                FutureOutcome::Resolved(_) => write!(f, "<future 完了>"),
+                FutureOutcome::Failed(_) => write!(f, "<future 失敗>"),
+            },
             HandleKind::Worker(w) => write!(f, "<worker {}>", w.label),
             HandleKind::WorkerClosed => write!(f, "<worker 閉じています>"),
             HandleKind::Stream(io) => write!(f, "<stream {}>", io.label),

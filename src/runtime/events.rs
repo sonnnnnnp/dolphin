@@ -11,7 +11,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use super::data::Data;
 use super::error::RuntimeError;
-use super::handle::HandleKind;
+use super::handle::{FutureOutcome, HandleKind};
 use super::interp::Interpreter;
 use super::value::Value;
 use crate::diag::Diagnostic;
@@ -205,11 +205,27 @@ impl Interpreter<'_> {
     }
 
     fn event_loop(&mut self) -> Result<(), String> {
-        while !self.events.stopped && self.events.has_pending() {
-            // 送り口を自分も持っているので、切れることはない
-            let Ok(event) = self.events.rx.recv() else {
+        loop {
+            // 再開できる `async` 関数の流れを先に進める（design.md 5.46）
+            self.run_ready().map_err(|e| e.message)?;
+            if self.events.stopped || !self.events.has_pending() {
                 return Ok(());
-            };
+            }
+            self.wait_one_event()?;
+        }
+    }
+
+    /// 届いたイベントを 1 つ処理する（届くまで待つ）。`Err` は `os.exit`
+    pub(super) fn wait_one_event(&mut self) -> Result<(), String> {
+        // 送り口を自分も持っているので、切れることはない
+        let Ok(event) = self.events.rx.recv() else {
+            return Ok(());
+        };
+        self.handle_event(event)
+    }
+
+    fn handle_event(&mut self, event: Event) -> Result<(), String> {
+        {
             match event {
                 Event::Done { id, data } => {
                     if let Some(pending) = self.events.pending.remove(&id) {
@@ -218,10 +234,10 @@ impl Interpreter<'_> {
                 }
                 Event::Tick { id } => {
                     let Some(pending) = self.events.pending.get(&id) else {
-                        continue;
+                        return Ok(());
                     };
                     let Some((flag, repeat)) = &pending.timer else {
-                        continue;
+                        return Ok(());
                     };
                     let (cancelled, repeat) = (flag.load(Ordering::SeqCst), *repeat);
                     let callback = pending.callback.clone();
@@ -282,6 +298,14 @@ impl Interpreter<'_> {
 
     /// コールバックを呼ぶ。エラーは標準エラーに出して続ける。`os.exit` だけは `Err`
     fn call_callback(&mut self, callback: &Value, args: Vec<Value>) -> Result<(), String> {
+        // future が受け取り手なら、その結果で future を終わらせる（`await` できる非同期の関数）
+        if let Value::Handle(handle) = callback
+            && matches!(&*handle.inner.borrow(), HandleKind::Future(_))
+        {
+            let value = args.into_iter().next().unwrap_or(Value::Nil);
+            self.settle_future(callback, FutureOutcome::Resolved(value));
+            return Ok(());
+        }
         if let Err(message) = self.call_value(callback, args) {
             if self.exit_code.is_some() {
                 return Err(message);

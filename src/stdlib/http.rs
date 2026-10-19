@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use ureq::http;
 
-use super::async_::{spawn_blocking, split_callback};
+use super::async_::{spawn_blocking_opt, split_callback_opt};
 use super::json::to_json_string;
 use super::{error_value, expect_args, new_map, type_error};
 use crate::runtime::interp::Interpreter;
@@ -74,10 +74,10 @@ fn request_req(name: &str, args: &[Value]) -> Result<Req, String> {
 // ---- 非同期版（design.md 5.23）。最後の引数がコールバック ----
 
 fn request_async(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
-    let (rest, callback) = split_callback("http.request_async", args)?;
+    let (rest, callback) = split_callback_opt(args);
     let req = request_req("http.request_async", rest)?;
     reject_stream("http.request_async", &req)?;
-    spawn_blocking(interp, callback, move || send(req))
+    spawn_blocking_opt(interp, callback, move || send(req))
 }
 
 fn method_async(
@@ -86,10 +86,10 @@ fn method_async(
     method: &str,
     args: &[Value],
 ) -> Result<Value, String> {
-    let (rest, callback) = split_callback(name, args)?;
+    let (rest, callback) = split_callback_opt(args);
     let req = method_req(name, method, rest)?;
     reject_stream(name, &req)?;
-    spawn_blocking(interp, callback, move || send(req))
+    spawn_blocking_opt(interp, callback, move || send(req))
 }
 
 /// 非同期版は結果をスレッドの外へ持ち出すので、ストリームは返せない

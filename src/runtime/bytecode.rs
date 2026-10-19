@@ -83,6 +83,8 @@ pub enum Op {
     MakeClosure(u32),
     /// 値がエラー値なら、いまの関数からそのエラーを返す
     Try,
+    /// future が終わるまで待って、その値にする（design.md 5.46）
+    Await,
     Return,
     /// `name[args]`。スタックは [args...]
     Call {

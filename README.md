@@ -162,6 +162,7 @@ count: 3
 | [v0.51.0](https://github.com/sonnnnnnp/dolphin/tree/v0.51.0) | ワーカー `std:worker`（別スレッドの別インタプリタ） | [v0.50.0...v0.51.0](https://github.com/sonnnnnnp/dolphin/compare/v0.50.0...v0.51.0) |
 | [v0.52.0](https://github.com/sonnnnnnp/dolphin/tree/v0.52.0) | FFI `std:ffi`（C の共有ライブラリを呼ぶ。`--features ffi`） | [v0.51.0...v0.52.0](https://github.com/sonnnnnnp/dolphin/compare/v0.51.0...v0.52.0) |
 | [v0.53.0](https://github.com/sonnnnnnp/dolphin/tree/v0.53.0) | バイトコード VM（評価器の置き換え。挙動は同じ） | [v0.52.0...v0.53.0](https://github.com/sonnnnnnp/dolphin/compare/v0.52.0...v0.53.0) |
+| [v0.54.0](https://github.com/sonnnnnnp/dolphin/tree/v0.54.0) | `async` と `await`（止めて再開できる関数、`future`） | [v0.53.0...v0.54.0](https://github.com/sonnnnnnp/dolphin/compare/v0.53.0...v0.54.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

@@ -8,6 +8,7 @@ use std::time::Duration;
 use super::{expect_args, int_arg, num_arg, type_error};
 use crate::runtime::data::Data;
 use crate::runtime::events::Event;
+use crate::runtime::handle::Handle;
 use crate::runtime::interp::Interpreter;
 use crate::runtime::value::Value;
 
@@ -20,9 +21,20 @@ pub fn register(interp: &mut Interpreter<'_>) {
             ("async.cancel", cancel),
             ("async.run", run),
             ("async.stop", stop),
+            ("async.sleep", sleep),
         ],
     );
 }
+
+/// `std:async` を `import` したときに足す、Dolphin で書いた関数（design.md 5.46）
+pub const PRELUDE: &str = "async all[@futures] (
+    @results := {}
+    for @f in @futures (
+        arr_push[@results, await @f]
+    )
+    # @results
+)
+";
 
 /// 最後の引数のコールバックと、残りの引数に分ける
 pub fn split_callback<'v>(name: &str, args: &'v [Value]) -> Result<(&'v [Value], Value), String> {
@@ -35,6 +47,36 @@ pub fn split_callback<'v>(name: &str, args: &'v [Value]) -> Result<(&'v [Value],
             "{name} の最後の引数はコールバックの関数です（{}が渡されました）",
             other.type_name()
         )),
+    }
+}
+
+/// 最後の引数がコールバックなら、それと残りの引数に分ける。コールバックがなければ、すべて引数
+/// （コールバックを省いた非同期の関数は、future を返す。design.md 5.46）
+pub fn split_callback_opt(args: &[Value]) -> (&[Value], Option<Value>) {
+    match args.split_last() {
+        Some((last @ (Value::Func(_) | Value::Native(_)), rest)) => (rest, Some(last.clone())),
+        _ => (args, None),
+    }
+}
+
+/// `spawn_blocking` のコールバックを省ける版。省いたら future を返す
+pub fn spawn_blocking_opt(
+    interp: &mut Interpreter<'_>,
+    callback: Option<Value>,
+    work: impl FnOnce() -> Value + Send + 'static,
+) -> Result<Value, String> {
+    match callback {
+        Some(callback) => spawn_blocking(interp, callback, work),
+        None => {
+            let future = Handle::new_future();
+            let id = interp.events.register(future.clone(), None)?;
+            let tx = interp.events.sender();
+            thread::spawn(move || {
+                let data = Data::from_value(&work());
+                let _ = tx.send(Event::Done { id, data });
+            });
+            Ok(future)
+        }
     }
 }
 
@@ -111,6 +153,23 @@ fn every(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> 
         }
     });
     Ok(Value::Num(id as f64))
+}
+
+/// `seconds` 秒後に `nil` で終わる future
+fn sleep(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("async.sleep", args, 1)?;
+    let delay = seconds("async.sleep", args, true)?;
+    let future = Handle::new_future();
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let id = interp
+        .events
+        .register(future.clone(), Some((Arc::clone(&cancelled), false)))?;
+    let tx = interp.events.sender();
+    thread::spawn(move || {
+        thread::sleep(delay);
+        let _ = tx.send(Event::Tick { id });
+    });
+    Ok(future)
 }
 
 fn cancel(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {

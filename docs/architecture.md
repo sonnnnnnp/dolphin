@@ -91,7 +91,7 @@ dolphin/
 │  │  ├─ bytecode.rs     命令（Op）と、コンパイルした 1 つのまとまり（Chunk）
 │  │  ├─ compile.rs      AST → バイトコード
 │  │  ├─ interp.rs       Interpreter（モジュール・import・組み込み関数の呼び出し・分割代入）
-│  │  └─ interp/vm.rs    VM（枠と値のスタックをヒープに持つ。Dolphin の関数呼び出しで Rust の再帰を使わない）
+│  │  └─ interp/vm.rs    VM（枠と値のスタックをヒープに持つ。Dolphin の関数呼び出しで Rust の再帰を使わない）と、`async` 関数の流れ（止めて再開する。future の終わりをイベントループが拾う）
 │  └─ stdlib/
 │     ├─ mod.rs          全モジュールの登録、引数検査の共通処理
 │     ├─ io.rs           log, input

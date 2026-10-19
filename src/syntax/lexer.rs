@@ -36,6 +36,10 @@ pub enum TokenKind {
     True,
     False,
     Nil,
+    /// `async`（design.md 5.46）
+    Async,
+    /// `await`
+    Await,
 
     // 記号
     LBracket,
@@ -96,6 +100,8 @@ impl fmt::Display for TokenKind {
             True => "`true`",
             False => "`false`",
             Nil => "`nil`",
+            Async => "`async`",
+            Await => "`await`",
             LBracket => "`[`",
             RBracket => "`]`",
             LParen => "`(`",
@@ -257,6 +263,8 @@ impl Lexer {
                         "for" => TokenKind::For,
                         "in" => TokenKind::In,
                         "nil" => TokenKind::Nil,
+                        "async" => TokenKind::Async,
+                        "await" => TokenKind::Await,
                         "break" => TokenKind::Break,
                         "continue" => TokenKind::Continue,
                         "true" => TokenKind::True,

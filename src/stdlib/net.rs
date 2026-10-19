@@ -202,6 +202,7 @@ fn accept(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         }
         HandleKind::Process(_)
         | HandleKind::Ffi { .. }
+        | HandleKind::Future(_)
         | HandleKind::Worker(_)
         | HandleKind::WorkerClosed => {
             Err("net.accept に渡せるのは待ち受けのハンドルです（プロセスかワーカーでした）".into())
@@ -234,6 +235,7 @@ fn with_conn(
         )),
         HandleKind::Process(_)
         | HandleKind::Ffi { .. }
+        | HandleKind::Future(_)
         | HandleKind::Worker(_)
         | HandleKind::WorkerClosed => Err(format!(
             "{name} に渡せるのは TCP の接続のハンドルです（プロセスかワーカーでした）"
@@ -381,6 +383,7 @@ fn local_addr(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> 
         }
         HandleKind::Process(_)
         | HandleKind::Ffi { .. }
+        | HandleKind::Future(_)
         | HandleKind::Worker(_)
         | HandleKind::WorkerClosed => {
             return Err(

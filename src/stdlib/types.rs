@@ -23,7 +23,10 @@ fn type_of(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         Value::Module(_) => "module",
         Value::Error(_) => "error",
         Value::Bytes(_) => "bytes",
-        Value::Handle(_) => "handle",
+        Value::Handle(h) => match &*h.inner.borrow() {
+            crate::runtime::handle::HandleKind::Future(_) => "future",
+            _ => "handle",
+        },
     };
     Ok(Value::Str(name.into()))
 }
