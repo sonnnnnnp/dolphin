@@ -149,6 +149,21 @@ three",
     }
 }
 
+/// 接続を断られるポート。空きポートを選んでも、並行して動く別のテストのサーバーが
+/// そのポートを使い始めることがあるので、実際に断られるのを確かめてから使う
+fn closed_port() -> u16 {
+    loop {
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        if TcpStream::connect(("127.0.0.1", port)).is_err() {
+            return port;
+        }
+    }
+}
+
 /// スクリプトを実行して出力を返す。`PORT` はテスト用サーバーのポートに置き換える
 fn run(port: u16, script: &str) -> String {
     let src =
@@ -263,11 +278,7 @@ log[@loop{"status"}]
 fn failures_are_error_values() {
     let port = start_server();
     // 閉じたポートへの接続
-    let closed = TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let closed = closed_port();
     let out = run(
         port,
         &format!(
