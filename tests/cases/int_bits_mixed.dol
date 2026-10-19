@@ -1,0 +1,2 @@
+@b := import["std:bits"]
+log[@b.and[1i, 1]]

@@ -311,7 +311,7 @@ impl<'a> Resolver<'a> {
 
     fn expr(&self, expr: &'a Expr, ctx: &Ctx<'a>) -> RResult {
         match &expr.kind {
-            ExprKind::Number(_) | ExprKind::Bool(_) | ExprKind::Nil => Ok(()),
+            ExprKind::Number(_) | ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::Nil => Ok(()),
             ExprKind::Str(parts) => parts.iter().try_for_each(|part| match part {
                 StrSegment::Expr(inner) => self.expr(inner, ctx),
                 StrSegment::Text(_) => Ok(()),

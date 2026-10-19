@@ -533,6 +533,7 @@ impl<'t> Parser<'t> {
         let token = self.peek();
         let kind = match &token.kind {
             TokenKind::Number(n) => ExprKind::Number(*n),
+            TokenKind::Int(n) => ExprKind::Int(*n),
             TokenKind::Str(parts) => ExprKind::Str(str_segments(parts, token.span)?),
             TokenKind::True => ExprKind::Bool(true),
             TokenKind::False => ExprKind::Bool(false),

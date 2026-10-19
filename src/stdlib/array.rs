@@ -150,13 +150,19 @@ fn arr_reverse(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String>
     Ok(new_array(items))
 }
 
-/// 昇順の新しい配列。要素はすべて数値か、すべて文字列。安定ソート
+/// 昇順の新しい配列。要素はすべて数値か、すべて整数か、すべて文字列。安定ソート
 fn arr_sort(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
     expect_args("arr_sort", args, 1)?;
     let mut items = array_arg("arr_sort", args, 0)?.borrow().clone();
     let all_num = items.iter().all(|v| matches!(v, Value::Num(_)));
+    let all_int = items.iter().all(|v| matches!(v, Value::Int(_)));
     let all_str = items.iter().all(|v| matches!(v, Value::Str(_)));
-    if all_num {
+    if all_int {
+        items.sort_by(|a, b| match (a, b) {
+            (Value::Int(a), Value::Int(b)) => a.cmp(b),
+            _ => Ordering::Equal,
+        });
+    } else if all_num {
         items.sort_by(|a, b| match (a, b) {
             (Value::Num(a), Value::Num(b)) => a.total_cmp(b),
             _ => Ordering::Equal,
@@ -173,7 +179,7 @@ fn arr_sort(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
             None => format!("{first}は並べ替えられません"),
         };
         return Err(format!(
-            "arr_sort の要素は、すべて数値かすべて文字列である必要があります（{message}。`arr_sort_by` を使ってください）"
+            "arr_sort の要素は、すべて数値かすべて整数かすべて文字列である必要があります（{message}。`arr_sort_by` を使ってください）"
         ));
     }
     Ok(new_array(items))
@@ -188,8 +194,9 @@ fn arr_sort_by(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, St
         match interp.call_value(f, vec![x.clone(), y.clone()])? {
             Value::Num(n) if n.is_nan() => Err("arr_sort_by の関数が NaN を返しました".into()),
             Value::Num(n) => Ok(n.partial_cmp(&0.0).unwrap_or(Ordering::Equal)),
+            Value::Int(n) => Ok(n.cmp(&0)),
             other => Err(format!(
-                "arr_sort_by の関数は数値を返す必要があります（{}でした）",
+                "arr_sort_by の関数は数値か整数を返す必要があります（{}でした）",
                 other.type_name()
             )),
         }

@@ -1,0 +1,4 @@
+int_bits_shift.dol:2:5: エラー: bits.shl のシフトの量は 0〜63 です（64 が渡されました）
+  |
+2 | log[@b.shl[1i, 64i]]
+  |     ^

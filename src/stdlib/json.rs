@@ -5,7 +5,7 @@
 use std::fmt::Write as _;
 use std::rc::Rc;
 
-use super::{error_value, expect_args, new_array, new_map, str_arg};
+use super::{error_value, expect_args, new_array, new_map, str_arg, type_error};
 use crate::runtime::interp::Interpreter;
 use crate::runtime::map::Map;
 use crate::runtime::value::Value;
@@ -25,9 +25,32 @@ pub fn register(interp: &mut Interpreter<'_>) {
 const MAX_DEPTH: usize = 512;
 
 fn parse(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
-    expect_args("json.parse", args, 1)?;
+    if !(1..=2).contains(&args.len()) {
+        return Err(format!(
+            "json.parse の引数は 1 個か 2 個です（{} 個渡されました）",
+            args.len()
+        ));
+    }
     let src = str_arg("json.parse", args, 0)?;
-    Ok(match parse_str(src) {
+    let mut ints = false;
+    if let Some(options) = args.get(1) {
+        let Value::Map(options) = options else {
+            return Err(type_error("json.parse", 1, "マップ", options));
+        };
+        for (key, value) in options.borrow().iter() {
+            match (&**key, value) {
+                ("int", Value::Bool(b)) => ints = *b,
+                ("int", other) => {
+                    return Err(format!(
+                        "json.parse のオプション `int` は真偽値です（{}が渡されました）",
+                        other.type_name()
+                    ));
+                }
+                _ => return Err(format!("json.parse のオプション `{key}` は知りません")),
+            }
+        }
+    }
+    Ok(match parse_str(src, ints) {
         Ok(value) => value,
         Err((pos, message)) => {
             let before = &src[..pos];
@@ -56,8 +79,10 @@ fn pretty(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
 /// 失敗したときの (バイト位置, メッセージ)
 type PErr = (usize, String);
 
-fn parse_str(src: &str) -> Result<Value, PErr> {
+/// `ints` が true なら、小数点も指数もない整数を `int` にする（design.md 5.40）
+fn parse_str(src: &str, ints: bool) -> Result<Value, PErr> {
     let mut p = Parser {
+        ints,
         src,
         bytes: src.as_bytes(),
         pos: 0,
@@ -73,6 +98,7 @@ fn parse_str(src: &str) -> Result<Value, PErr> {
 }
 
 struct Parser<'a> {
+    ints: bool,
     src: &'a str,
     bytes: &'a [u8],
     pos: usize,
@@ -273,6 +299,7 @@ impl Parser<'_> {
 
     fn number(&mut self) -> Result<Value, PErr> {
         let start = self.pos;
+        let mut plain = true;
         if self.peek() == Some(b'-') {
             self.pos += 1;
         }
@@ -282,6 +309,7 @@ impl Parser<'_> {
             _ => return self.err("数字が必要です"),
         }
         if self.peek() == Some(b'.') {
+            plain = false;
             self.pos += 1;
             if !self.peek().is_some_and(|b| b.is_ascii_digit()) {
                 return self.err("小数点の後に数字が必要です");
@@ -289,6 +317,7 @@ impl Parser<'_> {
             self.digits();
         }
         if matches!(self.peek(), Some(b'e' | b'E')) {
+            plain = false;
             self.pos += 1;
             if matches!(self.peek(), Some(b'+' | b'-')) {
                 self.pos += 1;
@@ -297,6 +326,12 @@ impl Parser<'_> {
                 return self.err("指数の後に数字が必要です");
             }
             self.digits();
+        }
+        if self.ints && plain {
+            return match self.src[start..self.pos].parse::<i64>() {
+                Ok(n) => Ok(Value::Int(n)),
+                Err(_) => Err((start, "整数が大きすぎます（int は 64 ビットまで）".into())),
+            };
         }
         match self.src[start..self.pos].parse::<f64>() {
             Ok(n) if n.is_finite() => Ok(Value::Num(n)),
@@ -342,6 +377,7 @@ fn write_value(
             write!(out, "{n}").expect("String への書き込みは失敗しない")
         }
         Value::Num(n) => return Err(format!("{name}: {n} は JSON にできません")),
+        Value::Int(n) => write!(out, "{n}").expect("String への書き込みは失敗しない"),
         Value::Str(s) => write_string(out, s),
         Value::Array(items) => {
             let ptr = Rc::as_ptr(items).cast::<()>();
@@ -442,7 +478,7 @@ mod tests {
     use super::*;
 
     fn roundtrip(src: &str) -> String {
-        let value = parse_str(src).unwrap();
+        let value = parse_str(src, false).unwrap();
         let Value::Str(s) = write_json("t", &value, None).unwrap() else {
             unreachable!()
         };
@@ -450,7 +486,7 @@ mod tests {
     }
 
     fn parse_err(src: &str) -> (usize, String) {
-        parse_str(src).unwrap_err()
+        parse_str(src, false).unwrap_err()
     }
 
     #[test]
@@ -475,7 +511,7 @@ mod tests {
 
     #[test]
     fn string_escapes() {
-        let v = parse_str(r#""Aé😀\/\t""#).unwrap();
+        let v = parse_str(r#""Aé😀\/\t""#, false).unwrap();
         assert_eq!(v.to_string(), "Aé😀/\t");
         // 出力: 制御文字は \u00XX、非 ASCII はそのまま
         let out = write_json("t", &Value::Str("é\u{1}\"\\".into()), None).unwrap();
@@ -508,14 +544,14 @@ mod tests {
     #[test]
     fn depth_limit() {
         let ok = format!("{}{}", "[".repeat(MAX_DEPTH), "]".repeat(MAX_DEPTH));
-        assert!(parse_str(&ok).is_ok());
+        assert!(parse_str(&ok, false).is_ok());
         let deep = format!("{}{}", "[".repeat(MAX_DEPTH + 1), "]".repeat(MAX_DEPTH + 1));
         assert!(parse_err(&deep).1.starts_with("入れ子が深すぎます"));
     }
 
     #[test]
     fn pretty_output() {
-        let value = parse_str(r#"{"a":[1,{"b":[]}],"c":{}}"#).unwrap();
+        let value = parse_str(r#"{"a":[1,{"b":[]}],"c":{}}"#, false).unwrap();
         let out = write_json("t", &value, Some(2)).unwrap().to_string();
         assert_eq!(
             out,
@@ -539,6 +575,25 @@ mod tests {
         assert_eq!(
             write_json("t", &outer, None).unwrap().to_string(),
             "[[1],[1]]"
+        );
+    }
+
+    #[test]
+    fn ints_option_and_writing() {
+        let v = parse_str("[1, 1.5, 1e2, -0, 9223372036854775807]", true).unwrap();
+        assert_eq!(v.to_string(), "{1, 1.5, 100, 0, 9223372036854775807}");
+        let Value::Array(items) = &v else { panic!() };
+        let kinds: Vec<_> = items.borrow().iter().map(Value::type_name).collect();
+        assert_eq!(kinds, ["整数", "数値", "数値", "整数", "整数"]);
+        assert!(parse_str("9223372036854775808", true).is_err());
+        // 既定では、大きい整数も数値のまま
+        assert!(matches!(
+            parse_str("9223372036854775808", false),
+            Ok(Value::Num(_))
+        ));
+        assert_eq!(
+            to_json_string("t", &Value::Int(i64::MIN), None).unwrap(),
+            "-9223372036854775808"
         );
     }
 }

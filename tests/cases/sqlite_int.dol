@@ -1,0 +1,12 @@
+@db := import["std:sqlite"]
+@c := @db.open[":memory:", {"int": true}]?
+@db.exec[@c, "CREATE TABLE t (id INTEGER, x REAL, s TEXT)"]?
+@r := @db.exec[@c, "INSERT INTO t VALUES (?, ?, ?)", {1234567890123456789i, 1.5, "a"}]?
+log[@r, type_of[@r{"last_id"}]]
+@rows := @db.query[@c, "SELECT * FROM t"]?
+log[@rows, type_of[@rows{0}{"id"}], type_of[@rows{0}{"x"}]]
+@d := @db.open[":memory:"]?
+@db.exec[@d, "CREATE TABLE t (id INTEGER)"]?
+@db.exec[@d, "INSERT INTO t VALUES (?)", {5i}]?
+@x := @db.query[@d, "SELECT id FROM t"]?
+log[@x, type_of[@x{0}{"id"}]]

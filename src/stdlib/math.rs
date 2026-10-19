@@ -9,19 +9,19 @@ use crate::runtime::interp::{Const, Interpreter};
 use crate::runtime::value::Value;
 
 pub fn register(interp: &mut Interpreter<'_>) {
-    interp.register("abs", |_, args| unary("abs", args, f64::abs));
+    interp.register("abs", abs);
     interp.register("floor", |_, args| unary("floor", args, f64::floor));
     interp.register("ceil", |_, args| unary("ceil", args, f64::ceil));
     // 0.5 は 0 から遠いほうへ丸める（2.5 → 3、-2.5 → -3）
     interp.register("round", |_, args| unary("round", args, f64::round));
     interp.register("sqrt", sqrt);
     interp.register("pow", pow);
-    interp.register("min", |_, args| fold("min", args, f64::min));
-    interp.register("max", |_, args| fold("max", args, f64::max));
+    interp.register("min", |_, args| fold("min", args, f64::min, i64::min));
+    interp.register("max", |_, args| fold("max", args, f64::max, i64::max));
     interp.register("random", random);
     interp.register("random_int", random_int);
     interp.register("trunc", |_, args| unary("trunc", args, f64::trunc));
-    interp.register("sign", |_, args| unary("sign", args, sign));
+    interp.register("sign", sign_value);
     interp.register("clamp", clamp);
     interp.register("num_fixed", num_fixed);
     register_std_math(interp);
@@ -136,6 +136,26 @@ fn num_fixed(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
     Ok(Value::Str(out.into()))
 }
 
+/// 整数（design.md 5.40）は整数のまま、数値は数値で返す
+fn abs(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("abs", args, 1)?;
+    match &args[0] {
+        Value::Int(n) => n
+            .checked_abs()
+            .map(Value::Int)
+            .ok_or_else(|| "abs の結果が整数の範囲を超えました".to_string()),
+        _ => unary("abs", args, f64::abs),
+    }
+}
+
+fn sign_value(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("sign", args, 1)?;
+    match &args[0] {
+        Value::Int(n) => Ok(Value::Int(n.signum())),
+        _ => unary("sign", args, sign),
+    }
+}
+
 /// 引数 1 つの数値関数の共通処理
 fn unary(name: &str, args: &[Value], f: fn(f64) -> f64) -> Result<Value, String> {
     expect_args(name, args, 1)?;
@@ -143,9 +163,25 @@ fn unary(name: &str, args: &[Value], f: fn(f64) -> f64) -> Result<Value, String>
 }
 
 /// min / max。引数は 1 個以上
-fn fold(name: &str, args: &[Value], f: fn(f64, f64) -> f64) -> Result<Value, String> {
+/// 引数がすべて整数なら整数で返す（混在は実行時エラー。design.md 5.40）
+fn fold(
+    name: &str,
+    args: &[Value],
+    f: fn(f64, f64) -> f64,
+    int_f: fn(i64, i64) -> i64,
+) -> Result<Value, String> {
     if args.is_empty() {
         return Err(format!("{name} には 1 個以上の数値を渡してください"));
+    }
+    if let Value::Int(first) = args[0] {
+        let mut acc = first;
+        for (i, arg) in args.iter().enumerate().skip(1) {
+            match arg {
+                Value::Int(n) => acc = int_f(acc, *n),
+                other => return Err(super::type_error(name, i, "整数", other)),
+            }
+        }
+        return Ok(Value::Int(acc));
     }
     let mut acc = num_arg(name, args, 0)?;
     for i in 1..args.len() {

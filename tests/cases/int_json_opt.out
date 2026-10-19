@@ -1,0 +1,4 @@
+int_json_opt.dol:2:5: エラー: json.parse のオプション `x` は知りません
+  |
+2 | log[@j.parse["1", {"x": true}]]
+  |     ^

@@ -21,6 +21,8 @@ pub enum TokenKind {
     Var(String),
     Ident(String),
     Number(f64),
+    /// 整数リテラル `123i`（design.md 5.40）
+    Int(i64),
     Str(Vec<StrPart>),
 
     // キーワード
@@ -82,6 +84,7 @@ impl fmt::Display for TokenKind {
             Var(name) => return write!(f, "`@{name}`"),
             Ident(name) => return write!(f, "`{name}`"),
             Number(n) => return write!(f, "`{n}`"),
+            Int(n) => return write!(f, "`{n}i`"),
             Str(_) => "文字列",
             If => "`if`",
             Else => "`else`",
@@ -235,8 +238,8 @@ impl Lexer {
                     self.push(TokenKind::Str(parts), start);
                 }
                 c if c.is_ascii_digit() => {
-                    let n = self.number(start)?;
-                    self.push(TokenKind::Number(n), start);
+                    let kind = self.number(start)?;
+                    self.push(kind, start);
                 }
                 c if c.is_ascii_alphabetic() || c == '_' => {
                     let word = self.ident();
@@ -339,8 +342,9 @@ impl Lexer {
         s
     }
 
-    /// 数値リテラル（design.md 5.19）。`0xFF` `0b1010` `0o17`、桁区切りの `_`、指数 `1e9`
-    fn number(&mut self, start: Span) -> Result<f64, Diagnostic> {
+    /// 数値リテラル（design.md 5.19）。`0xFF` `0b1010` `0o17`、桁区切りの `_`、指数 `1e9`。
+    /// 末尾に `i` を付けると整数リテラル（design.md 5.40）
+    fn number(&mut self, start: Span) -> Result<TokenKind, Diagnostic> {
         if self.peek() == Some('0')
             && let Some(radix) = match self.peek_next() {
                 Some('x') => Some(16),
@@ -355,14 +359,28 @@ impl Lexer {
             if digits.is_empty() {
                 return self.error(start, "進数の接頭辞の後に数字がありません");
             }
+            if self.int_suffix() {
+                return i64::from_str_radix(&digits, radix)
+                    .map(TokenKind::Int)
+                    .or_else(|_| {
+                        self.error(start, "整数が大きすぎます（9223372036854775807 まで）")
+                    });
+            }
             let n = u64::from_str_radix(&digits, radix)
                 .ok()
                 .filter(|n| *n <= MAX_EXACT)
-                .ok_or_else(|| Diagnostic::new(start, "2^53 を超える整数は正確に表せません"))?;
-            return Ok(n as f64);
+                .ok_or_else(|| {
+                    Diagnostic::new(
+                        start,
+                        "2^53 を超える整数は正確に表せません（整数にするなら末尾に `i` を付けます）",
+                    )
+                })?;
+            return Ok(TokenKind::Number(n as f64));
         }
         let mut s = self.digits(10, start)?;
+        let mut plain = true;
         if self.peek() == Some('.') && self.peek_next().is_some_and(|c| c.is_ascii_digit()) {
+            plain = false;
             s.push('.');
             self.bump();
             s.push_str(&self.digits(10, start)?);
@@ -375,6 +393,7 @@ impl Lexer {
                 .get(self.pos + after)
                 .is_some_and(char::is_ascii_digit)
             {
+                plain = false;
                 self.bump();
                 s.push('e');
                 if let Some(sign) = sign {
@@ -384,10 +403,31 @@ impl Lexer {
                 s.push_str(&self.digits(10, start)?);
             }
         }
+        if self.int_suffix() {
+            if !plain {
+                return self.error(start, "小数や指数には整数の印 `i` を付けられません");
+            }
+            return s
+                .parse::<i64>()
+                .map(TokenKind::Int)
+                .or_else(|_| self.error(start, "整数が大きすぎます（9223372036854775807 まで）"));
+        }
         match s.parse::<f64>() {
-            Ok(n) if n.is_finite() => Ok(n),
+            Ok(n) if n.is_finite() => Ok(TokenKind::Number(n)),
             _ => self.error(start, "数値が大きすぎます"),
         }
+    }
+
+    /// 数字の直後の整数の印 `i`（その後ろに英数字や `_` が続かないとき）を読む
+    fn int_suffix(&mut self) -> bool {
+        let is_suffix = self.peek() == Some('i')
+            && !self
+                .peek_next()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+        if is_suffix {
+            self.bump();
+        }
+        is_suffix
     }
 
     /// `radix` 進数の数字の並び。桁区切りの `_` は数字の間だけに置ける（読み捨てる）
@@ -685,5 +725,34 @@ mod tests {
     fn error_has_position() {
         let err = tokenize("@a = 1\n@b = \"open").unwrap_err();
         assert_eq!(err.span, Span { line: 2, col: 6 });
+    }
+
+    #[test]
+    fn int_literals() {
+        use TokenKind::{Int, Number};
+        let kinds = |src: &str| -> Vec<TokenKind> {
+            tokenize(src).unwrap().into_iter().map(|t| t.kind).collect()
+        };
+        assert_eq!(
+            kinds("1i 0xFFi 1_000i 0b11i 0o7i"),
+            vec![Int(1), Int(255), Int(1000), Int(3), Int(7), TokenKind::Eof]
+        );
+        assert_eq!(
+            kinds("9223372036854775807i"),
+            vec![Int(i64::MAX), TokenKind::Eof]
+        );
+        // `i` の後ろに英数字が続くなら、整数の印ではない（数字のあとに名前が続く並びのまま）
+        assert_eq!(
+            kinds("5in"),
+            vec![Number(5.0), TokenKind::In, TokenKind::Eof]
+        );
+        for bad in [
+            "9223372036854775808i",
+            "1.5i",
+            "1e3i",
+            "0xFFFFFFFFFFFFFFFFi",
+        ] {
+            assert!(tokenize(bad).is_err(), "{bad}");
+        }
     }
 }

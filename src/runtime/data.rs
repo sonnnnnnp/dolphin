@@ -10,6 +10,7 @@ pub enum Data {
     Nil,
     Bool(bool),
     Num(f64),
+    Int(i64),
     Str(String),
     Bytes(Vec<u8>),
     Array(Vec<Data>),
@@ -27,6 +28,7 @@ impl Data {
         match value {
             Value::Bool(b) => Data::Bool(*b),
             Value::Num(n) => Data::Num(*n),
+            Value::Int(n) => Data::Int(*n),
             Value::Str(s) => Data::Str(s.to_string()),
             Value::Bytes(b) => Data::Bytes(b.to_vec()),
             Value::Array(items) => {
@@ -52,6 +54,7 @@ impl Data {
             Data::Nil => Value::Nil,
             Data::Bool(b) => Value::Bool(b),
             Data::Num(n) => Value::Num(n),
+            Data::Int(n) => Value::Int(n),
             Data::Str(s) => Value::Str(s.into()),
             Data::Bytes(b) => Value::bytes(b),
             Data::Array(items) => gc::new_array(items.into_iter().map(Data::into_value).collect()),
@@ -79,6 +82,7 @@ mod tests {
     fn roundtrip() {
         let mut map = Map::default();
         map.insert("a".into(), Value::Num(1.0));
+        map.insert("i".into(), Value::Int(i64::MAX));
         map.insert(
             "b".into(),
             gc::new_array(vec![Value::Str("x".into()), Value::Nil]),

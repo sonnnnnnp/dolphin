@@ -1,4 +1,4 @@
-sqlite_bad_arg.dol:3:1: エラー: sqlite.exec のパラメータに渡せるのは nil・真偽値・数値・文字列・バイト列です（配列が渡されました）
+sqlite_bad_arg.dol:3:1: エラー: sqlite.exec のパラメータに渡せるのは nil・真偽値・数値・整数・文字列・バイト列です（配列が渡されました）
   |
 3 | @db.exec[@c, "SELECT ?", {{1, 2}}]
   | ^

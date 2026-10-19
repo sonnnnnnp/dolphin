@@ -168,6 +168,8 @@ pub struct Expr {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprKind {
     Number(f64),
+    /// 整数リテラル（design.md 5.40）
+    Int(i64),
     Str(Vec<StrSegment>),
     Bool(bool),
     /// `nil`
@@ -340,6 +342,7 @@ impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
             ExprKind::Number(n) => write!(f, "{n}"),
+            ExprKind::Int(n) => write!(f, "{n}i"),
             ExprKind::Str(parts) => {
                 write!(f, "\"")?;
                 for part in parts {

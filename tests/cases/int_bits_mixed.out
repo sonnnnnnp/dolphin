@@ -1,0 +1,4 @@
+int_bits_mixed.dol:2:5: エラー: bits.and の引数に整数と数値が混ざっています
+  |
+2 | log[@b.and[1i, 1]]
+  |     ^

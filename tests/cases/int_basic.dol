@@ -1,0 +1,12 @@
+@big := 9223372036854775807i
+log[type_of[@big], @big, type_of[1], 0xFFi, 0b101i, 0o17i, 1_000i]
+log[7i + 5i, 7i - 9i, 7i * 6i, 7i / 2i, -7i / 2i, 7i % 3i, -7i % 2i, -(3i)]
+log[1i < 2i, 2i <= 2i, 3i > 4i, 1i == 1i, 1i != 2i, 1i == 1, "n=@{4i * 2i}"]
+log[{10, 20, 30}{1i}, to_str[5i] == "5", @big - 1i]
+log[to_int[5], to_int["  -42 "], to_int[7i], to_int["+8"], to_num[3i] + 0.5]
+log[is_error[to_int[1.5]], is_error[to_int["1.5"]], is_error[to_int["1_000"]], is_error[to_int[1e19]], is_error[to_int["9223372036854775808"]]]
+log[err_kind[to_int["x"]], to_int["-9223372036854775808"]]
+log[abs[-5i], sign[-5i], sign[0i], min[3i, 1i, 2i], max[3i, 1i, 2i], abs[-2.5], min[2, 1.5]]
+log[arr_sort[{3i, 1i, 2i}], arr_sort_by[{3i, 1i, 2i}, [@a, @b] ( # @a - @b )]]
+@big2 := 1234567890123456789i
+log[@big2 + 1i, to_num[@big2] == 1234567890123456789]

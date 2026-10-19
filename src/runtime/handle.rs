@@ -130,6 +130,8 @@ pub struct SqliteConn {
     pub conn: rusqlite::Connection,
     /// 開いたときのパス（表示用。メモリ上なら `:memory:`）
     pub path: String,
+    /// INTEGER を整数（`int`）で返すか（design.md 5.40）。false なら数値
+    pub ints: bool,
 }
 
 pub struct Handle {

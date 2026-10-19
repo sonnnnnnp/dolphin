@@ -65,12 +65,12 @@ fn failure(what: &str, e: &rusqlite::Error) -> Value {
 fn with_conn(
     name: &str,
     args: &[Value],
-    f: impl FnOnce(&Connection) -> Result<Value, String>,
+    f: impl FnOnce(&Connection, bool) -> Result<Value, String>,
 ) -> Result<Value, String> {
     let handle = handle_arg(name, args, 0)?;
     let inner = handle.inner.borrow();
     match &*inner {
-        HandleKind::Sqlite(db) => f(&db.conn),
+        HandleKind::Sqlite(db) => f(&db.conn, db.ints),
         HandleKind::SqliteClosed => Ok(closed()),
         _ => Err(format!(
             "{name} に渡せるのは SQLite の接続のハンドルです（{handle}でした）"
@@ -90,6 +90,7 @@ fn open(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
     let path = str_arg("sqlite.open", args, 0)?;
     let mut read_only = false;
     let mut timeout = DEFAULT_TIMEOUT;
+    let mut ints = false;
     if let Some(options) = args.get(1) {
         let Value::Map(options) = options else {
             return Err(type_error("sqlite.open", 1, "マップ", options));
@@ -97,13 +98,14 @@ fn open(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         for (key, value) in options.borrow().iter() {
             match (&**key, value) {
                 ("read_only", Value::Bool(b)) => read_only = *b,
+                ("int", Value::Bool(b)) => ints = *b,
                 ("timeout", Value::Num(n)) => {
                     if !(n.is_finite() && *n >= 0.0) {
                         return Err(format!("sqlite.open の `timeout` は 0 以上の数です（{n}）"));
                     }
                     timeout = *n;
                 }
-                ("read_only" | "timeout", other) => {
+                ("read_only" | "timeout" | "int", other) => {
                     return Err(format!(
                         "sqlite.open のオプション `{key}` の型が違います（{}が渡されました）",
                         other.type_name()
@@ -128,6 +130,7 @@ fn open(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
     Ok(Value::Handle(Handle::new(HandleKind::Sqlite(SqliteConn {
         conn,
         path: path.to_string(),
+        ints,
     }))))
 }
 
@@ -153,22 +156,24 @@ fn to_sql(name: &str, value: &Value) -> Result<SqlValue, String> {
     Ok(match value {
         Value::Nil => SqlValue::Null,
         Value::Bool(b) => SqlValue::Integer(i64::from(*b)),
+        Value::Int(n) => SqlValue::Integer(*n),
         Value::Num(n) if n.fract() == 0.0 && n.abs() <= MAX_EXACT => SqlValue::Integer(*n as i64),
         Value::Num(n) => SqlValue::Real(*n),
         Value::Str(s) => SqlValue::Text(s.to_string()),
         Value::Bytes(b) => SqlValue::Blob(b.to_vec()),
         other => {
             return Err(format!(
-                "{name} のパラメータに渡せるのは nil・真偽値・数値・文字列・バイト列です（{}が渡されました）",
+                "{name} のパラメータに渡せるのは nil・真偽値・数値・整数・文字列・バイト列です（{}が渡されました）",
                 other.type_name()
             ));
         }
     })
 }
 
-fn from_sql(value: ValueRef<'_>) -> Value {
+fn from_sql(value: ValueRef<'_>, ints: bool) -> Value {
     match value {
         ValueRef::Null => Value::Nil,
+        ValueRef::Integer(i) if ints => Value::Int(i),
         ValueRef::Integer(i) => Value::Num(i as f64),
         ValueRef::Real(r) => Value::Num(r),
         ValueRef::Text(t) => Value::Str(String::from_utf8_lossy(t).into_owned().into()),
@@ -260,7 +265,7 @@ fn sql_args<'v>(name: &str, args: &'v [Value]) -> Result<(&'v str, Option<&'v Va
 
 fn exec(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
     let (sql, params) = sql_args("sqlite.exec", args)?;
-    with_conn("sqlite.exec", args, |conn| {
+    with_conn("sqlite.exec", args, |conn, ints| {
         let mut stmt = match conn.prepare(sql) {
             Ok(stmt) => stmt,
             Err(e) => return Ok(failure("SQL を準備できません", &e)),
@@ -280,18 +285,21 @@ fn exec(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         drop(rows);
         let changes = if stmt.readonly() { 0 } else { conn.changes() };
         let mut result = Map::default();
-        result.insert("changes".into(), Value::Num(changes as f64));
-        result.insert(
-            "last_id".into(),
-            Value::Num(conn.last_insert_rowid() as f64),
-        );
+        let (changes, last_id) = (changes as i64, conn.last_insert_rowid());
+        if ints {
+            result.insert("changes".into(), Value::Int(changes));
+            result.insert("last_id".into(), Value::Int(last_id));
+        } else {
+            result.insert("changes".into(), Value::Num(changes as f64));
+            result.insert("last_id".into(), Value::Num(last_id as f64));
+        }
         Ok(new_map(result))
     })
 }
 
 fn query(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
     let (sql, params) = sql_args("sqlite.query", args)?;
-    with_conn("sqlite.query", args, |conn| {
+    with_conn("sqlite.query", args, |conn, ints| {
         let mut stmt = match conn.prepare(sql) {
             Ok(stmt) => stmt,
             Err(e) => return Ok(failure("SQL を準備できません", &e)),
@@ -311,7 +319,7 @@ fn query(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
             let mut map = Map::default();
             for (i, name) in columns.iter().enumerate() {
                 match row.get_ref(i) {
-                    Ok(value) => map.insert(Rc::clone(name), from_sql(value)),
+                    Ok(value) => map.insert(Rc::clone(name), from_sql(value, ints)),
                     Err(e) => return Ok(failure("結果を読めません", &e)),
                 }
             }
@@ -324,7 +332,7 @@ fn query(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
 fn run_script(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
     expect_args("sqlite.run_script", args, 2)?;
     let sql = str_arg("sqlite.run_script", args, 1)?;
-    with_conn("sqlite.run_script", args, |conn| {
+    with_conn("sqlite.run_script", args, |conn, _| {
         Ok(match conn.execute_batch(sql) {
             Ok(()) => Value::Nil,
             Err(e) => failure("SQL を実行できません", &e),

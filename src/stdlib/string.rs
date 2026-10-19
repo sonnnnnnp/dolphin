@@ -31,6 +31,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     interp.register("str_rfind", str_rfind);
     interp.register("to_str", to_str);
     interp.register("to_num", to_num);
+    interp.register("to_int", to_int);
 }
 
 fn string(s: impl Into<std::rc::Rc<str>>) -> Value {
@@ -150,6 +151,7 @@ fn to_num(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
     expect_args("to_num", args, 1)?;
     match &args[0] {
         Value::Num(n) => Ok(Value::Num(*n)),
+        Value::Int(n) => Ok(Value::Num(*n as f64)),
         Value::Str(s) => Ok(s
             .trim()
             .parse::<f64>()
@@ -160,7 +162,35 @@ fn to_num(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
                 super::error_value("parse", format!("数値に変換できません（{s:?}）"))
             })),
         other => Err(format!(
-            "to_num の 1 番目の引数は文字列か数値です（{}が渡されました）",
+            "to_num の 1 番目の引数は文字列か数値か整数です（{}が渡されました）",
+            other.type_name()
+        )),
+    }
+}
+
+/// 整数にする（design.md 5.40）。整数はそのまま。数値は小数部がなく範囲に収まれば整数。
+/// 文字列は符号と 10 進数字だけで読めれば整数。できなければ `parse` のエラー値
+fn to_int(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
+    expect_args("to_int", args, 1)?;
+    match &args[0] {
+        Value::Int(n) => Ok(Value::Int(*n)),
+        Value::Num(n) => {
+            // 2^63 ちょうどは範囲外（`as i64` で丸められないよう、半開区間で見る）
+            let in_range = *n >= -9_223_372_036_854_775_808.0 && *n < 9_223_372_036_854_775_808.0;
+            if n.fract() == 0.0 && in_range {
+                Ok(Value::Int(*n as i64))
+            } else {
+                Ok(super::error_value(
+                    "parse",
+                    format!("整数に変換できません（{n}）"),
+                ))
+            }
+        }
+        Value::Str(s) => Ok(s.trim().parse::<i64>().map(Value::Int).unwrap_or_else(|_| {
+            super::error_value("parse", format!("整数に変換できません（{s:?}）"))
+        })),
+        other => Err(format!(
+            "to_int の 1 番目の引数は文字列か数値か整数です（{}が渡されました）",
             other.type_name()
         )),
     }

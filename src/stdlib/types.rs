@@ -15,6 +15,7 @@ fn type_of(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
         Value::Nil => "nil",
         Value::Bool(_) => "bool",
         Value::Num(_) => "number",
+        Value::Int(_) => "int",
         Value::Str(_) => "string",
         Value::Array(_) => "array",
         Value::Map(_) => "map",

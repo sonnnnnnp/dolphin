@@ -393,7 +393,7 @@ impl<'a> Walker<'a> {
 
     fn expr(&mut self, expr: &Expr) {
         match &expr.kind {
-            ExprKind::Number(_) | ExprKind::Bool(_) | ExprKind::Nil => {}
+            ExprKind::Number(_) | ExprKind::Int(_) | ExprKind::Bool(_) | ExprKind::Nil => {}
             ExprKind::Str(segments) => {
                 // 文字列の中の `@name` は、式の位置が文字列の先頭になっているので、原文から探す。
                 // `@{ 式 }` の式は、字句の位置を持っている

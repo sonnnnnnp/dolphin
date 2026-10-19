@@ -19,6 +19,8 @@ pub enum Value {
     Nil,
     Bool(bool),
     Num(f64),
+    /// 64 ビット符号付き整数（design.md 5.40）。数値とは別の型
+    Int(i64),
     Str(Rc<str>),
     /// 配列とマップは参照渡し（design.md 7.1）。clone しても同じものを指す
     Array(Rc<RefCell<Vec<Value>>>),
@@ -107,6 +109,7 @@ impl Value {
             Value::Nil => "値なし",
             Value::Bool(_) => "真偽値",
             Value::Num(_) => "数値",
+            Value::Int(_) => "整数",
             Value::Str(_) => "文字列",
             Value::Array(_) => "配列",
             Value::Map(_) => "マップ",
@@ -124,6 +127,7 @@ impl Value {
             (Value::Nil, Value::Nil) => true,
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Num(a), Value::Num(b)) => a == b,
+            (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Str(a), Value::Str(b)) => a == b,
             // 同じものなら中身を見ずに true（自分自身を含む配列で無限に比べないため）
             (Value::Array(a), Value::Array(b)) if Rc::ptr_eq(a, b) => true,
@@ -179,6 +183,7 @@ fn write_value(
         Value::Nil => return write!(f, "nil"),
         Value::Bool(b) => return write!(f, "{b}"),
         Value::Num(n) => return write!(f, "{n}"),
+        Value::Int(n) => return write!(f, "{n}"),
         Value::Str(s) if quote_str => return write!(f, "{s:?}"),
         Value::Str(s) => return write!(f, "{s}"),
         Value::Module(m) => return write!(f, "<module {:?}>", &*m.name),

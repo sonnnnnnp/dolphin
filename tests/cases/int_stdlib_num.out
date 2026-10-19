@@ -1,0 +1,4 @@
+int_stdlib_num.dol:1:5: エラー: sqrt の 1 番目の引数は数値です（整数が渡されました）
+  |
+1 | log[sqrt[4i]]
+  |     ^

@@ -1,0 +1,4 @@
+int_to_int_type.dol:1:5: エラー: to_int の 1 番目の引数は文字列か数値か整数です（真偽値が渡されました）
+  |
+1 | log[to_int[true]]
+  |     ^

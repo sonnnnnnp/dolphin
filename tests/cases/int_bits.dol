@@ -1,0 +1,5 @@
+@b := import["std:bits"]
+log[@b.and[0xFFi, 0x0Fi], @b.or[1i, 2i], @b.xor[5i, 1i], @b.not[0i]]
+log[@b.shl[1i, 62i], @b.shl[1i, 63i], @b.shr[-8i, 1i], @b.popcount[-1i], @b.popcount[255i]]
+log[@b.and[12, 10], @b.shl[1, 4], @b.popcount[7]]
+log[@b.xor[0x7FFFFFFFFFFFFFFFi, 0xFFi]]

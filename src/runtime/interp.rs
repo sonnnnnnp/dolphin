@@ -478,6 +478,7 @@ impl<'a> Interpreter<'a> {
         let span = expr.span;
         let value = match &expr.kind {
             ExprKind::Number(n) => Value::Num(*n),
+            ExprKind::Int(n) => Value::Int(*n),
             ExprKind::Bool(b) => Value::Bool(*b),
             ExprKind::Nil => Value::Nil,
             ExprKind::Str(parts) => {
@@ -598,6 +599,10 @@ impl<'a> Interpreter<'a> {
             }
             ExprKind::Unary { op, operand } => match (op, self.eval(operand)?) {
                 (UnaryOp::Neg, Value::Num(n)) => Value::Num(-n),
+                (UnaryOp::Neg, Value::Int(n)) => match n.checked_neg() {
+                    Some(n) => Value::Int(n),
+                    None => return Err(int_overflow(span)),
+                },
                 (UnaryOp::Not, Value::Bool(b)) => Value::Bool(!b),
                 (op, value) => {
                     return Err(RuntimeError::new(
@@ -633,6 +638,22 @@ impl<'a> Interpreter<'a> {
             (B::Div | B::Rem, Value::Num(_), Value::Num(b)) if *b == 0.0 => {
                 return Err(RuntimeError::new(span, "0 で割ることはできません"));
             }
+            (B::Div | B::Rem, Value::Int(_), Value::Int(0)) => {
+                return Err(RuntimeError::new(span, "0 で割ることはできません"));
+            }
+            (_, Value::Int(a), Value::Int(b)) => match op {
+                B::Add | B::Sub | B::Mul | B::Div | B::Rem => {
+                    let result = match op {
+                        B::Add => a.checked_add(*b),
+                        B::Sub => a.checked_sub(*b),
+                        B::Mul => a.checked_mul(*b),
+                        B::Div => a.checked_div(*b),
+                        _ => a.checked_rem(*b),
+                    };
+                    Value::Int(result.ok_or_else(|| int_overflow(span))?)
+                }
+                _ => Value::Bool(compare(op, Some(a.cmp(b)))),
+            },
             (_, Value::Num(a), Value::Num(b)) => match op {
                 B::Add => Value::Num(a + b),
                 B::Sub => Value::Num(a - b),
@@ -643,6 +664,14 @@ impl<'a> Interpreter<'a> {
             },
             (B::Lt | B::LtEq | B::Gt | B::GtEq, Value::Str(a), Value::Str(b)) => {
                 Value::Bool(compare(op, Some(a.cmp(b))))
+            }
+            (_, Value::Int(_), Value::Num(_)) | (_, Value::Num(_), Value::Int(_)) => {
+                return Err(RuntimeError::new(
+                    span,
+                    format!(
+                        "整数と数値に `{op}` は使えません（`to_int` か `to_num` でそろえてください）"
+                    ),
+                ));
             }
             _ => {
                 return Err(RuntimeError::new(
@@ -1206,14 +1235,22 @@ fn to_key(value: &Value, span: Span) -> RResult<Rc<str>> {
 
 /// 添字として使える値（0 以上 len 未満の整数）か確かめる
 fn to_index(value: &Value, len: usize, span: Span) -> RResult<usize> {
-    let Value::Num(n) = *value else {
-        return Err(RuntimeError::new(
-            span,
-            format!(
-                "添字は数値である必要があります（{}でした）",
-                value.type_name()
-            ),
-        ));
+    let n = match *value {
+        Value::Num(n) => n,
+        Value::Int(i) => {
+            return usize::try_from(i).ok().filter(|i| *i < len).ok_or_else(|| {
+                RuntimeError::new(span, format!("添字 {i} は範囲外です（要素は {len} 個）"))
+            });
+        }
+        _ => {
+            return Err(RuntimeError::new(
+                span,
+                format!(
+                    "添字は数値か整数である必要があります（{}でした）",
+                    value.type_name()
+                ),
+            ));
+        }
     };
     if n.fract() != 0.0 || n < 0.0 || n >= len as f64 {
         return Err(RuntimeError::new(
@@ -1222,6 +1259,10 @@ fn to_index(value: &Value, len: usize, span: Span) -> RResult<usize> {
         ));
     }
     Ok(n as usize)
+}
+
+fn int_overflow(span: Span) -> RuntimeError {
+    RuntimeError::new(span, "整数が範囲（-2^63 〜 2^63-1）を超えました")
 }
 
 fn compare(op: BinaryOp, ord: Option<Ordering>) -> bool {
