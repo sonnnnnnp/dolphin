@@ -40,6 +40,7 @@ pub mod stream;
 pub mod string;
 pub mod time;
 pub mod types;
+pub mod worker;
 pub mod ws;
 pub mod ws_proto;
 
@@ -70,6 +71,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     #[cfg(feature = "ui")]
     crate::ui::register(interp);
     ws::register(interp);
+    worker::register(interp);
     types::register(interp);
     gc::register(interp);
     debug::register(interp);

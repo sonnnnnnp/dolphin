@@ -68,6 +68,11 @@ impl<'a> Session<'a> {
         Self { interp }
     }
 
+    /// ワーカーの中で動かすときの、親とやり取りする口を付ける（design.md 5.43）
+    pub fn set_worker(&mut self, worker: runtime::worker::WorkerContext) {
+        self.interp.worker = Some(worker);
+    }
+
     /// `os.exit` が呼ばれていたら、その終了コード
     pub fn exit_code(&self) -> Option<i32> {
         self.interp.exit_code

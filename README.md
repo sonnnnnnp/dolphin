@@ -159,6 +159,7 @@ count: 3
 | [v0.48.0](https://github.com/sonnnnnnp/dolphin/tree/v0.48.0) | 整数 `int`（`123i`、`to_int`） | [v0.47.0...v0.48.0](https://github.com/sonnnnnnp/dolphin/compare/v0.47.0...v0.48.0) |
 | [v0.49.0](https://github.com/sonnnnnnp/dolphin/tree/v0.49.0) | ストリーム `std:stream`（`HTTP` の `"stream": true` を含む） | [v0.48.0...v0.49.0](https://github.com/sonnnnnnp/dolphin/compare/v0.48.0...v0.49.0) |
 | [v0.50.0](https://github.com/sonnnnnnp/dolphin/tree/v0.50.0) | プロセスの常駐連携（`os.spawn` `os.wait`） | [v0.49.0...v0.50.0](https://github.com/sonnnnnnp/dolphin/compare/v0.49.0...v0.50.0) |
+| [v0.51.0](https://github.com/sonnnnnnp/dolphin/tree/v0.51.0) | ワーカー `std:worker`（別スレッドの別インタプリタ） | [v0.50.0...v0.51.0](https://github.com/sonnnnnnp/dolphin/compare/v0.50.0...v0.51.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 

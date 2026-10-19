@@ -94,6 +94,8 @@ pub struct Interpreter<'a> {
     returning: Option<Value>,
     /// イベントループ（design.md 5.23）
     pub events: Events,
+    /// ワーカーの中で動いているときの、親とやり取りする口（design.md 5.43）
+    pub worker: Option<super::worker::WorkerContext>,
 }
 
 impl<'a> Interpreter<'a> {
@@ -119,7 +121,13 @@ impl<'a> Interpreter<'a> {
             std_consts: HashMap::new(),
             returning: None,
             events: Events::default(),
+            worker: None,
         }
+    }
+
+    /// いま実行しているファイルのあるディレクトリ（`import` の相対パスの基準）
+    pub fn current_dir(&self) -> &Path {
+        &self.current.dir
     }
 
     /// 組み込み関数の名前（並べ替え済み。言語サーバーの補完用）

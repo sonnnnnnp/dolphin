@@ -1762,7 +1762,10 @@ log[@w.join[@job]]               // {"ok": true, "status": 0, "error": nil}
 
 // fib.dol（ワーカーの中身）
 @w := import["std:worker"]
-fib[@n] ( if @n < 2 ( # @n ) # fib[@n - 1] + fib[@n - 2] )
+fib[@n] (
+    if @n < 2 ( # @n )
+    # fib[@n - 1] + fib[@n - 2]
+)
 @m := @w.recv[]
 while @m != nil (
     @w.send[fib[@m{"n"}]]
@@ -1775,7 +1778,7 @@ while @m != nil (
 | 項目 | 内容 | 状態 |
 |---|---|---|
 | `worker.spawn[path]` `worker.spawn[path, options]` | `path` のファイル（呼び出したファイルのあるディレクトリからの相対パス）を、新しいスレッドで動かし、ワーカーのハンドルを返す。ファイルが読めなければエラー値（`not_found` `permission` `io` `parse`）。構文の間違いは、ワーカーの終わり（`on_close` か `join`）で分かる | 確定 |
-| `options` | `"arg"`: ワーカーが `worker.arg[]` で受け取る値。`"on_message"`: `f[worker, data]`、`"on_close"`: `f[worker, status, error]`（どちらかを付けると**コールバック型**。イベントループ（5.23）で呼ばれる。ワーカーが終わるまで、イベントループは終わらない）。付けなければ**ブロッキング型** | 確定 |
+| `options` | `"arg"`: ワーカーが `worker.arg[]` で受け取る値。`"on_message"`: `f[worker, data]`、`"on_close"`: `f[worker, status, error]`（`error` は実行時エラーの表示で、なければ空の文字列。どちらかを付けると**コールバック型**。イベントループ（5.23）で呼ばれる。ワーカーが終わるまで、イベントループは終わらない）。付けなければ**ブロッキング型** | 確定 |
 | `worker.send[w, data]` | ワーカーへメッセージを送る。戻り値は `nil`。ワーカーがすでに終わっていればエラー値（`closed`） | 確定 |
 | `worker.recv[w]` `worker.recv[w, timeout]` | ブロッキング型で、ワーカーからのメッセージを 1 つ受け取る（来るまで待つ）。ワーカーが終わって、届いたものを全部受け取ったあとは `nil`。`timeout`（秒）までに来なければエラー値（`timeout`）。コールバック型に使うのは実行時エラー | 確定 |
 | `worker.join[w]` | ブロッキング型で、ワーカーが終わるまで待ち、`{"ok": 終了コードが 0, "status": 終了コード, "error": 実行時エラーの表示か nil}` を返す。待つあいだに届いたメッセージは、あとから `recv` で受け取れる。何度呼んでもよい | 確定 |

@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+## [0.51.0] - 2026-10-20
+
+ワーカー `std:worker`（[design.md 5.43](docs/design.md)）。複数のコアで計算を分けられるように。
+
+### 追加
+- `worker.spawn[path]` `worker.spawn[path, options]`: 別のスレッドに別のインタプリタを立てて、スクリプトを動かす。メモリは共有せず、持ち出せる値（`nil` 真偽値 数値 整数 文字列 バイト列 配列 マップ エラー値）をメッセージで送る。`options` は `arg`（ワーカーが `worker.arg[]` で受け取る値）、`on_message[worker, data]`、`on_close[worker, status, error]`（付けるとコールバック型でイベントループで呼ばれる。付けなければブロッキング型）
+- 親の側: `worker.send[w, data]`、`worker.recv[w]` `worker.recv[w, timeout]`、`worker.join[w]`（`{"ok", "status", "error"}`）、`worker.terminate[w]`
+- ワーカーの側: `worker.recv[]` `worker.recv[timeout]`、`worker.send[data]`、`worker.arg[]`、`worker.is_worker[]`
+- 同時に動かせるワーカーは 64 個まで。実行中の処理を途中で止めることはできない（ワーカーが自分で終わるように作る）
+
 ## [0.50.0] - 2026-10-20
 
 プロセスの常駐連携（[design.md 5.42](docs/design.md)）。起動したままのコマンドと、標準入出力でやり取りし続けられるように。

@@ -66,7 +66,11 @@ impl Stream {
     /// 接続のハンドルを「閉じた」にする
     fn mark_closed(&self) {
         if let Value::Handle(handle) = &self.conn {
-            *handle.inner.borrow_mut() = HandleKind::Closed;
+            let mut inner = handle.inner.borrow_mut();
+            *inner = match &*inner {
+                HandleKind::Worker(_) | HandleKind::WorkerClosed => HandleKind::WorkerClosed,
+                _ => HandleKind::Closed,
+            };
         }
     }
 }

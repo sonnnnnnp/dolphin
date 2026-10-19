@@ -8,6 +8,8 @@ use std::rc::Rc;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
+pub use super::worker::WorkerHandle;
+
 /// WebSocket のサーバー側の接続に送る指示（送信は補助スレッドが行う。design.md 5.22）
 #[derive(Debug)]
 pub enum WsOut {
@@ -119,6 +121,9 @@ pub enum HandleKind {
     },
     /// 起動した子プロセス（`os.spawn`。design.md 5.42）
     Process(ProcessHandle),
+    /// ワーカー（`std:worker`。design.md 5.43）
+    Worker(WorkerHandle),
+    WorkerClosed,
     /// ストリーム（`std:stream`。design.md 5.41）
     Stream(StreamIo),
     StreamClosed,
@@ -190,6 +195,7 @@ impl Handle {
             #[cfg(feature = "sqlite")]
             HandleKind::Sqlite(_) | HandleKind::SqliteClosed => HandleKind::SqliteClosed,
             HandleKind::Stream(_) | HandleKind::StreamClosed => HandleKind::StreamClosed,
+            HandleKind::Worker(_) | HandleKind::WorkerClosed => HandleKind::WorkerClosed,
             _ => HandleKind::Closed,
         };
     }
@@ -213,6 +219,8 @@ impl fmt::Display for Handle {
             },
             HandleKind::WsServer { .. } => write!(f, "<websocket サーバー側の接続>"),
             HandleKind::Process(p) => write!(f, "<process {}>", p.pid),
+            HandleKind::Worker(w) => write!(f, "<worker {}>", w.label),
+            HandleKind::WorkerClosed => write!(f, "<worker 閉じています>"),
             HandleKind::Stream(io) => write!(f, "<stream {}>", io.label),
             HandleKind::StreamClosed => write!(f, "<stream 閉じています>"),
             #[cfg(feature = "sqlite")]
