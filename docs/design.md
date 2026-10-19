@@ -1682,6 +1682,43 @@ log[to_num[@id] + 1]             // 1.2345678901234568e18（数値になる）
 | 持ち出せる値 | int は `Data` にできる（イベントループ、非同期の関数、`err_new` の詳細データで受け渡せる。5.23、5.39） | 確定 |
 | 作らないもの | 任意精度の整数、符号なし 64 ビット、`pow`・`sqrt` などの int 版、数値との自動変換。必要になってから足す | 確定 |
 
+### 5.41 ストリーム（`std:stream`、v0.49.0、確定 2026-10-20）
+
+`file_read` は全体を読み、HTTP の本文は 32 MB まで、`net.read` は接続だけ、というように、**大きなデータを少しずつ読み書きする道具**がなかった（数 GB のファイル、ダウンロード、行ごとの処理）。ファイル・標準入出力・HTTP の本文・メモリを同じ書き方で扱えるよう、`handle`（5.21）の仲間として**ストリーム**を足す。型は `handle` のまま（`type_of` は `"handle"`）。
+
+```
+@s := import["std:stream"]
+@in := @s.open["big.log"]?
+@out := @s.create["errors.log"]?
+@s.each_line[@in, [@line] (
+    if str_contains[@line, "ERROR"] ( @s.write[@out, @line + "\n"]? )
+)]?
+@s.close[@in]
+@s.close[@out]?
+```
+
+| 項目 | 内容 | 状態 |
+|---|---|---|
+| 向き | ストリームは読む向きか書く向きのどちらか（TCP の接続は両方）。向きの違う関数を呼ぶのは実行時エラー | 確定 |
+| 表示 | `<stream ファイル a.txt 読み込み>` `<stream ファイル a.txt 書き込み>` `<stream 標準入力>` `<stream メモリ>`（閉じていれば `<stream 閉じています>`）。`==` は同じものかを比べる。JSON にはできない。参照されなくなれば自動で閉じる（書き込みは、このとき書き残しを書き出す。失敗は気づけないので、`close` を呼ぶこと） | 確定 |
+| 作る | `open[path]`（読む）、`create[path]`（書く。なければ作り、あれば空にする）、`append[path]`（書く。末尾に足す）、`stdin[]`、`stdout[]`、`stderr[]`、`from_bytes[bytes]`（バイト列を読む）。失敗はエラー値（`not_found` `permission` `exists` `io`。`file_read` と同じ。5.13） | 確定 |
+| `read[s, n]` | 最大 `n` バイト（0〜64 MB）をバイト列で返す。届いている分だけ。終わりなら空のバイト列 | 確定 |
+| `read_exact[s, n]` | ちょうど `n` バイト。足りないうちに終わったらエラー値（`eof`） | 確定 |
+| `read_line[s]` | 改行までの 1 行を文字列で（末尾の `\n` `\r\n` は除く）。終わりなら `nil`。1 行は 16 MB まで（超えたら `too_large`）。UTF-8 でなければ `parse` | 確定 |
+| `read_all[s]` `read_text[s]` | 残りをすべて、バイト列・文字列で返す。1 GiB まで（超えたら `too_large`）。`read_text` は UTF-8 でなければ `parse` | 確定 |
+| `each_line[s, f]` | 1 行ずつ `f[line]` を呼ぶ。`f` が `false` を返したらそこで止める（それ以外の戻り値は無視）。終わるか止めたら `nil`。読み込みの失敗はエラー値 | 確定 |
+| `write[s, data]` | 文字列かバイト列を書く。戻り値は `nil`。ファイルは内部でまとめて書くので、確実に書き出すには `flush` か `close` | 確定 |
+| `flush[s]` | たまっている分を書き出す | 確定 |
+| `copy[from, to]` | 読み切るまで `from` から `to` へ移す。移したバイト数（数値）を返す | 確定 |
+| `close[s]` | 書き込みは書き出してから閉じる。書き出しに失敗したらエラー値（閉じるのは閉じる）。何度呼んでもよい。成功は `nil` | 確定 |
+| TCP の接続 | `read` `read_exact` `read_line` `read_all` `read_text` `each_line` `write` `flush` `copy` `close` は、`std:net` の接続（5.21）にも使える（同じバッファを共有する） | 確定 |
+| `stdout[]` | `log` と同じ出力先に書く（順序が入れ替わらない）。`stderr[]` は標準エラー | 確定 |
+| HTTP の本文 | `http.get` などの `options` に `"stream": true` を付けると、レスポンスの `body` が文字列の代わりに読み込みのストリームになる（`status` `ok` `headers` は同じ）。本文の大きさの上限（32 MB）と、全体の時間切れ（`timeout`）は適用しない。`timeout` は接続とレスポンスの先頭までの待ちに使う。`*_async` では使えない（実行時エラー） | 確定 |
+| 失敗 | エラー値。種類は `closed`（閉じたストリーム）、`eof`、`too_large`、`parse`、`timeout`、`network`（TCP と HTTP の本文）、ファイルは `not_found` `permission` `exists` `io` | 確定 |
+| 型の間違い | ストリームでないハンドル、向きの違い、`n` が負などは実行時エラー | 確定 |
+| 作らないもの | 非同期の読み書き（`await` の後）、サーバーのレスポンスの逐次送信（SSE。別の版）、シーク、ストリームを返す `for` | 確定 |
+| ビルド | 標準ライブラリだけ。HTTP の `"stream"` は `http` feature | 確定 |
+
 ---
 
 ## 6. 旧実装からの主な変更（案）
