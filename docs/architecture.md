@@ -14,8 +14,8 @@
                 └───────────────────────┬────────────────────────┘
                                         ▼
  .dol ─▶ Lexer ─▶ Parser ─▶  AST  ─▶ Resolver ─▶ Interpreter ─▶ 実行結果
-        トークン   再帰下降          スコープ検査     tree-walking 評価
-                                    関数の事前登録   （将来 VM に差し替え可）
+        トークン   再帰下降          スコープ検査     バイトコードにコンパイルして VM で実行
+                                    関数の事前登録
           │          │                 │               │
           └──────────┴──── Diagnostics ┴───────────────┘
                      行・列つきのエラー表示（ソース行に ^^^）
@@ -32,14 +32,14 @@
 | Lexer | `&str` → `Vec<Token>` | 字句に分割する。`[ ]` `{ }` の中の改行を捨てる | ✅ |
 | Parser | `&[Token]` → `Program` | design.md 4 章の EBNF を再帰下降で解析する | ✅ |
 | Resolver | `&Program` → `()` | 関数の重複・未定義の関数・引数の数・関数の外での `#`・未宣言の変数への読み書き・二重宣言を実行前に検査する | ✅ |
-| Interpreter | `&Program` → 出力 | AST を tree-walking で評価する。呼び出しの深さは 1000 段まで | ✅ |
+| Interpreter | `&Program` → 出力 | AST をバイトコードにコンパイルして VM で実行する（`runtime/compile.rs`・`runtime/bytecode.rs`・`runtime/interp/vm.rs`）。呼び出しの深さは 1000 段まで | ✅ |
 | Diagnostics | 各層のエラー → 文字列 | すべての層のエラーを同じ形で表示する | ✅ |
 | 標準ライブラリ | `&[Value]` → `Value` | ネイティブ関数を Interpreter に登録する | 🚧 |
 
 Resolver を独立させる理由:
 
 - 「宣言していない変数に代入した」などの誤りを、実行前にまとめて見つけられる
-- 評価器を将来バイトコード VM に差し替えても、前段を書き直さずに済む
+- 評価器を（実際に v0.53.0 でバイトコード VM に差し替えたように）置き換えても、前段を書き直さずに済む
 
 ---
 
@@ -51,7 +51,7 @@ Resolver を独立させる理由:
 | 構文解析 | PEG パーサ（`Grammar/python.gram`） | `syntax/parser.rs`（再帰下降） |
 | 構文木 | `ast` モジュール | `syntax/ast.rs` |
 | 名前解決 | `Python/symtable.c` | `sema/resolver.rs` |
-| 実行 | `compile.c` → バイトコード → `ceval.c` | `runtime/interp.rs`（tree-walking） |
+| 実行 | `compile.c` → バイトコード → `ceval.c` | `runtime/compile.rs` → `runtime/interp/vm.rs`（バイトコード VM） |
 | 値 | `PyObject` | `runtime/value.rs` の `Value` |
 | 組み込み関数 | `builtins`、C 拡張 | `stdlib/`（`NativeFn` を登録） |
 
@@ -86,9 +86,12 @@ dolphin/
 │  │  ├─ data.rs         Data（スレッドをまたげる値。非同期の結果を運ぶ）
 │  │  ├─ events.rs       イベントループ（タイマー・非同期の結果・http.serve のメッセージ）
 │  │  ├─ module.rs       モジュール（import したファイル 1 つ分の `@` 変数と関数）
-│  │  ├─ env.rs          Env（スコープ 1 つ分の変数表。外側への参照を持つ）と Frame（呼び出し 1 回分）
+│  │  ├─ env.rs          Env（スコープ 1 つ分の変数表。外側への参照を持つ）
 │  │  ├─ error.rs        RuntimeError（呼び出し履歴つき）
-│  │  └─ interp.rs       評価器
+│  │  ├─ bytecode.rs     命令（Op）と、コンパイルした 1 つのまとまり（Chunk）
+│  │  ├─ compile.rs      AST → バイトコード
+│  │  ├─ interp.rs       Interpreter（モジュール・import・組み込み関数の呼び出し・分割代入）
+│  │  └─ interp/vm.rs    VM（枠と値のスタックをヒープに持つ。Dolphin の関数呼び出しで Rust の再帰を使わない）
 │  └─ stdlib/
 │     ├─ mod.rs          全モジュールの登録、引数検査の共通処理
 │     ├─ io.rs           log, input
@@ -244,8 +247,8 @@ main.dol:2:6: エラー: 文字列が閉じられていません
 | 段階 4 HTTP | tokio は複数スレッドで動くが、インタプリタは `Rc` を使っていて別スレッドに渡せない（`Send` でない） | サーバーは別スレッドで動かし、リクエストはチャネルでインタプリタのスレッドに送る。インタプリタは 1 スレッドで順番に処理する（JavaScript のイベントループと同じ型） |
 | 段階 5 GUI | macroquad がメインループを握る | `gameloop` を「毎フレーム呼ばれる関数」として登録し、macroquad の側から呼ぶ（design.md 7.2） |
 | メモリ | `Rc` は循環参照を解放できない（配列が自分自身を含む場合や、関数値が自分を作ったスコープの変数に入る場合など） | 当面は許容する。問題になったら GC を自作する。表示と `==` は循環しても止まるようにしてある |
-| スタック | tree-walking は Dolphin の呼び出し 1 段で Rust の再帰が何段も深くなり、Windows の既定スタック（1 MB）ではすぐあふれる | 呼び出しの深さを 1000 段に制限し、CLI は 256 MB のスタックを持つスレッドで動かす |
-| 性能 | tree-walking は遅い | 段階 6 でバイトコード VM にする。Resolver の層があるので差し替えやすい |
+| スタック | 旧評価器（tree-walking）は Dolphin の呼び出し 1 段で Rust の再帰が何段も深くなり、Windows の既定スタック（1 MB）ではすぐあふれた | 呼び出しの深さを 1000 段に制限し、CLI は 256 MB のスタックを持つスレッドで動かす。v0.53.0 の VM は Dolphin の関数呼び出しで再帰しないが、組み込み関数が呼ぶ関数値の入れ子には再帰が残るので、制限とスレッドはそのまま |
+| 性能 | tree-walking は遅い | v0.53.0 でバイトコード VM にした（`await` の土台が目的。変数は今も名前で引くので速度はほぼ同じ。スロット化は今後） |
 
 ---
 

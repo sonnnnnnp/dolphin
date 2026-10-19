@@ -8,7 +8,9 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use super::env::{Env, Frame};
+use super::bytecode::Chunk;
+use super::compile::compile_program;
+use super::env::Env;
 use super::error::{RuntimeError, TraceEntry};
 use super::events::Events;
 use super::gc;
@@ -17,11 +19,11 @@ use super::module::Module;
 use super::value::{Closure, NativeRef, Value};
 use crate::diag::Origin;
 use crate::sema::resolver::{self, Callee};
-use crate::syntax::ast::{
-    BinaryOp, Expr, ExprKind, FuncDef, Pattern, Program, Stmt, StmtKind, StrSegment, UnaryOp, Var,
-};
+use crate::syntax::ast::{BinaryOp, FuncDef, Pattern, Program, Stmt, StmtKind, Var};
 use crate::syntax::span::Span;
 use crate::syntax::{lexer, parser};
+
+mod vm;
 
 /// 組み込みモジュールの定数の値
 #[derive(Debug, Clone, Copy)]
@@ -37,17 +39,6 @@ pub type NativeFn = fn(&mut Interpreter<'_>, &[Value]) -> Result<Value, String>;
 pub const MAX_DEPTH: usize = 1000;
 
 type RResult<T> = Result<T, RuntimeError>;
-
-/// 文を実行した後の制御の流れ
-enum Flow {
-    Normal,
-    /// `#` が実行された。関数の終わりまで戻る
-    Return(Value),
-    /// `break` が実行された。いちばん内側の while を抜ける
-    Break,
-    /// `continue` が実行された。いちばん内側の while の条件に戻る
-    Continue,
-}
 
 /// import したファイルの状態（design.md 5.7）
 enum ModuleState {
@@ -75,23 +66,25 @@ pub struct Interpreter<'a> {
     modules: HashMap<PathBuf, ModuleState>,
     /// 実行中の import の連なり（循環のエラー表示用）
     loading: Vec<Rc<str>>,
-    frames: Vec<Frame>,
+    /// バイトコード VM の枠のスタック（design.md 5.45）
+    vm_frames: Vec<vm::VmFrame>,
+    /// VM の値のスタック
+    stack: Vec<Value>,
+    /// 関数の呼び出しの深さ（ファイルの本体は数えない）
+    depth: usize,
+    /// コンパイル済みの関数（定義のアドレス → 定義と命令列）
+    chunks: HashMap<usize, (Rc<FuncDef>, Rc<Chunk>)>,
     natives: HashMap<&'static str, NativeFn>,
     /// いま実行している組み込み関数の呼び出し位置。組み込み関数が関数値を呼ぶときの位置になる
     native_span: Span,
     /// 組み込み関数が呼んだ関数値の中で起きたエラー。`call_value` が預け、
     /// 組み込み関数がエラーを返したときに `call_native` が取り出す（呼び出し履歴を保つため）
     native_error: Option<RuntimeError>,
-    /// 関数の中を実行しているか。`?` がエラーを返せる場所かどうか（import したファイルの
-    /// トップレベルは、呼び出し元が関数の中でも「関数の外」）
-    in_func: bool,
     /// 組み込みモジュールの登録（`std:json` → 関数の表）と、import 済みのもの
     std_registry: HashMap<&'static str, Vec<(&'static str, NativeFn)>>,
     std_loaded: HashMap<&'static str, Rc<Module>>,
     /// 組み込みモジュールの定数（`std:math` の `pi` など）
     std_consts: HashMap<&'static str, Vec<(&'static str, Const)>>,
-    /// `?` が関数から返そうとしているエラー値（`RuntimeError::early_return` と組）
-    returning: Option<Value>,
     /// イベントループ（design.md 5.23）
     pub events: Events,
     /// ワーカーの中で動いているときの、親とやり取りする口（design.md 5.43）
@@ -111,15 +104,16 @@ impl<'a> Interpreter<'a> {
             root_dir: base_dir,
             modules: HashMap::new(),
             loading: Vec::new(),
-            frames: Vec::new(),
+            vm_frames: Vec::new(),
+            stack: Vec::new(),
+            depth: 0,
+            chunks: HashMap::new(),
             natives: HashMap::new(),
             native_span: Span { line: 1, col: 1 },
             native_error: None,
-            in_func: false,
             std_registry: HashMap::new(),
             std_loaded: HashMap::new(),
             std_consts: HashMap::new(),
-            returning: None,
             events: Events::default(),
             worker: None,
         }
@@ -242,28 +236,19 @@ impl<'a> Interpreter<'a> {
                     .insert(def.name.clone(), def);
             }
         }
-        debug_assert!(Rc::ptr_eq(&self.env, &self.current.globals));
-        // トップレベルの `#` は Resolver が弾いているので、Flow は見なくてよい
-        let Some((last, rest)) = program.stmts.split_last() else {
-            return Ok(None);
-        };
-        self.exec_block(rest)?;
-        if keep_last && let StmtKind::Expr(expr) = &last.kind {
-            return Ok(Some(self.eval(expr)?));
-        }
-        self.exec(last)?;
-        Ok(None)
-    }
-
-    // ---- 文 ----
-
-    /// 新しいスコープに入ってブロックを実行する。エラーでも元のスコープに戻す
-    fn exec_scoped(&mut self, block: &[Stmt]) -> RResult<Flow> {
-        let inner = Env::new(Some(Rc::clone(&self.env)));
-        let outer = mem::replace(&mut self.env, inner);
-        let result = self.exec_block(block);
-        self.env = outer;
-        result
+        let returns_value = keep_last
+            && matches!(
+                program.stmts.last(),
+                Some(Stmt {
+                    kind: StmtKind::Expr(_),
+                    ..
+                })
+            );
+        let chunk = compile_program(&program.stmts, keep_last);
+        let target = self.vm_frames.len();
+        self.push_program_frame(chunk);
+        let value = self.run_vm(target)?;
+        Ok(returns_value.then_some(value))
     }
 
     /// 分割代入。`pattern` の変数に、`value` の要素を宣言か代入で入れる
@@ -336,416 +321,7 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    fn exec_block(&mut self, block: &[Stmt]) -> RResult<Flow> {
-        for stmt in block {
-            let flow = self.exec(stmt)?;
-            if !matches!(flow, Flow::Normal) {
-                return Ok(flow);
-            }
-        }
-        Ok(Flow::Normal)
-    }
-
-    fn exec(&mut self, stmt: &Stmt) -> RResult<Flow> {
-        match &stmt.kind {
-            // 事前登録済み
-            StmtKind::FuncDef(_) => {}
-            StmtKind::If {
-                cond,
-                then_block,
-                else_block,
-            } => {
-                if self.eval_cond(cond)? {
-                    return self.exec_scoped(then_block);
-                }
-                if let Some(block) = else_block {
-                    return self.exec_scoped(block);
-                }
-            }
-            StmtKind::While { cond, body } => {
-                while self.eval_cond(cond)? {
-                    gc::maybe_collect();
-                    match self.exec_scoped(body)? {
-                        Flow::Normal | Flow::Continue => {}
-                        Flow::Break => break,
-                        Flow::Return(value) => return Ok(Flow::Return(value)),
-                    }
-                }
-            }
-            StmtKind::For { var, iter, body } => {
-                let items = match self.eval(iter)? {
-                    // 回し始めた時点の要素を使う
-                    Value::Array(items) => items.borrow().clone(),
-                    other => {
-                        return Err(RuntimeError::new(
-                            iter.span,
-                            format!(
-                                "for で回せるのは配列だけです（{}でした）。マップは `map_keys` でキーの配列にします",
-                                other.type_name()
-                            ),
-                        ));
-                    }
-                };
-                for item in items {
-                    gc::maybe_collect();
-                    // ループ変数と本体は、繰り返しごとに新しい同じスコープ
-                    let inner = Env::new(Some(Rc::clone(&self.env)));
-                    inner.declare(&var.0, item);
-                    let outer = mem::replace(&mut self.env, inner);
-                    let flow = self.exec_block(body);
-                    self.env = outer;
-                    match flow? {
-                        Flow::Normal | Flow::Continue => {}
-                        Flow::Break => break,
-                        Flow::Return(value) => return Ok(Flow::Return(value)),
-                    }
-                }
-            }
-            StmtKind::Return(value) => {
-                let value = match value {
-                    Some(expr) => self.eval(expr)?,
-                    None => Value::Nil,
-                };
-                return Ok(Flow::Return(value));
-            }
-            StmtKind::Break => return Ok(Flow::Break),
-            StmtKind::Continue => return Ok(Flow::Continue),
-            StmtKind::Declare { target, value } => {
-                let value = self.eval(value)?;
-                self.env.declare(&target.0, value);
-            }
-            StmtKind::Destructure {
-                pattern,
-                value,
-                declare,
-            } => {
-                let value = self.eval(value)?;
-                self.destructure(pattern, &value, *declare, stmt.span)?;
-            }
-            StmtKind::Assign {
-                target,
-                indices,
-                value,
-            } => {
-                let Some((last, outer)) = indices.split_last() else {
-                    let value = self.eval(value)?;
-                    if !self.env.assign(&target.0, value) {
-                        return Err(undefined(target, stmt.span));
-                    }
-                    return Ok(Flow::Normal);
-                };
-                // 配列とマップは参照なので、clone しても同じものを書き換える。
-                // `@m{"a"}{"b"} = v` は、外側の添字を読んでいって最後の 1 つだけ書く
-                let mut container = match self.get_var(target) {
-                    Some(container) => container,
-                    None => return Err(undefined(target, stmt.span)),
-                };
-                for index in outer {
-                    reject_module(&container, stmt.span)?;
-                    let key = self.eval(index)?;
-                    container = index_get(&container, &key, stmt.span, index.span)?;
-                }
-                reject_module(&container, stmt.span)?;
-                let key = self.eval(last)?;
-                let value = self.eval(value)?;
-                index_set(&container, &key, value, stmt.span, last.span)?;
-            }
-            StmtKind::Expr(expr) => {
-                // 捨てられたエラー値は、失敗に気づかないまま進まないよう実行時エラーにする
-                if let Value::Error(e) = self.eval(expr)? {
-                    return Err(RuntimeError::new(
-                        expr.span,
-                        format!(
-                            "エラー値が捨てられました（{}: {}）。変数に入れるか、`?` か `is_error` で扱ってください",
-                            e.kind, e.message
-                        ),
-                    ));
-                }
-            }
-        }
-        Ok(Flow::Normal)
-    }
-
-    /// `if` / `while` の条件。真偽値以外はエラー（design.md 5.3）
-    fn eval_cond(&mut self, cond: &Expr) -> RResult<bool> {
-        match self.eval(cond)? {
-            Value::Bool(b) => Ok(b),
-            other => Err(RuntimeError::new(
-                cond.span,
-                format!(
-                    "条件は真偽値である必要があります（{}でした）",
-                    other.type_name()
-                ),
-            )),
-        }
-    }
-
-    // ---- 式 ----
-
-    fn eval(&mut self, expr: &Expr) -> RResult<Value> {
-        let span = expr.span;
-        let value = match &expr.kind {
-            ExprKind::Number(n) => Value::Num(*n),
-            ExprKind::Int(n) => Value::Int(*n),
-            ExprKind::Bool(b) => Value::Bool(*b),
-            ExprKind::Nil => Value::Nil,
-            ExprKind::Str(parts) => {
-                let mut s = String::new();
-                for part in parts {
-                    match part {
-                        StrSegment::Text(text) => s.push_str(text),
-                        StrSegment::Expr(inner) => s.push_str(&self.eval(inner)?.to_string()),
-                    }
-                }
-                Value::Str(s.into())
-            }
-            ExprKind::Var(var) => match self.get_var(var) {
-                Some(value) => value.clone(),
-                None => return Err(undefined(var, span)),
-            },
-            ExprKind::Array(items) => gc::new_array(self.eval_args(items)?),
-            ExprKind::Map(entries) => {
-                let mut map = Map::default();
-                for (key, value) in entries {
-                    let k = self.eval(key)?;
-                    let k = to_key(&k, key.span)?;
-                    map.insert(k, self.eval(value)?);
-                }
-                gc::new_map(map)
-            }
-            ExprKind::Member { target, name } => {
-                let base = self.eval(target)?;
-                // マップなら `@m{"name"}` と同じ（design.md 5.19）
-                if let Value::Map(_) = base {
-                    return index_get(&base, &Value::Str(name.as_str().into()), target.span, span);
-                }
-                let module = self.as_module(base, target.span)?;
-                // 変数がなければ、同じ名前の関数を関数値として返す（design.md 5.8）
-                let value = module.globals.get_own(name).or_else(|| {
-                    if let Some(native) = module.natives.get(name.as_str()) {
-                        return Some(Value::Native(native.clone()));
-                    }
-                    let def = module.functions.borrow().get(name).cloned()?;
-                    Some(Value::Func(Closure::register(Closure {
-                        def,
-                        env: Rc::clone(&module.globals),
-                        module: Rc::clone(&module),
-                    })))
-                });
-                value.ok_or_else(|| {
-                    RuntimeError::new(
-                        span,
-                        format!("{} に変数 `@{name}` がありません", module_label(&module)),
-                    )
-                })?
-            }
-            ExprKind::FuncRef(name) => self.func_value(name, span)?,
-            ExprKind::If {
-                cond,
-                then_expr,
-                else_expr,
-            } => {
-                if self.eval_cond(cond)? {
-                    self.eval(then_expr)?
-                } else {
-                    self.eval(else_expr)?
-                }
-            }
-            // 引数と配列リテラルの外では、`...` は構文解析で弾かれる
-            ExprKind::Spread(_) => unreachable!("`...` は引数と配列の中にだけ現れる"),
-            ExprKind::Try(inner) => match self.eval(inner)? {
-                Value::Error(e) if self.in_func => {
-                    // いまの関数からエラーを返す。呼び出し（call_def）が受け取る
-                    self.returning = Some(Value::Error(e));
-                    let mut signal = RuntimeError::new(span, "`?` による戻り");
-                    signal.early_return = true;
-                    return Err(signal);
-                }
-                // 関数の外では、エラーで止まる
-                Value::Error(e) => return Err(RuntimeError::new(span, &*e.message)),
-                value => value,
-            },
-            ExprKind::Lambda(def) => Value::Func(Closure::register(Closure {
-                def: Rc::clone(def),
-                env: Rc::clone(&self.env),
-                module: Rc::clone(&self.current),
-            })),
-            ExprKind::CallValue { callee, args } => {
-                let f = self.eval(callee)?;
-                let args = self.eval_args(args)?;
-                self.call_function(&f, args, span, callee.span)?
-            }
-            ExprKind::MemberCall { target, name, args } => {
-                let base = self.eval(target)?;
-                let module = match base {
-                    // マップの値の関数を呼ぶ（`@m.handler[1]`）
-                    Value::Map(_) => {
-                        let f =
-                            index_get(&base, &Value::Str(name.as_str().into()), target.span, span)?;
-                        let args = self.eval_args(args)?;
-                        return self.call_function(&f, args, span, span);
-                    }
-                    base => self.as_module(base, target.span)?,
-                };
-                let args = self.eval_args(args)?;
-                let def = module.functions.borrow().get(name).cloned();
-                match (def, module.natives.get(name.as_str())) {
-                    (Some(def), _) => self.call_user(&module, &def, args, span)?,
-                    (None, Some(native)) => self.call_native(native.f, &args, span)?,
-                    (None, None) => {
-                        return Err(RuntimeError::new(
-                            span,
-                            format!("{} に関数 `{name}` がありません", module_label(&module)),
-                        ));
-                    }
-                }
-            }
-            ExprKind::Index { target, index } => {
-                let container = self.eval(target)?;
-                let key = self.eval(index)?;
-                index_get(&container, &key, target.span, index.span)?
-            }
-            ExprKind::Unary { op, operand } => match (op, self.eval(operand)?) {
-                (UnaryOp::Neg, Value::Num(n)) => Value::Num(-n),
-                (UnaryOp::Neg, Value::Int(n)) => match n.checked_neg() {
-                    Some(n) => Value::Int(n),
-                    None => return Err(int_overflow(span)),
-                },
-                (UnaryOp::Not, Value::Bool(b)) => Value::Bool(!b),
-                (op, value) => {
-                    return Err(RuntimeError::new(
-                        span,
-                        format!("{}に `{op}` は使えません", value.type_name()),
-                    ));
-                }
-            },
-            ExprKind::Binary { op, lhs, rhs } => self.binary(*op, lhs, rhs, span)?,
-            ExprKind::Call { name, args } => self.call(name, args, span)?,
-        };
-        Ok(value)
-    }
-
-    fn binary(&mut self, op: BinaryOp, lhs: &Expr, rhs: &Expr, span: Span) -> RResult<Value> {
-        use BinaryOp as B;
-
-        // && と || は短絡評価する。両辺とも真偽値に限る
-        if let B::And | B::Or = op {
-            match (op, self.eval_logic_operand(lhs, op)?) {
-                (B::Or, true) => return Ok(Value::Bool(true)),
-                (B::And, false) => return Ok(Value::Bool(false)),
-                _ => return Ok(Value::Bool(self.eval_logic_operand(rhs, op)?)),
-            }
-        }
-
-        let l = self.eval(lhs)?;
-        let r = self.eval(rhs)?;
-        let value = match (op, &l, &r) {
-            (B::Eq, _, _) => Value::Bool(l.equals(&r)),
-            (B::NotEq, _, _) => Value::Bool(!l.equals(&r)),
-            (B::Add, Value::Str(a), Value::Str(b)) => Value::Str(format!("{a}{b}").into()),
-            (B::Div | B::Rem, Value::Num(_), Value::Num(b)) if *b == 0.0 => {
-                return Err(RuntimeError::new(span, "0 で割ることはできません"));
-            }
-            (B::Div | B::Rem, Value::Int(_), Value::Int(0)) => {
-                return Err(RuntimeError::new(span, "0 で割ることはできません"));
-            }
-            (_, Value::Int(a), Value::Int(b)) => match op {
-                B::Add | B::Sub | B::Mul | B::Div | B::Rem => {
-                    let result = match op {
-                        B::Add => a.checked_add(*b),
-                        B::Sub => a.checked_sub(*b),
-                        B::Mul => a.checked_mul(*b),
-                        B::Div => a.checked_div(*b),
-                        _ => a.checked_rem(*b),
-                    };
-                    Value::Int(result.ok_or_else(|| int_overflow(span))?)
-                }
-                _ => Value::Bool(compare(op, Some(a.cmp(b)))),
-            },
-            (_, Value::Num(a), Value::Num(b)) => match op {
-                B::Add => Value::Num(a + b),
-                B::Sub => Value::Num(a - b),
-                B::Mul => Value::Num(a * b),
-                B::Div => Value::Num(a / b),
-                B::Rem => Value::Num(a % b),
-                _ => Value::Bool(compare(op, a.partial_cmp(b))),
-            },
-            (B::Lt | B::LtEq | B::Gt | B::GtEq, Value::Str(a), Value::Str(b)) => {
-                Value::Bool(compare(op, Some(a.cmp(b))))
-            }
-            (_, Value::Int(_), Value::Num(_)) | (_, Value::Num(_), Value::Int(_)) => {
-                return Err(RuntimeError::new(
-                    span,
-                    format!(
-                        "整数と数値に `{op}` は使えません（`to_int` か `to_num` でそろえてください）"
-                    ),
-                ));
-            }
-            _ => {
-                return Err(RuntimeError::new(
-                    span,
-                    format!("{}と{}に `{op}` は使えません", l.type_name(), r.type_name()),
-                ));
-            }
-        };
-        Ok(value)
-    }
-
-    fn eval_logic_operand(&mut self, expr: &Expr, op: BinaryOp) -> RResult<bool> {
-        match self.eval(expr)? {
-            Value::Bool(b) => Ok(b),
-            other => Err(RuntimeError::new(
-                expr.span,
-                format!(
-                    "`{op}` の両辺は真偽値である必要があります（{}でした）",
-                    other.type_name()
-                ),
-            )),
-        }
-    }
-
     // ---- 関数呼び出し ----
-
-    /// 引数や配列の要素を評価する。`...式` は、配列の要素を並べる（design.md 5.19）
-    fn eval_args(&mut self, exprs: &[Expr]) -> RResult<Vec<Value>> {
-        let mut values = Vec::with_capacity(exprs.len());
-        for expr in exprs {
-            if let ExprKind::Spread(inner) = &expr.kind {
-                match self.eval(inner)? {
-                    Value::Array(items) => values.extend(items.borrow().iter().cloned()),
-                    other => {
-                        return Err(RuntimeError::new(
-                            inner.span,
-                            format!(
-                                "`...` で展開できるのは配列だけです（{}でした）",
-                                other.type_name()
-                            ),
-                        ));
-                    }
-                }
-            } else {
-                values.push(self.eval(expr)?);
-            }
-        }
-        Ok(values)
-    }
-
-    fn call(&mut self, name: &str, args: &[Expr], span: Span) -> RResult<Value> {
-        let args = self.eval_args(args)?;
-
-        let def = self.current.functions.borrow().get(name).cloned();
-        if let Some(def) = def {
-            let module = Rc::clone(&self.current);
-            return self.call_user(&module, &def, args, span);
-        }
-        if name == "import" {
-            return self.import(&args, span);
-        }
-        match self.native(name) {
-            Some(f) => self.call_native(f, &args, span),
-            None => Err(RuntimeError::new(span, format!("未定義の関数 `{name}`"))),
-        }
-    }
 
     /// 組み込み関数を呼ぶ。中で呼んだ関数値がエラーになっていたら、そのエラーをそのまま返す
     fn call_native(&mut self, f: NativeFn, args: &[Value], span: Span) -> RResult<Value> {
@@ -771,7 +347,8 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    /// 関数値を呼ぶ。`span` は呼び出し位置、`callee_span` は呼ぶ式の位置
+    /// 関数値を呼んで、戻り値を返す。`span` は呼び出し位置、`callee_span` は呼ぶ式の位置
+    /// （組み込み関数から呼ぶとき用。入れ子で VM を動かして、戻るまで待つ）
     fn call_function(
         &mut self,
         f: &Value,
@@ -781,24 +358,12 @@ impl<'a> Interpreter<'a> {
     ) -> RResult<Value> {
         match f {
             Value::Func(closure) => {
-                self.call_def(&closure.module, &closure.def, &closure.env, args, span)
+                let target = self.vm_frames.len();
+                self.push_function_frame(&closure.module, &closure.def, &closure.env, args, span)?;
+                self.run_vm(target)
             }
             Value::Native(native) => self.call_native(native.f, &args, span),
-            other => {
-                let hint = match other {
-                    Value::Array(_) | Value::Map(_) => {
-                        "。配列やマップの要素は `@a{0}` のように `{ }` で読みます"
-                    }
-                    _ => "",
-                };
-                Err(RuntimeError::new(
-                    callee_span,
-                    format!(
-                        "`[ ]` で呼び出せるのは関数だけです（{}でした）{hint}",
-                        other.type_name()
-                    ),
-                ))
-            }
+            other => Err(not_callable(other, callee_span)),
         }
     }
 
@@ -834,108 +399,6 @@ impl<'a> Interpreter<'a> {
         match self.natives.get_key_value(name) {
             Some((name, f)) => Ok(Value::Native(NativeRef { name, f: *f })),
             None => Err(RuntimeError::new(span, format!("未定義の関数 `{name}`"))),
-        }
-    }
-
-    /// 渡されなかった引数（`given` 個より後ろ）に、既定値の式の値を入れる
-    fn bind_defaults(&mut self, def: &FuncDef, given: usize) -> RResult<()> {
-        for param in &def.params[given..] {
-            if let Some(default) = &param.default {
-                let value = self.eval(default)?;
-                self.env.declare(&param.name, value);
-            }
-        }
-        Ok(())
-    }
-
-    /// `module` の名前つきの関数 `def` を呼ぶ
-    fn call_user(
-        &mut self,
-        module: &Rc<Module>,
-        def: &FuncDef,
-        args: Vec<Value>,
-        span: Span,
-    ) -> RResult<Value> {
-        let env = Rc::clone(&module.globals);
-        self.call_def(module, def, &env, args, span)
-    }
-
-    /// 関数 `def` を呼ぶ。`parent` は関数が作られた場所のスコープで、その内側に引数のスコープを作る。
-    /// 実行している間は、関数名を `module` から引く
-    fn call_def(
-        &mut self,
-        module: &Rc<Module>,
-        def: &FuncDef,
-        parent: &Rc<Env>,
-        args: Vec<Value>,
-        span: Span,
-    ) -> RResult<Value> {
-        let name = func_label(def);
-        if args.len() < def.min_args() || def.max_args().is_some_and(|max| args.len() > max) {
-            return Err(RuntimeError::new(
-                span,
-                resolver::arity_message(
-                    &quoted_label(def),
-                    def.min_args(),
-                    def.max_args(),
-                    args.len(),
-                ),
-            ));
-        }
-        if self.frames.len() >= MAX_DEPTH {
-            return Err(RuntimeError::new(
-                span,
-                format!(
-                    "関数の呼び出しが深すぎます（{MAX_DEPTH} 段）。終わらない再帰になっていませんか"
-                ),
-            ));
-        }
-
-        gc::maybe_collect();
-        // 関数のスコープは、そのファイルのトップレベルのスコープの内側に作る
-        let env = Env::new(Some(Rc::clone(parent)));
-        let given = args.len().min(def.params.len());
-        let mut args = args;
-        let extra = args.split_off(given);
-        for (param, value) in def.params.iter().zip(args) {
-            env.declare(&param.name, value);
-        }
-        if let Some(rest) = &def.rest {
-            env.declare(rest, gc::new_array(extra));
-        }
-        self.frames.push(Frame {
-            func_name: name.to_string(),
-        });
-        let caller = mem::replace(&mut self.current, Rc::clone(module));
-        let caller_env = mem::replace(&mut self.env, env);
-        let was_in_func = mem::replace(&mut self.in_func, true);
-        // 渡されなかった引数は、既定値を関数のスコープで評価する（前の引数を使える）
-        let result = self
-            .bind_defaults(def, given)
-            .and_then(|()| self.exec_block(&def.body));
-        self.in_func = was_in_func;
-        self.env = caller_env;
-        self.current = caller;
-        self.frames.pop();
-
-        match result {
-            // `?` が返したエラー値が、この呼び出しの戻り値になる
-            Err(e) if e.early_return => Ok(self.returning.take().unwrap_or(Value::Nil)),
-            Ok(Flow::Return(value)) => Ok(value),
-            // break / continue が関数の外へ出ないことは Resolver が保証している
-            Ok(Flow::Normal | Flow::Break | Flow::Continue) => Ok(Value::Nil),
-            Err(mut e) => {
-                // 別のファイルの関数で起きたエラーは、そのファイルの行を引用する
-                if e.origin.is_none() {
-                    e.origin = module.origin.clone();
-                }
-                e.trace.push(TraceEntry {
-                    what: format!("{name} の中"),
-                    span,
-                    file: file_of(&self.current),
-                });
-                Err(e)
-            }
         }
     }
 
@@ -1040,9 +503,7 @@ impl<'a> Interpreter<'a> {
         self.loading.push(shown);
         let importer = mem::replace(&mut self.current, Rc::clone(&module));
         let importer_env = mem::replace(&mut self.env, Rc::clone(&module.globals));
-        let importer_in_func = mem::replace(&mut self.in_func, false);
         let result = self.run(&program, false);
-        self.in_func = importer_in_func;
         self.env = importer_env;
         self.current = importer;
         self.loading.pop();
@@ -1153,6 +614,27 @@ fn module_label(module: &Module) -> String {
 
 fn undefined(var: &Var, span: Span) -> RuntimeError {
     RuntimeError::new(span, format!("未定義の変数 `{var}`"))
+}
+
+fn undefined_name(name: &str, span: Span) -> RuntimeError {
+    RuntimeError::new(span, format!("未定義の変数 `@{name}`"))
+}
+
+/// 関数でない値を `[ ]` で呼ぼうとした
+fn not_callable(value: &Value, callee_span: Span) -> RuntimeError {
+    let hint = match value {
+        Value::Array(_) | Value::Map(_) => {
+            "。配列やマップの要素は `@a{0}` のように `{ }` で読みます"
+        }
+        _ => "",
+    };
+    RuntimeError::new(
+        callee_span,
+        format!(
+            "`[ ]` で呼び出せるのは関数だけです（{}でした）{hint}",
+            value.type_name()
+        ),
+    )
 }
 
 /// `container{key}` を読む。配列なら番号、マップなら文字列のキー

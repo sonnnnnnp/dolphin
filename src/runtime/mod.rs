@@ -1,5 +1,7 @@
 //! 実行時: 値・変数・評価器
 
+pub mod bytecode;
+pub mod compile;
 pub mod data;
 pub mod env;
 pub mod error;

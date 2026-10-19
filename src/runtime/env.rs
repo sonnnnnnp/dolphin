@@ -73,9 +73,3 @@ impl Env {
         }
     }
 }
-
-/// 関数呼び出し 1 回分。呼び出しの深さを数えるために使う
-#[derive(Debug)]
-pub struct Frame {
-    pub func_name: String,
-}
