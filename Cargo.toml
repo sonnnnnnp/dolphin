@@ -16,6 +16,9 @@ rodio = { version = "0.23", optional = true, default-features = false, features 
 rusqlite = { version = "0.40", optional = true, features = ["bundled"] }
 # 画像のデコード（`std:canvas` の `image`）
 image = { version = "0.25", optional = true, default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp"] }
+# C の共有ライブラリを呼ぶ（`import["std:ffi"]`）。呼び出し規約は libffi に任せる
+libloading = { version = "0.8", optional = true }
+libffi = { version = "5", optional = true }
 # GUI（`import["std:ui"]`）。OpenGL（glow）で描く
 eframe = { version = "0.36", optional = true, default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
 # HTTP クライアント（std:http）。TLS は rustls
@@ -42,5 +45,7 @@ ui = ["dep:eframe", "image"]
 image = ["dep:image"]
 # 音の再生（`import["std:audio"]`）。既定では無効（`--features audio`）
 audio = ["dep:rodio"]
+# C の共有ライブラリを呼ぶ（`import["std:ffi"]`）。unsafe を使う。既定では無効（`--features ffi`）
+ffi = ["dep:libloading", "dep:libffi"]
 # SQLite（`import["std:sqlite"]`）。ソースを同梱するのでビルドが長くなる。既定では無効（`--features sqlite`）
 sqlite = ["dep:rusqlite"]
