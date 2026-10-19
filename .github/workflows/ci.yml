@@ -31,3 +31,6 @@ jobs:
       # SQLite（sqlite feature）も、ビルドとテストが通ること
       - run: cargo clippy --all-targets --features sqlite -- -D warnings
       - run: cargo test --features sqlite
+      # FFI（ffi feature）も、ビルドとテストが通ること
+      - run: cargo clippy --all-targets --features ffi -- -D warnings
+      - run: cargo test --features ffi

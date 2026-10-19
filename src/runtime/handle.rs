@@ -121,6 +121,11 @@ pub enum HandleKind {
     },
     /// 起動した子プロセス（`os.spawn`。design.md 5.42）
     Process(ProcessHandle),
+    /// FFI のライブラリ・関数・バッファ（`std:ffi`。design.md 5.44）。中身は stdlib/ffi.rs の型
+    Ffi {
+        object: Box<dyn std::any::Any>,
+        label: String,
+    },
     /// ワーカー（`std:worker`。design.md 5.43）
     Worker(WorkerHandle),
     WorkerClosed,
@@ -219,6 +224,7 @@ impl fmt::Display for Handle {
             },
             HandleKind::WsServer { .. } => write!(f, "<websocket サーバー側の接続>"),
             HandleKind::Process(p) => write!(f, "<process {}>", p.pid),
+            HandleKind::Ffi { label, .. } => write!(f, "<ffi {label}>"),
             HandleKind::Worker(w) => write!(f, "<worker {}>", w.label),
             HandleKind::WorkerClosed => write!(f, "<worker 閉じています>"),
             HandleKind::Stream(io) => write!(f, "<stream {}>", io.label),

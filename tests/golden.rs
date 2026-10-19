@@ -27,6 +27,7 @@ fn golden() {
             && (cfg!(feature = "ui")
                 || cfg!(feature = "audio")
                 || cfg!(feature = "sqlite")
+                || cfg!(feature = "ffi")
                 || !cfg!(feature = "image"))
         {
             continue;

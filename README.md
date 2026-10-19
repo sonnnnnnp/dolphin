@@ -160,6 +160,7 @@ count: 3
 | [v0.49.0](https://github.com/sonnnnnnp/dolphin/tree/v0.49.0) | ストリーム `std:stream`（`HTTP` の `"stream": true` を含む） | [v0.48.0...v0.49.0](https://github.com/sonnnnnnp/dolphin/compare/v0.48.0...v0.49.0) |
 | [v0.50.0](https://github.com/sonnnnnnp/dolphin/tree/v0.50.0) | プロセスの常駐連携（`os.spawn` `os.wait`） | [v0.49.0...v0.50.0](https://github.com/sonnnnnnp/dolphin/compare/v0.49.0...v0.50.0) |
 | [v0.51.0](https://github.com/sonnnnnnp/dolphin/tree/v0.51.0) | ワーカー `std:worker`（別スレッドの別インタプリタ） | [v0.50.0...v0.51.0](https://github.com/sonnnnnnp/dolphin/compare/v0.50.0...v0.51.0) |
+| [v0.52.0](https://github.com/sonnnnnnp/dolphin/tree/v0.52.0) | FFI `std:ffi`（C の共有ライブラリを呼ぶ。`--features ffi`） | [v0.51.0...v0.52.0](https://github.com/sonnnnnnp/dolphin/compare/v0.51.0...v0.52.0) |
 
 差分は、まず `docs/design.md`（仕様）から読み、次に `tests/cases/`（使い方の実例）、最後に `src/` を読むと流れがつかめます。手元では `git diff v0.2.0 v0.3.0 --stat` のように見られます。
 
@@ -187,7 +188,7 @@ runtime_error.dol:5:12: エラー: 添字 5 は範囲外です（要素は 2 個
 | Resolver | 実行前に、未定義の関数・引数の数・宣言されていない変数などを検査する |
 | Interpreter | AST を tree-walking で評価する |
 
-全体像は [docs/architecture.md](docs/architecture.md) にまとめています。コア言語は外部クレートに依存しません（HTTP の TLS は、既定で有効な `http` feature の `ureq` を、ハッシュ・HMAC・乱数は `crypto` feature の `ring` と `md-5` を、正規表現は `regex` feature の `regex` を使います）。GUI（`std:ui`）は依存が多いので、`ui` feature（`cargo build --features ui`）を付けたときだけ含まれます。音（`std:audio`）も `audio` feature（`rodio` を使う。Linux では `libasound2-dev` が要ります）です。SQLite（`std:sqlite`）は `sqlite` feature（`rusqlite` で SQLite のソースを同梱する。C コンパイラが要ります）です。
+全体像は [docs/architecture.md](docs/architecture.md) にまとめています。コア言語は外部クレートに依存しません（HTTP の TLS は、既定で有効な `http` feature の `ureq` を、ハッシュ・HMAC・乱数は `crypto` feature の `ring` と `md-5` を、正規表現は `regex` feature の `regex` を使います）。GUI（`std:ui`）は依存が多いので、`ui` feature（`cargo build --features ui`）を付けたときだけ含まれます。音（`std:audio`）も `audio` feature（`rodio` を使う。Linux では `libasound2-dev` が要ります）です。SQLite（`std:sqlite`）は `sqlite` feature（`rusqlite` で SQLite のソースを同梱する。C コンパイラが要ります）です。FFI（`std:ffi`）は `ffi` feature（`libloading` と `libffi` を使う。C コンパイラが要ります）です。
 
 ## ビルド・実行方法
 

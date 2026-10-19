@@ -112,6 +112,7 @@ dolphin/
 │     ├─ net.rs          std:net（TCP。ブロッキング、標準ライブラリだけ）
 │     ├─ process.rs      os.spawn / wait / poll / kill（常駐する子プロセスとの連携）
 │     ├─ worker.rs       std:worker（別スレッドの別インタプリタとメッセージでやり取りする。runtime/worker.rs に口の型）
+│     ├─ ffi.rs          std:ffi（C の共有ライブラリを呼ぶ。ffi feature。libloading と libffi）
 │     ├─ stream.rs       std:stream（ファイル・標準入出力・HTTP の本文・メモリ・TCP を共通に読み書きする）
 │     ├─ path.rs         std:path
 │     ├─ os.rs           std:os（args / env / exit / run など）

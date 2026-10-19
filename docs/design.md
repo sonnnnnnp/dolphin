@@ -1820,8 +1820,8 @@ log[@ffi.call[@pow, {2, 10}]]                         // 1024
 log[@ffi.call[@getenv, {"HOME"}]]
 
 @buf := @ffi.buffer[16]                               // C が書き込む領域
-@snprintf := @ffi.func[@c, "snprintf", {"buf", "i64", "str"}, "i32"]?
-@ffi.call[@snprintf, {@buf, 16, "hi"}]
+@strcpy := @ffi.func[@c, "strcpy", {"buf", "str"}, "ptr"]?
+@ffi.call[@strcpy, {@buf, "hi"}]
 log[@ffi.read[@buf, 0, 2]]                            // <bytes 6869>
 ```
 

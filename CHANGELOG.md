@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.52.0] - 2026-10-20
+
+FFI `std:ffi`（[design.md 5.44](docs/design.md)）。C の共有ライブラリ（`.dll` `.so` `.dylib`）の関数を呼べるように。`ffi` feature（既定では無効。`libloading` と `libffi` を使い、ビルドに C コンパイラが要る）。
+
+### 追加
+- `ffi.open[path]`（ライブラリを開く）、`ffi.func[lib, name, arg_types, ret_type]`（関数を型の組と一緒に登録）、`ffi.call[f, args]`（呼ぶ）。型は `void bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 ptr str bytes buf`
+- `ffi.buffer[n]` `ffi.buffer_from[bytes]`（C が書き込める領域）、`ffi.read` `ffi.write` `ffi.size` `ffi.address`、アドレスから読む `ffi.peek` `ffi.cstr`
+- 間違った型や不正なアドレスを渡すと、プロセスごと落ちることがある。C からのコールバックと構造体の値渡しは作らない
+
 ## [0.51.0] - 2026-10-20
 
 ワーカー `std:worker`（[design.md 5.43](docs/design.md)）。複数のコアで計算を分けられるように。

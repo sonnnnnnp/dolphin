@@ -15,6 +15,8 @@ pub mod csv;
 pub mod debug;
 pub mod encoding;
 pub mod error;
+#[cfg(feature = "ffi")]
+pub mod ffi;
 pub mod fs;
 pub mod gc;
 #[cfg(feature = "http")]
@@ -58,6 +60,8 @@ pub fn register(interp: &mut Interpreter<'_>) {
     #[cfg(feature = "http")]
     http::register(interp);
     fs::register(interp);
+    #[cfg(feature = "ffi")]
+    ffi::register(interp);
     string::register(interp);
     stream::register(interp);
     array::register(interp);
