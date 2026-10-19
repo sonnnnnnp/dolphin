@@ -1,0 +1,4 @@
+@s := import["std:stream"]
+@db := import["std:net"]
+@l := @db.listen[0]?
+@s.read[@l, 1]

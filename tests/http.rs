@@ -130,6 +130,16 @@ fn handle(mut stream: TcpStream) {
             respond(&mut stream, "200 OK", &[], b"late");
         }
         "/binary" => respond(&mut stream, "200 OK", &[], &[0xff, 0xfe, 0xfd]),
+        // 本文の上限（32 MB）を超える大きさ。ストリームなら読める
+        "/big" => respond(&mut stream, "200 OK", &[], &vec![b'x'; 40 * 1024 * 1024]),
+        "/lines" => respond(
+            &mut stream,
+            "200 OK",
+            &[],
+            b"one
+two
+three",
+        ),
         // 受け取った本文を、16 進数の文字列にして返す
         "/bodyhex" => {
             let hex: String = req.raw_body.iter().map(|b| format!("{b:02x}")).collect();
@@ -401,4 +411,52 @@ fn binary_option_mistakes() {
 実際: {message}"
         );
     }
+}
+
+#[test]
+fn stream_bodies() {
+    let port = start_server();
+    let out = run(
+        port,
+        r#"
+@s := import["std:stream"]
+@r := @http.get[@base + "/lines", {"stream": true}]?
+log[@r{"status"}, @r{"ok"}, @r{"headers"}{"content-length"}, type_of[@r{"body"}]]
+@lines := {}
+@s.each_line[@r{"body"}, [@l] ( arr_push[@lines, @l] )]?
+log[@lines]
+@s.close[@r{"body"}]
+
+// 40 MB は、普通の取得では too_large。ストリームなら最後まで読める
+log[err_kind[@http.get[@base + "/big"]]]
+@big := @http.get[@base + "/big", {"stream": true}]?
+@total := 0
+@done := false
+while !@done (
+    @chunk := @s.read[@big{"body"}, 1048576]?
+    if bytes_len[@chunk] == 0 ( @done = true ) else ( @total = @total + bytes_len[@chunk] )
+)
+log[@total]
+"#,
+    );
+    assert_eq!(
+        out,
+        "200 true 13 handle
+{\"one\", \"two\", \"three\"}
+too_large
+41943040
+"
+    );
+}
+
+#[test]
+fn stream_option_mistakes() {
+    let port = start_server();
+    let message = run_err(port, r#"@http.get[@base + "/hello", {"stream": 1}]"#);
+    assert!(message.contains("`stream` は真偽値です"), "{message}");
+    let message = run_err(
+        port,
+        r#"@http.get_async[@base + "/hello", {"stream": true}, [@r] ( log[1] )]"#,
+    );
+    assert!(message.contains("`stream` を使えません"), "{message}");
 }

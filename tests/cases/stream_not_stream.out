@@ -1,0 +1,4 @@
+stream_not_stream.dol:4:1: エラー: stream.read に渡せるのはストリームか TCP の接続のハンドルです（ほかの種類のハンドルでした）
+  |
+4 | @s.read[@l, 1]
+  | ^

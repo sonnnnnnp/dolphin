@@ -1,0 +1,4 @@
+stream_net_on_stream.dol:3:1: エラー: net.read に渡せるのは TCP の接続のハンドルです（ストリームでした。ストリームには std:stream の関数を使います）
+  |
+3 | @n.read[@s.from_bytes[bytes_new[1]], 1]
+  | ^

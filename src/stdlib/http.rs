@@ -76,6 +76,7 @@ fn request_req(name: &str, args: &[Value]) -> Result<Req, String> {
 fn request_async(interp: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
     let (rest, callback) = split_callback("http.request_async", args)?;
     let req = request_req("http.request_async", rest)?;
+    reject_stream("http.request_async", &req)?;
     spawn_blocking(interp, callback, move || send(req))
 }
 
@@ -87,7 +88,17 @@ fn method_async(
 ) -> Result<Value, String> {
     let (rest, callback) = split_callback(name, args)?;
     let req = method_req(name, method, rest)?;
+    reject_stream(name, &req)?;
     spawn_blocking(interp, callback, move || send(req))
+}
+
+/// 非同期版は結果をスレッドの外へ持ち出すので、ストリームは返せない
+fn reject_stream(name: &str, req: &Req) -> Result<(), String> {
+    if req.stream {
+        Err(format!("{name} では `stream` を使えません"))
+    } else {
+        Ok(())
+    }
 }
 
 fn get(_: &mut Interpreter<'_>, args: &[Value]) -> Result<Value, String> {
@@ -142,6 +153,8 @@ struct Req {
     body: Option<Vec<u8>>,
     /// レスポンスの本文をバイト列で返すか（`"as": "bytes"`）
     as_bytes: bool,
+    /// 本文を読み込みのストリームで返すか（`"stream": true`。design.md 5.41）
+    stream: bool,
     timeout: Duration,
     redirects: u32,
 }
@@ -155,7 +168,7 @@ impl Req {
         options: &Map,
         skip: &[&str],
     ) -> Result<Req, String> {
-        const KNOWN: [&str; 9] = [
+        const KNOWN: [&str; 10] = [
             "url",
             "method",
             "headers",
@@ -165,6 +178,7 @@ impl Req {
             "timeout",
             "redirects",
             "as",
+            "stream",
         ];
         for (key, _) in options.iter() {
             if !KNOWN.contains(&&**key) {
@@ -248,6 +262,11 @@ impl Req {
             }
         };
 
+        let stream = match options.get("stream") {
+            None => false,
+            Some(Value::Bool(b)) => *b,
+            Some(other) => return Err(option_type(name, "stream", "真偽値", other)),
+        };
         let timeout = match options.get("timeout") {
             Some(Value::Num(n)) if n.is_finite() && *n > 0.0 => {
                 Duration::try_from_secs_f64(*n).unwrap_or(Duration::MAX)
@@ -275,6 +294,7 @@ impl Req {
             headers,
             body,
             as_bytes,
+            stream,
             timeout,
             redirects,
         })
@@ -313,8 +333,17 @@ fn send(req: Req) -> Value {
     for (key, value) in &req.headers {
         builder = builder.header(key.as_str(), value.as_str());
     }
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(req.timeout))
+    // ストリームは、本文を読み終わるまでの全体には時間切れを付けない（大きなダウンロードのため）
+    let config = ureq::Agent::config_builder();
+    let config = if req.stream {
+        config
+            .timeout_connect(Some(req.timeout))
+            .timeout_send_request(Some(req.timeout))
+            .timeout_recv_response(Some(req.timeout))
+    } else {
+        config.timeout_global(Some(req.timeout))
+    };
+    let agent: ureq::Agent = config
         .max_redirects(req.redirects)
         .max_redirects_will_error(false)
         .http_status_as_error(false)
@@ -332,7 +361,7 @@ fn send(req: Req) -> Value {
             Err(e) => return request_error(&e),
         },
     };
-    match result.and_then(|response| read_response(response, req.as_bytes)) {
+    match result.and_then(|response| read_response(response, req.as_bytes, req.stream)) {
         Ok(value) => value,
         Err(e) => failure(&e, &req.url),
     }
@@ -346,6 +375,7 @@ fn request_error(e: &http::Error) -> Value {
 fn read_response(
     mut response: http::Response<ureq::Body>,
     as_bytes: bool,
+    stream: bool,
 ) -> Result<Value, ureq::Error> {
     let status = response.status().as_u16();
     let mut headers = Map::default();
@@ -357,10 +387,14 @@ fn read_response(
         };
         headers.insert(name.as_str().into(), Value::Str(merged.into()));
     }
-    let config = response.body_mut().with_config().limit(MAX_BODY);
-    let body = if as_bytes {
+    let body = if stream {
+        let reader = std::io::BufReader::new(response.into_body().into_reader());
+        super::stream::network_reader(Box::new(reader), "HTTP の本文 読み込み".into())
+    } else if as_bytes {
+        let config = response.body_mut().with_config().limit(MAX_BODY);
         Value::bytes(config.read_to_vec()?)
     } else {
+        let config = response.body_mut().with_config().limit(MAX_BODY);
         Value::Str(config.read_to_string()?.into())
     };
 

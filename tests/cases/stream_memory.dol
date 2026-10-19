@@ -1,0 +1,18 @@
+@s := import["std:stream"]
+@m := @s.from_bytes[str_to_bytes["one\ntwo\nthree"]]
+log[@m]
+log[@s.read_exact[@m, 3]?, @s.read_line[@m]?]
+log[err_kind[@s.read_exact[@m, 100]]]
+@m2 := @s.from_bytes[str_to_bytes["hello world"]]
+@out := @s.stdout[]
+log[@out]
+@n := @s.copy[@m2, @out]?
+@s.write[@out, "\n"]?
+log[@n]
+log[@s.read_all[@m2]?]
+log[@s.read_text[@s.from_bytes[bytes_new[0]]]?]
+log[err_kind[@s.read_text[@s.from_bytes[bytes_from_arr[{255}]]]]]
+@e := @s.from_bytes[bytes_from_arr[{255, 10}]]
+log[err_kind[@s.read_line[@e]]]
+@s.write[@s.stdout[], "stdout stream\n"]?
+log[@s.stdin[], @s.stderr[]]

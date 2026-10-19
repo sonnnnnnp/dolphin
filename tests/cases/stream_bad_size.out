@@ -1,0 +1,4 @@
+stream_bad_size.dol:2:1: エラー: stream.read のバイト数は 0〜67108864 です（-1）
+  |
+2 | @s.read[@s.from_bytes[bytes_new[1]], -1]
+  | ^

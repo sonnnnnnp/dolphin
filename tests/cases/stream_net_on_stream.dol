@@ -1,0 +1,3 @@
+@n := import["std:net"]
+@s := import["std:stream"]
+@n.read[@s.from_bytes[bytes_new[1]], 1]

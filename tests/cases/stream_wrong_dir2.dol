@@ -1,0 +1,2 @@
+@s := import["std:stream"]
+@s.read_line[@s.stdout[]]

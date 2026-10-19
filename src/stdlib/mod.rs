@@ -35,6 +35,7 @@ pub mod random;
 pub mod regex;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
+pub mod stream;
 pub mod string;
 pub mod time;
 pub mod types;
@@ -56,6 +57,7 @@ pub fn register(interp: &mut Interpreter<'_>) {
     http::register(interp);
     fs::register(interp);
     string::register(interp);
+    stream::register(interp);
     array::register(interp);
     map::register(interp);
     math::register(interp);

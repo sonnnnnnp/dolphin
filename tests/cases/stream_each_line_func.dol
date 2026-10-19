@@ -1,0 +1,2 @@
+@s := import["std:stream"]
+@s.each_line[@s.from_bytes[bytes_new[1]], 5]

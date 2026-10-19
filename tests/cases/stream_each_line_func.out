@@ -1,0 +1,4 @@
+stream_each_line_func.dol:2:1: エラー: stream.each_line の 2 番目の引数は関数です（数値が渡されました）
+  |
+2 | @s.each_line[@s.from_bytes[bytes_new[1]], 5]
+  | ^

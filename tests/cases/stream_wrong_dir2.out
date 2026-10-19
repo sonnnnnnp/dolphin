@@ -1,0 +1,4 @@
+stream_wrong_dir2.dol:2:1: エラー: stream.read_line は読み込み用のストリームに使います（書き込み用でした）
+  |
+2 | @s.read_line[@s.stdout[]]
+  | ^

@@ -2,7 +2,7 @@
 
 use std::cell::RefCell;
 use std::fmt;
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
@@ -117,12 +117,32 @@ pub enum HandleKind {
     WsServer {
         tx: Sender<WsOut>,
     },
+    /// ストリーム（`std:stream`。design.md 5.41）
+    Stream(StreamIo),
+    StreamClosed,
     /// SQLite の接続（`std:sqlite`。design.md 5.28）
     #[cfg(feature = "sqlite")]
     Sqlite(SqliteConn),
     #[cfg(feature = "sqlite")]
     SqliteClosed,
     Closed,
+}
+
+/// ストリームの書き込み先
+pub enum StreamSink {
+    Writer(Box<dyn Write>),
+    /// `log` と同じ出力先（インタプリタの `out`。書くときに借りる）
+    InterpOut,
+}
+
+/// ストリームの実体。読む向きか書く向きのどちらか
+pub struct StreamIo {
+    pub reader: Option<Box<dyn BufRead>>,
+    pub writer: Option<StreamSink>,
+    /// 表示用（`ファイル a.txt 読み込み` など）
+    pub label: String,
+    /// 失敗を `network` の種類にするか（HTTP の本文）。false なら `io`
+    pub network: bool,
 }
 
 #[cfg(feature = "sqlite")]
@@ -150,6 +170,7 @@ impl Handle {
         *inner = match &*inner {
             #[cfg(feature = "sqlite")]
             HandleKind::Sqlite(_) | HandleKind::SqliteClosed => HandleKind::SqliteClosed,
+            HandleKind::Stream(_) | HandleKind::StreamClosed => HandleKind::StreamClosed,
             _ => HandleKind::Closed,
         };
     }
@@ -172,6 +193,8 @@ impl fmt::Display for Handle {
                 Err(_) => write!(f, "<websocket 接続>"),
             },
             HandleKind::WsServer { .. } => write!(f, "<websocket サーバー側の接続>"),
+            HandleKind::Stream(io) => write!(f, "<stream {}>", io.label),
+            HandleKind::StreamClosed => write!(f, "<stream 閉じています>"),
             #[cfg(feature = "sqlite")]
             HandleKind::Sqlite(db) => write!(f, "<sqlite 接続 {}>", db.path),
             #[cfg(feature = "sqlite")]

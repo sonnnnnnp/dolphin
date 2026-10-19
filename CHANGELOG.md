@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+## [0.49.0] - 2026-10-20
+
+ストリーム `std:stream`（[design.md 5.41](docs/design.md)）。ファイル・標準入出力・HTTP の本文・メモリを、少しずつ読み書きできるように。数 GB のファイルやダウンロードが扱える。
+
+### 追加
+- `std:stream`: `open` `create` `append`（ファイル）、`stdin` `stdout` `stderr`、`from_bytes`（メモリ）でストリームを作り、`read` `read_exact` `read_line` `read_all` `read_text` `each_line`（`f` が `false` を返すと止める）で読み、`write` `flush` `copy` `close` で書く・閉じる。型は `handle`
+- `std:net` の TCP 接続にも、同じ読み書きの関数が使える
+- `http.get` などの `options` に `"stream": true`: レスポンスの `body` が読み込みのストリームになる。本文の大きさの上限（32 MB）と、全体の時間切れは適用しない（`*_async` では使えない）
+- `stdout[]` は `log` と同じ出力先に書く
+
 ## [0.48.0] - 2026-10-20
 
 整数 `int`（[design.md 5.40](docs/design.md)）。数値は 64 ビット浮動小数点数で、2^53 を超える整数（64 ビットの ID やハッシュ、ナノ秒の時刻）が正確に扱えなかったため。今までの数値のコードは変わらない。

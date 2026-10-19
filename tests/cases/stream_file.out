@@ -1,0 +1,14 @@
+<stream ファイル target/dolphin_stream_file_test.txt 書き込み>
+<stream 閉じています>
+<stream ファイル target/dolphin_stream_file_test.txt 読み込み>
+alpha beta
+<bytes e382ac> <bytes e383b3>
+マ
+delta
+epsilon
+
+nil <bytes >
+closed
+{"alpha", "beta", "ガンマ", "delta", "epsilon"}
+止めた 2 ガンマ
+not_found

@@ -110,6 +110,7 @@ dolphin/
 │     ├─ async_.rs       std:async（タイマー、コールバック型の非同期の関数の共通処理）
 │     ├─ audio.rs        std:audio（feature = "audio"。rodio。再生は補助スレッド）
 │     ├─ net.rs          std:net（TCP。ブロッキング、標準ライブラリだけ）
+│     ├─ stream.rs       std:stream（ファイル・標準入出力・HTTP の本文・メモリ・TCP を共通に読み書きする）
 │     ├─ path.rs         std:path
 │     ├─ os.rs           std:os（args / env / exit / run など）
 │     ├─ time.rs         std:time（暦の計算は自前）

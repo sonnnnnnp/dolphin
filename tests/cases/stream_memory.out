@@ -1,0 +1,12 @@
+<stream メモリ>
+<bytes 6f6e65> 
+eof
+<stream 標準出力>
+hello world
+11
+<bytes >
+
+parse
+parse
+stdout stream
+<stream 標準入力> <stream 標準エラー>

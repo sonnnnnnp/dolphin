@@ -1,0 +1,4 @@
+stream_wrong_dir.dol:2:1: エラー: stream.write は書き込み用のストリームに使います（読み込み用でした）
+  |
+2 | @s.write[@s.from_bytes[bytes_new[1]], "x"]
+  | ^

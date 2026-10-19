@@ -1,0 +1,42 @@
+@s := import["std:stream"]
+@path := "target/dolphin_stream_file_test.txt"
+
+@w := @s.create[@path]?
+log[@w]
+@s.write[@w, "alpha\n"]?
+@s.write[@w, "beta\r\n"]?
+@s.write[@w, str_to_bytes["ガンマ\ndelta"]]?
+@s.flush[@w]?
+@s.close[@w]?
+@s.close[@w]
+log[@w]
+
+@a := @s.append[@path]?
+@s.write[@a, "\nepsilon\n"]?
+@s.close[@a]?
+
+@r := @s.open[@path]?
+log[@r]
+log[@s.read_line[@r]?, @s.read_line[@r]?]
+log[@s.read[@r, 3]?, @s.read_exact[@r, 3]?]
+log[@s.read_text[@r]?]
+log[@s.read_line[@r]?, @s.read[@r, 10]?]
+@s.close[@r]
+log[err_kind[@s.read_line[@r]]]
+
+@lines := {}
+@r2 := @s.open[@path]?
+@s.each_line[@r2, [@l] ( arr_push[@lines, @l] )]?
+log[@lines]
+@s.close[@r2]
+
+@r3 := @s.open[@path]?
+@n := 0
+@s.each_line[@r3, [@l] (
+    @n = @n + 1
+    # @n < 2
+)]?
+log["止めた", @n, @s.read_line[@r3]?]
+
+log[err_kind[@s.open["target/dolphin_no_such_dir/x"]]]
+file_remove[@path]
